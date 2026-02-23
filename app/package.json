@@ -1,0 +1,49 @@
+{
+  "name": "app",
+  "version": "0.0.0",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:unit": "vitest",
+    "lint": "run-s lint:*",
+    "lint:oxlint": "oxlint . --fix",
+    "lint:eslint": "eslint . --fix --cache",
+    "format": "prettier --write --experimental-cli src/",
+    "serve:electron": "cross-env NODE_ENV=development electron .",
+    "start": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && npm run serve:electron\"",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "pinia": "^3.0.4",
+    "vue": "^3.5.28",
+    "vue-router": "^5.0.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@vitejs/plugin-vue": "^6.0.4",
+    "@vitest/eslint-plugin": "^1.6.9",
+    "@vue/test-utils": "^2.4.0",
+    "cross-env": "^10.1.0",
+    "electron": "^40.6.0",
+    "electron-builder": "^26.8.1",
+    "eslint": "^10.0.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-oxlint": "~1.46.0",
+    "eslint-plugin-vue": "~10.8.0",
+    "globals": "^17.3.0",
+    "jsdom": "^28.1.0",
+    "npm-run-all2": "^8.0.4",
+    "oxlint": "~1.47.0",
+    "prettier": "3.8.1",
+    "vite": "^7.3.1",
+    "vite-plugin-vue-devtools": "^8.0.6",
+    "vitest": "^4.0.18"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}
