@@ -1,13 +1,11 @@
 <script setup>
-console.log(process.env.NODE_ENV)
-
+console.log(window.electronAPI.getVersion())
 </script>
 
 <template>
   <h1>You did it!</h1>
   <p>
-    Visit <a href="https://vuejs.org/" target="_blank" rel="noopener">vuejs.org</a> to read the
-    documentation
+    do better
   </p>
 </template>
 
