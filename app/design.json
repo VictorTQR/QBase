@@ -1,0 +1,247 @@
+{
+  "meta": {
+    "name": "Modern Minimalist Design System",
+    "description": "基于高对比度黑白灰的通用设计系统。去除了多余的阴影和装饰，强调排版、留白和边框。适用于后台管理、SaaS着陆页、文档及个人作品集。",
+    "principles": [
+      "Content First: 内容优于装饰",
+      "Borders over Shadows: 使用边框而非投影来区分层级",
+      "High Contrast: 保持文本的高可读性",
+      "Micro-Interaction: 细腻的微交互动画"
+    ]
+  },
+  "color": {
+    "base": {
+      "white": "#FFFFFF",
+      "black": "#09090B"
+    },
+    "gray": {
+      "50": "#FAFAFA",
+      "100": "#F4F4F5",
+      "200": "#E4E4E7",
+      "300": "#D4D4D8",
+      "400": "#A1A1AA",
+      "500": "#71717A",
+      "600": "#52525B",
+      "900": "#18181B"
+    },
+    "semantic": {
+      "primary": {
+        "bg": "#18181B",
+        "fg": "#FAFAFA",
+        "hover": "#27272A",
+        "border": "#27272A"
+      },
+      "secondary": {
+        "bg": "#FFFFFF",
+        "fg": "#18181B",
+        "hover": "#F4F4F5",
+        "border": "#E4E4E7"
+      },
+      "accent": {
+        "bg": "#F4F4F5",
+        "fg": "#18181B"
+      },
+      "danger": {
+        "fg": "#DC2626",
+        "bg": "#FEF2F2",
+        "border": "#FECACA"
+      },
+      "success": {
+        "fg": "#16A34A",
+        "bg": "#F0FDF4"
+      }
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "sans": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      "mono": "JetBrains Mono, ui-monospace, SFMono-Regular, monospace"
+    },
+    "scale": {
+      "xs": { "size": "0.75rem", "lineHeight": "1rem", "weight": "500" },
+      "sm": { "size": "0.875rem", "lineHeight": "1.25rem", "weight": "400" },
+      "base": { "size": "1rem", "lineHeight": "1.5rem", "weight": "400" },
+      "lg": { "size": "1.125rem", "lineHeight": "1.75rem", "weight": "400" },
+      "xl": { "size": "1.25rem", "lineHeight": "1.75rem", "weight": "500" },
+      "2xl": { "size": "1.5rem", "lineHeight": "2rem", "weight": "600" },
+      "3xl": { "size": "1.875rem", "lineHeight": "2.25rem", "weight": "700" },
+      "4xl": { "size": "2.25rem", "lineHeight": "2.5rem", "weight": "700" },
+      "5xl": { "size": "3rem", "lineHeight": "1", "weight": "800" }
+    }
+  },
+  "spacing": {
+    "unit": "4px",
+    "scale": {
+      "0": "0",
+      "1": "4px",
+      "2": "8px",
+      "3": "12px",
+      "4": "16px",
+      "5": "20px",
+      "6": "24px",
+      "8": "32px",
+      "10": "40px",
+      "12": "48px",
+      "16": "64px",
+      "24": "96px"
+    }
+  },
+  "radius": {
+    "none": "0",
+    "sm": "4px",
+    "md": "8px",
+    "lg": "12px",
+    "xl": "16px",
+    "full": "9999px"
+  },
+  "effects": {
+    "shadow": "none",
+    "transition": "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+    "focusRing": {
+      "offset": "2px",
+      "width": "2px",
+      "color": "#18181B"
+    }
+  },
+  "components": {
+    "container": {
+      "maxWidth": "1200px",
+      "padding": { "x": "24px" }
+    },
+    "button": {
+      "variants": {
+        "primary": {
+          "bg": "color.semantic.primary.bg",
+          "fg": "color.semantic.primary.fg",
+          "border": "transparent",
+          "hover": { "bg": "color.semantic.primary.hover" }
+        },
+        "secondary": {
+          "bg": "color.semantic.secondary.bg",
+          "fg": "color.semantic.secondary.fg",
+          "border": "color.semantic.secondary.border",
+          "hover": { "bg": "color.semantic.secondary.hover" }
+        },
+        "ghost": {
+          "bg": "transparent",
+          "fg": "color.semantic.secondary.fg",
+          "border": "transparent",
+          "hover": { "bg": "color.semantic.accent.bg" }
+        }
+      },
+      "sizes": {
+        "sm": { "height": "32px", "padding": "0 12px", "fontSize": "typography.scale.xs" },
+        "md": { "height": "40px", "padding": "0 16px", "fontSize": "typography.scale.sm" },
+        "lg": { "height": "48px", "padding": "0 24px", "fontSize": "typography.scale.base" }
+      }
+    },
+    "input": {
+      "base": {
+        "height": "40px",
+        "border": "1px solid #E4E4E7",
+        "radius": "8px",
+        "padding": "0 12px",
+        "bg": "#FFFFFF",
+        "placeholder": "#71717A",
+        "focus": {
+          "borderColor": "#18181B",
+          "ring": "2px solid #18181B"
+        }
+      }
+    },
+    "card": {
+      "base": {
+        "bg": "#FFFFFF",
+        "border": "1px solid #E4E4E7",
+        "radius": "12px",
+        "padding": "24px",
+        "hover": {
+          "borderColor": "#A1A1AA"
+        }
+      }
+    },
+    "badge": {
+      "radius": "9999px",
+      "padding": "2px 8px",
+      "fontSize": "0.75rem",
+      "fontWeight": "500",
+      "variants": {
+        "default": { "bg": "#F4F4F5", "fg": "#18181B" },
+        "outline": { "bg": "transparent", "fg": "#18181B", "border": "1px solid #E4E4E7" }
+      }
+    },
+    "modal": {
+      "overlay": { "bg": "rgba(0,0,0,0.5)" },
+      "content": {
+        "bg": "#FFFFFF",
+        "radius": "12px",
+        "shadow": "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+        "maxWidth": "500px",
+        "padding": "24px"
+      }
+    },
+    "alert": {
+      "base": {
+        "padding": "16px",
+        "radius": "8px",
+        "border": "1px solid",
+        "fontSize": "0.875rem",
+        "display": "flex",
+        "alignItems": "center"
+      },
+      "variants": {
+        "info": { "bg": "#F4F4F5", "border": "#E4E4E7", "fg": "#18181B" },
+        "warning": { "bg": "#FEFCE8", "border": "#FDE047", "fg": "#854D0E" },
+        "error": { "bg": "#FEF2F2", "border": "#FECACA", "fg": "#991B1B" }
+      }
+    }
+  },
+  "layout": {
+    "header": {
+      "height": "64px",
+      "borderBottom": "1px solid #E4E4E7",
+      "bg": "rgba(255, 255, 255, 0.8)",
+      "backdropBlur": "blur(8px)",
+      "padding": "0 24px"
+    },
+    "section": {
+      "paddingVertical": "64px",
+      "gap": "24px"
+    },
+    "grid": {
+      "columns": 12,
+      "gap": "24px"
+    }
+  },
+  "patterns": {
+    "hero": {
+      "textAlign": "left",
+      "title": { "size": "typography.scale.5xl", "weight": "800", "color": "#09090B" },
+      "subtitle": { "size": "typography.scale.xl", "color": "#52525B", "marginTop": "16px" },
+      "actions": { "marginTop": "32px", "gap": "12px" }
+    },
+    "featureGrid": {
+      "columns": 3,
+      "card": {
+        "border": "1px solid #E4E4E7",
+        "padding": "24px",
+        "radius": "12px",
+        "transition": "border-color 0.2s"
+      }
+    },
+    "dataTable": {
+      "header": {
+        "bg": "#F4F4F5",
+        "borderBottom": "1px solid #E4E4E7",
+        "fontSize": "0.75rem",
+        "color": "#71717A",
+        "textTransform": "uppercase",
+        "letterSpacing": "0.05em"
+      },
+      "row": {
+        "borderBottom": "1px solid #E4E4E7",
+        "hoverBg": "#FAFAFA"
+      }
+    }
+  }
+}
