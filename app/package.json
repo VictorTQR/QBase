@@ -13,7 +13,7 @@
     "lint:eslint": "eslint . --fix --cache",
     "format": "prettier --write --experimental-cli src/",
     "ele": "cross-env NODE_ENV=development electron .",
-    "serve:electron": "cross-env NODE_ENV=development electron .",
+    "serve:ele": "cross-env NODE_ENV=development electron .",
     "start": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && npm run serve:electron\"",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder"
