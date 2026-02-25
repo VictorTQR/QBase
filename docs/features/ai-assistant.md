@@ -1,7 +1,7 @@
 # AI 助手
 
-**状态**: ✅ 已完成
-**版本**: v0.2
+**状态**: 🔄 进行中
+**版本**: v0.3
 **更新日期**: 2026-02-25
 
 ## 功能概述
@@ -16,6 +16,13 @@ AI 助手功能提供基于 LLM 的智能对话能力，支持基于当前文档
 - Markdown 渲染回复
 - 对话历史管理
 
+### 多会话管理 (v0.3)
+
+- 创建/切换/删除会话
+- 会话自动命名（基于第一条消息）
+- 会话列表侧边栏
+- 会话持久化存储
+
 ### LLM 配置
 
 - OpenAI 兼容 API
@@ -28,6 +35,38 @@ AI 助手功能提供基于 LLM 的智能对话能力，支持基于当前文档
 - 基于文档的智能问答
 
 ## 实现细节
+
+### Repository 抽象层 (v0.3)
+
+使用 Repository 模式抽象存储层，便于后续切换存储实现：
+
+```javascript
+// repositories/SessionRepository.js
+export class SessionRepository {
+  async getAll() { ... }
+  async getById(id) { ... }
+  async create(session) { ... }
+  async update(id, updates) { ... }
+  async delete(id) { ... }
+}
+
+// repositories/LocalStorageSessionRepository.js
+export class LocalStorageSessionRepository extends SessionRepository {
+  // localStorage 具体实现
+}
+```
+
+### Session 数据结构 (v0.3)
+
+```javascript
+{
+  id: 'uuid-v4',
+  title: '会话标题',
+  createdAt: '2026-02-25T10:00:00.000Z',
+  updatedAt: '2026-02-25T10:00:00.000Z',
+  messages: [...]
+}
+```
 
 ### Store 结构
 
@@ -110,7 +149,8 @@ persist: {
 
 | 组件 | 路径 | 说明 |
 |------|------|------|
-| AgentPanel | `components/Layout/AgentPanel.vue` | 对话面板 |
+| AgentPanel | `components/Layout/AgentPanel.vue` | 对话面板（含会话列表） |
+| SessionSidebar | `components/Layout/SessionSidebar.vue` | 会话列表侧边栏 |
 | LlmConfigDialog | `components/LlmConfigDialog.vue` | LLM 配置对话框 |
 
 ### Element-Plus-X 组件
@@ -146,10 +186,11 @@ persist: {
 
 ## 已知问题
 
-- [ ] 对话历史未持久化（计划 v0.3）
+- [x] 对话历史未持久化（已完成 v0.3）
 - [ ] 不支持多轮对话上下文（计划 v0.3）
 - [ ] 不支持图片输入（计划 v0.4）
 
 ## 相关文档
 
 - [消息 ID 重复 Bug 修复](../bugs/2026-02-25-message-id-duplicate.md)
+- [v0.3 实施报告](../implementation/v0.3-complete.md)
