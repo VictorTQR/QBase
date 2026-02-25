@@ -9,6 +9,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 800,
     height: 600,
+    autoHideMenuBar: true,
     webPreferences: {
       // 安全配置：启用上下文隔离，禁用 Node.js 集成
       contextIsolation: true,
