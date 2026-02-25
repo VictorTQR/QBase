@@ -2,6 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useDocumentStore } from './document'
 import { createLlmApi } from '@/utils/api'
+import { generateFlashcardPrompt } from '@/utils/prompts'
 import { LocalStorageSessionRepository } from '@/repositories/LocalStorageSessionRepository'
 
 function generateId() {
@@ -237,6 +238,39 @@ export const useAgentStore = defineStore(
       }
     }
 
+    async function generateFlashcards(content, count = 10) {
+      try {
+        const prompt = generateFlashcardPrompt(content, count)
+        const api = createLlmApi(llmConfig.value.baseUrl, llmConfig.value.apiKey)
+        const request = api.post('/chat/completions', {
+          model: llmConfig.value.model,
+          messages: [{ role: 'user', content: prompt }],
+          stream: false,
+          temperature: 0.7,
+        })
+
+        const result = await request.json()
+        const responseText = result.choices?.[0]?.message?.content || ''
+
+        let flashcards = []
+        try {
+          const jsonMatch = responseText.match(/\[[\s\S]*\]/)
+          if (jsonMatch) {
+            flashcards = JSON.parse(jsonMatch[0])
+          } else {
+            flashcards = JSON.parse(responseText)
+          }
+        } catch (parseErr) {
+          console.error('Failed to parse flashcards JSON:', parseErr)
+          throw new Error('闪卡生成失败：无法解析响应格式')
+        }
+
+        return { success: true, flashcards }
+      } catch (err) {
+        return { success: false, error: err.message }
+      }
+    }
+
     loadSessions()
 
     return {
@@ -258,6 +292,7 @@ export const useAgentStore = defineStore(
       setLlmConfig,
       testConnection,
       sendMessage,
+      generateFlashcards,
     }
   },
   {
