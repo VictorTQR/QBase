@@ -1,41 +1,44 @@
 <template>
   <div class="agent-panel">
-    <div class="panel-header">
-      <span>AI 助手</span>
-      <div class="header-actions">
-        <el-button size="small" circle @click="showConfig = true">
-          <el-icon><Setting /></el-icon>
-        </el-button>
-        <el-button size="small" circle @click="handleClear">
-          <el-icon><Delete /></el-icon>
-        </el-button>
+    <SessionSidebar />
+    <div class="chat-area">
+      <div class="panel-header">
+        <span>{{ agentStore.currentSession?.title || 'AI 助手' }}</span>
+        <div class="header-actions">
+          <el-button size="small" circle @click="showConfig = true">
+            <el-icon><Setting /></el-icon>
+          </el-button>
+          <el-button size="small" circle @click="handleClear">
+            <el-icon><Delete /></el-icon>
+          </el-button>
+        </div>
       </div>
-    </div>
-    <div class="panel-content">
-      <BubbleList
-        v-if="agentStore.messages.length > 0"
-        :list="bubbleList"
-        :max-height="maxHeight"
-        ref="bubbleListRef"
-      />
-      <el-empty v-else description="开始对话吧">
-        <template #image>
-          <el-icon :size="80"><ChatDotRound /></el-icon>
-        </template>
-      </el-empty>
-    </div>
-    <div class="panel-footer">
-      <div class="context-toggle">
-        <el-checkbox v-model="includeContext" size="small">包含当前文档</el-checkbox>
+      <div class="panel-content">
+        <BubbleList
+          v-if="agentStore.messages.length > 0"
+          :list="bubbleList"
+          :max-height="maxHeight"
+          ref="bubbleListRef"
+        />
+        <el-empty v-else description="开始对话吧">
+          <template #image>
+            <el-icon :size="80"><ChatDotRound /></el-icon>
+          </template>
+        </el-empty>
       </div>
-      <Sender
-        v-model="inputValue"
-        :loading="agentStore.isLoading"
-        placeholder="输入消息..."
-        @submit="handleSubmit"
-      />
+      <div class="panel-footer">
+        <div class="context-toggle">
+          <el-checkbox v-model="includeContext" size="small">包含当前文档</el-checkbox>
+        </div>
+        <Sender
+          v-model="inputValue"
+          :loading="agentStore.isLoading"
+          placeholder="输入消息..."
+          @submit="handleSubmit"
+        />
+      </div>
+      <LlmConfigDialog v-model="showConfig" />
     </div>
-    <LlmConfigDialog v-model="showConfig" />
   </div>
 </template>
 
@@ -45,6 +48,7 @@ import { Setting, Delete, ChatDotRound } from '@element-plus/icons-vue'
 import { BubbleList, Sender } from 'vue-element-plus-x'
 import { useAgentStore } from '@/stores/agent'
 import LlmConfigDialog from '../LlmConfigDialog.vue'
+import SessionSidebar from './SessionSidebar.vue'
 
 const agentStore = useAgentStore()
 
@@ -83,9 +87,16 @@ function handleClear() {
 
 <style scoped>
 .agent-panel {
-  width: 25%;
-  min-width: 250px;
+  width: 45%;
+  min-width: 450px;
   border-left: 1px solid var(--el-border-color);
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+.chat-area {
+  flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
