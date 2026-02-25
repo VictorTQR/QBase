@@ -117,16 +117,26 @@ ipcMain.handle('search-files', async (event, folderPath, query) => {
               id: fullPath,
               name: entry.name,
               path: fullPath,
-              type: 'file'
+              type: 'file',
+              matchType: 'name',
+              snippet: ''
             })
           } else {
             const content = await fs.readFile(fullPath, 'utf-8')
-            if (content.toLowerCase().includes(query.toLowerCase())) {
+            const lowerContent = content.toLowerCase()
+            const lowerQuery = query.toLowerCase()
+            const index = lowerContent.indexOf(lowerQuery)
+            if (index !== -1) {
+              const start = Math.max(0, index - 50)
+              const end = Math.min(content.length, index + query.length + 50)
+              const snippet = content.slice(start, end)
               results.push({
                 id: fullPath,
                 name: entry.name,
                 path: fullPath,
-                type: 'file'
+                type: 'file',
+                matchType: 'content',
+                snippet: snippet
               })
             }
           }
