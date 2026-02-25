@@ -17,18 +17,30 @@ export const useAgentStore = defineStore(
       model: 'gpt-3.5-turbo',
     })
 
-    function addMessage(role, content) {
-      const message = {
-        id: Date.now().toString(),
-        role,
-        content,
-        timestamp: new Date().toISOString(),
-        typing: false,
-        isMarkdown: true,
-      }
-      messages.value.push(message)
-      return message
-    }
+function generateId() {
+  const array = new Uint8Array(16)
+  crypto.getRandomValues(array)
+  array[6] = (array[6] & 0x0f) | 0x40
+  array[8] = (array[8] & 0x3f) | 0x80
+  return [...array]
+    .map((b, i) =>
+      [4, 6, 8, 10].includes(i) ? '-' + b.toString(16).padStart(2, '0') : b.toString(16).padStart(2, '0')
+    )
+    .join('')
+}
+
+function addMessage(role, content) {
+  const message = {
+    id: generateId(),
+    role,
+    content,
+    timestamp: new Date().toISOString(),
+    typing: false,
+    isMarkdown: true,
+  }
+  messages.value.push(message)
+  return message
+}
 
     function updateMessage(id, updates) {
       const index = messages.value.findIndex((m) => m.id === id)
