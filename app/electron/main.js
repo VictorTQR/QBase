@@ -24,8 +24,7 @@ function createWindow() {
     win.webContents.openDevTools()
   } else {
     // 生产环境：加载打包后的文件
-    win.loadURL("https://www.baidu.com")
-    // win.loadFile(path.join(__dirname, '../dist/index.html'))
+    win.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 }
 
