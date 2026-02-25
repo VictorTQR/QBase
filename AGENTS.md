@@ -15,12 +15,16 @@ QBase 是一个本地知识库管理系统，基于 Vue 3 + Electron 构建：
 - **Element Plus** UI 组件库
 - **Element-Plus-X** AI 体验组件库（XMarkdown、Bubble 等）
 
-### 当前版本 (v0.1)
+### 当前版本 (v0.2)
 - 工作区管理（添加/移除文件夹）
 - 文件树导航
 - Markdown 预览（使用 XMarkdown，支持代码高亮、LaTeX、Mermaid）
 - 三栏布局
 - Electron 文件系统 API
+- **AI 助手对话面板** (BubbleList + Sender)
+- **LLM 配置管理** (本地/云端模型)
+- **流式 AI 响应** (hook-fetch + SSE)
+- **Pinia 状态持久化** (工作区配置、LLM 设置)
 
 ## 包管理器与命令
 

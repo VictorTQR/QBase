@@ -8,7 +8,7 @@
 ### 测试和质量保证
 - 你只需要给出测试步骤，而不自动进行测试，测试由开发人员手动进行。
 - 安装依赖时，你只需要给出命令，而不自动执行。
-- 前端后端的测试文件分别在`frontend/`和`backend/`目录下。
+- 前端后端的测试文件分别在`app/`和`backend/`目录的合适位置。
 
 ### 项目依赖管理
 - 项目使用uv管理python虚拟环境。
@@ -26,6 +26,7 @@
   - api/                    # 接口文档（API层）
   - roadmap.md              # 项目路线图（项目层）
   - implementation/           # 实施报告（项目层）
+  - bugs/                   # 问题记录（项目层）
 - 更新文档的时机
   1. 完成新功能时：更新对应功能文档的状态
   2. 完成阶段时：更新 roadmap.md 和 README.md
@@ -34,6 +35,7 @@
   - 功能文档: `features/<feature-name>.md`
   - 规划文档: `plans/<plan-name>.md`
   - 实施报告: `implementation/<feature>-complete.md`
+  - bugs: `bugs/<date>-<bug-name>.md`
 - 状态标记
   - ✅ 已完成
   - 🔄 进行中
