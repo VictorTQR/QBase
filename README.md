@@ -14,8 +14,9 @@
 
 - **前端框架**: Vue 3 (Composition API + `<script setup>`)
 - **桌面框架**: Electron
-- **状态管理**: Pinia
+- **状态管理**: Pinia + pinia-plugin-persistedstate
 - **UI 组件**: Element Plus + Element-Plus-X
+- **HTTP 请求**: hook-fetch (支持流式 SSE)
 - **构建工具**: Vite
 - **测试框架**: Vitest
 
@@ -62,10 +63,11 @@ npm run format  # 格式化代码
 - [x] 三栏布局
 - [x] Electron 文件系统 API
 
-### v0.2 (计划) - AI 助手
-- [ ] Agent 对话面板
-- [ ] LLM 配置管理（本地/云端）
-- [ ] 基于文档的智能问答
+### v0.2 (进行中) - AI 助手
+- [x] Agent 对话面板（BubbleList + Sender）
+- [x] LLM 配置管理（本地/云端）
+- [x] 基于文档的智能问答
+- [x] Hook-Fetch 流式请求集成
 - [ ] 基础全文搜索
 
 ### v0.3 (计划) - 增强功能
