@@ -4,27 +4,38 @@
 
 ## 项目概述
 
-QBase 是一个本地知识库管理系统，基于 Vue 3 + Electron 构建：
-
-- Vue 3 (Composition API，使用 `<script setup>`)
-- Pinia 状态管理
-- Vue Router 路由
-- Electron 桌面打包
-- Vite 构建工具
-- Vitest 测试框架
-- **Element Plus** UI 组件库
-- **Element-Plus-X** AI 体验组件库（XMarkdown、Bubble 等）
+QBase 是一个本地知识库管理系统，基于 Vue 3 + Electron 构建。
 
 ### 当前版本 (v0.2)
+
 - 工作区管理（添加/移除文件夹）
 - 文件树导航
 - Markdown 预览（使用 XMarkdown，支持代码高亮、LaTeX、Mermaid）
 - 三栏布局
 - Electron 文件系统 API
-- **AI 助手对话面板** (BubbleList + Sender)
-- **LLM 配置管理** (本地/云端模型)
-- **流式 AI 响应** (hook-fetch + SSE)
-- **Pinia 状态持久化** (工作区配置、LLM 设置)
+- AI 助手对话面板 (BubbleList + Sender)
+- LLM 配置管理 (本地/云端模型)
+- 流式 AI 响应 (SSE)
+- Pinia 状态持久化
+
+## 开发原则
+
+### 代码质量原则
+
+- **奥卡姆剃刀**: 优先选择简单方案
+- **KISS**: 保持简单
+- **YAGNI**: 避免过度工程化
+
+### 语言偏好
+
+- 使用中文编写文档
+- 注释使用中文
+- commit 消息使用中文
+
+### 测试和质量保证
+
+- 你只需要给出测试步骤，而不自动进行测试，测试由开发人员手动进行
+- 安装依赖时，你只需要给出命令，而不自动执行
 
 ## 包管理器与命令
 
@@ -43,26 +54,12 @@ npm run start        # 同时启动 Vite + Electron
 
 ### 运行单个测试
 
-运行单个测试文件：
-
 ```bash
 npm run test:unit -- src/__tests__/your-test.spec.js
-```
-
-监听模式运行测试：
-
-```bash
-npm run test:unit -- --watch
+npm run test:unit -- --watch  # 监听模式
 ```
 
 ## 代码风格指南
-
-### 通用原则（来自 CLAUDE.md）
-
-- **奥卡姆剃刀**: 优先选择简单方案
-- **KISS**: 保持简单
-- **YAGNI**: 避免过度工程化
-- **中文**: 所有注释、文档、commit 消息使用中文
 
 ### 格式化规则
 
@@ -88,11 +85,13 @@ npm run test:unit -- --watch
 
 ### 命名约定
 
-- 变量和函数：camelCase
-- 组件：PascalCase
-- 常量：UPPER_SNAKE_CASE
-- Pinia store：useXxxStore
-- 测试文件：`__tests__` 目录下的 `*.spec.js`
+| 类型 | 约定 | 示例 |
+|------|------|------|
+| 变量/函数 | camelCase | `loadFile` |
+| 组件 | PascalCase | `MarkdownViewer.vue` |
+| 常量 | UPPER_SNAKE_CASE | `API_BASE_URL` |
+| Pinia store | useXxxStore | `useWorkspaceStore` |
+| 测试文件 | *.spec.js | `App.spec.js` |
 
 ### 错误处理
 
@@ -110,12 +109,50 @@ npm run test:unit -- --watch
 ## 关键配置文件
 
 所有应用文件在 `app/` 目录下：
+
 - `app/package.json` - 依赖和脚本
 - `app/eslint.config.js` - ESLint 配置
 - `app/vitest.config.js` - Vitest 配置
 - `app/.prettierrc.json` - Prettier 规则
 - `app/.oxlintrc.json` - Oxlint 配置
-- `CLAUDE.md` - 项目指南（中文）
+
+## 文档维护
+
+### 文档目录
+
+项目根目录下的 `docs/` 文件夹：
+
+```
+docs/
+├── README.md               # 文档入口
+├── architecture/           # 架构设计（稳定层）
+├── features/               # 功能实现（动态层）
+├── implementation/         # 实施报告（项目层）
+├── bugs/                   # 问题记录（项目层）
+└── roadmap.md              # 项目路线图（项目层）
+```
+
+### 更新文档的时机
+
+1. **完成新功能时**：更新对应功能文档的状态
+2. **完成阶段时**：更新 roadmap.md 和 README.md
+3. **实施重大变更时**：创建实施报告
+4. **修复 Bug 时**：创建 bugs 记录
+
+### 文档命名规范
+
+```
+features/<feature-name>.md           # 功能文档
+implementation/<version>-complete.md # 实施报告
+bugs/<date>-<bug-name>.md            # Bug 记录
+```
+
+### 状态标记
+
+- ✅ 已完成
+- 🔄 进行中
+- 📋 已规划
+- ⏳ 暂缓
 
 ## 开发工作流
 
@@ -126,10 +163,8 @@ npm run test:unit -- --watch
 5. 提交前运行 `npm run lint` 和 `npm run format`
 6. 运行 `npm run test:unit` 验证测试通过
 
-## Agent/Cursor/Copilot 规则
+## 相关文档
 
-未找到现有的 Cursor 或 Copilot 规则文件。请遵循：
-
-- 本 AGENTS.md 中的指南
-- CLAUDE.md 中的原则
-- 代码库中的现有代码模式
+- [CLAUDE.md](./CLAUDE.md) - 开发原则
+- [docs/README.md](./docs/README.md) - 文档入口
+- [docs/architecture/tech-stack.md](./docs/architecture/tech-stack.md) - 技术栈详情

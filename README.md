@@ -6,21 +6,23 @@
 
 - 📁 本地文件夹读取和管理
 - 📝 Markdown 文档预览（支持代码高亮、数学公式、Mermaid）
-- 🤖 AI 助手辅助知识管理（v0.2+）
-- 🔍 全文搜索（v0.2+）
-- 🏷️ 标签和分类（v0.3+）
+- 🤖 AI 助手辅助知识管理
+- 🔍 全文搜索（计划中）
+- 🏷️ 标签和分类（计划中）
 
 ## 技术栈
 
-- **前端框架**: Vue 3 (Composition API + `<script setup>`)
-- **桌面框架**: Electron
-- **状态管理**: Pinia + pinia-plugin-persistedstate
-- **UI 组件**: Element Plus + Element-Plus-X
-- **HTTP 请求**: hook-fetch (支持流式 SSE)
-- **构建工具**: Vite
-- **测试框架**: Vitest
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Vue | ^3.5.28 | 前端框架 |
+| Electron | ^40.6.0 | 桌面应用 |
+| Pinia | ^3.0.4 | 状态管理 |
+| Element Plus | ^2.13.2 | UI 组件库 |
+| Element-Plus-X | ^1.3.98 | AI 体验组件 |
+| Vite | ^7.3.1 | 构建工具 |
+| Vitest | ^4.0.18 | 测试框架 |
 
-## 开发
+## 快速开始
 
 ### 安装依赖
 
@@ -32,13 +34,16 @@ npm install
 ### 开发模式
 
 ```bash
-npm run start
+npm run start    # 同时启动 Vite + Electron
+npm run dev      # 仅启动 Vite
+npm run ele      # 仅启动 Electron
 ```
 
 ### 构建
 
 ```bash
-npm run build
+npm run build    # 构建生产版本
+npm run dist     # 打包 Electron 应用
 ```
 
 ### 测试
@@ -56,40 +61,39 @@ npm run format  # 格式化代码
 
 ## 开发进度
 
-### v0.1 (当前) - 核心文件浏览 ✅
-- [x] 工作区管理（添加/移除文件夹）
-- [x] 文件夹树导航
-- [x] Markdown 预览（XMarkdown）
-- [x] 三栏布局
-- [x] Electron 文件系统 API
+| 版本 | 状态 | 功能 |
+|------|------|------|
+| v0.1 | ✅ 已完成 | 核心文件浏览 |
+| v0.2 | ✅ 已完成 | AI 助手 |
+| v0.3 | 📋 已规划 | 增强功能 |
 
-### v0.2 (进行中) - AI 助手
-- [x] Agent 对话面板（BubbleList + Sender）
-- [x] LLM 配置管理（本地/云端）
-- [x] 基于文档的智能问答
-- [x] Hook-Fetch 流式请求集成
-- [ ] 基础全文搜索
-
-### v0.3 (计划) - 增强功能
-- [ ] 标签系统
-- [ ] 搜索增强
-- [ ] 内容组织推荐
+详见 [项目路线图](./docs/roadmap.md)
 
 ## 项目结构
 
 ```
 QBase/
-├── app/
-│   ├── src/
-│   │   ├── components/       # Vue 组件
-│   │   ├── stores/           # Pinia stores
-│   │   ├── views/            # 页面视图
-│   │   └── router/           # 路由配置
-│   ├── electron/             # Electron 主进程
-│   └── package.json
-├── docs/                     # 文档
-└── official_docs/            # 第三方库文档
+├── app/                    # 应用主目录
+│   ├── src/               # 源代码
+│   │   ├── components/    # Vue 组件
+│   │   ├── stores/        # Pinia stores
+│   │   ├── views/         # 页面视图
+│   │   └── router/        # 路由配置
+│   ├── electron/          # Electron 主进程
+│   └── public/            # 静态资源
+├── docs/                   # 项目文档
+├── official_docs/          # 第三方库文档
+├── AGENTS.md              # AI 代理开发指南
+├── CLAUDE.md              # 开发原则
+└── README.md              # 本文件
 ```
+
+## 文档
+
+- [文档入口](./docs/README.md)
+- [系统架构](./docs/architecture/system-architecture.md)
+- [技术栈](./docs/architecture/tech-stack.md)
+- [项目路线图](./docs/roadmap.md)
 
 ## 开发原则
 
