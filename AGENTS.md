@@ -1,120 +1,131 @@
-# AGENTS.md - AI Agent Guidelines for QBase
+# AGENTS.md - QBase AI 代理开发指南
 
-This document provides instructions for AI coding agents working on the QBase repository.
+本文档为在 QBase 仓库工作的 AI 编码代理提供指导。
 
-## Project Overview
+## 项目概述
 
-QBase is a Vue 3 + Electron desktop application built with:
+QBase 是一个本地知识库管理系统，基于 Vue 3 + Electron 构建：
 
-- Vue 3 (Composition API with `<script setup>`)
-- Pinia for state management
-- Vue Router for routing
-- Electron for desktop packaging
-- Vite as the build system
-- Vitest for testing
+- Vue 3 (Composition API，使用 `<script setup>`)
+- Pinia 状态管理
+- Vue Router 路由
+- Electron 桌面打包
+- Vite 构建工具
+- Vitest 测试框架
+- **Element Plus** UI 组件库
+- **Element-Plus-X** AI 体验组件库（XMarkdown、Bubble 等）
 
-## Package Manager & Commands
+### 当前版本 (v0.1)
+- 工作区管理（添加/移除文件夹）
+- 文件树导航
+- Markdown 预览（使用 XMarkdown，支持代码高亮、LaTeX、Mermaid）
+- 三栏布局
+- Electron 文件系统 API
 
-**npm** is the package manager. Key commands:
+## 包管理器与命令
+
+使用 **npm** 作为包管理器。主要命令：
 
 ```bash
-npm install          # Install dependencies
-npm run dev          # Start Vite dev server
-npm run build        # Build for production
-npm run test:unit    # Run all Vitest tests
-npm run lint         # Run ESLint + Oxlint with auto-fix
-npm run format       # Format code with Prettier
-npm run ele          # Start Electron
-npm run start        # Concurrent Vite + Electron
+npm install          # 安装依赖
+npm run dev          # 启动 Vite 开发服务器
+npm run build        # 生产构建
+npm run test:unit    # 运行所有 Vitest 测试
+npm run lint         # 运行 ESLint + Oxlint 并自动修复
+npm run format       # Prettier 格式化代码
+npm run ele          # 启动 Electron
+npm run start        # 同时启动 Vite + Electron
 ```
 
-### Running Single Tests
+### 运行单个测试
 
-To run a single test file:
+运行单个测试文件：
 
 ```bash
 npm run test:unit -- src/__tests__/your-test.spec.js
 ```
 
-To run tests in watch mode:
+监听模式运行测试：
 
 ```bash
 npm run test:unit -- --watch
 ```
 
-## Code Style Guidelines
+## 代码风格指南
 
-### General Principles (from CLAUDE.md)
+### 通用原则（来自 CLAUDE.md）
 
-- **Occam's Razor**: Prefer simple solutions
-- **KISS**: Keep It Simple, Stupid
-- **YAGNI**: You Ain't Gonna Need It - avoid over-engineering
-- **Chinese language**: Use Chinese for all comments, documentation, and commit messages
+- **奥卡姆剃刀**: 优先选择简单方案
+- **KISS**: 保持简单
+- **YAGNI**: 避免过度工程化
+- **中文**: 所有注释、文档、commit 消息使用中文
 
-### Formatting Rules
+### 格式化规则
 
-- No semicolons
-- Single quotes for strings
-- 100-character line length
-- 2-space indentation
-- Trailing commas in multi-line structures
+- 不使用分号
+- 字符串使用单引号
+- 行长度 100 字符
+- 2 空格缩进
+- 多行结构使用尾随逗号
 
-### Imports
+### 导入规范
 
-- ES module syntax (`import`/`export`)
-- Path alias `@` maps to `./src`
-- Group imports: external → internal → components/styles
-- No unused imports
+- 使用 ES 模块语法 (`import`/`export`)
+- 路径别名 `@` 映射到 `./src`
+- 导入分组：外部库 → 内部模块 → 组件/样式
+- 不保留未使用的导入
 
-### Vue Components
+### Vue 组件
 
-- Use `<script setup>` syntax
-- Scoped styles with `<style scoped>`
-- Component filenames: PascalCase (e.g., `MyComponent.vue`)
-- Props and emits defined with TypeScript or JSDoc
+- 使用 `<script setup>` 语法
+- 使用 `<style scoped>` 作用域样式
+- 组件文件名使用 PascalCase（如 `MyComponent.vue`）
+- Props 和 emits 使用 TypeScript 或 JSDoc 定义
 
-### Naming Conventions
+### 命名约定
 
-- Variables & functions: camelCase
-- Components: PascalCase
-- Constants: UPPER_SNAKE_CASE
-- Pinia stores: useXxxStore
-- Test files: `*.spec.js` in `__tests__` directories
+- 变量和函数：camelCase
+- 组件：PascalCase
+- 常量：UPPER_SNAKE_CASE
+- Pinia store：useXxxStore
+- 测试文件：`__tests__` 目录下的 `*.spec.js`
 
-### Error Handling
+### 错误处理
 
-- Use try/catch for async operations
-- Provide meaningful error messages in Chinese
-- Validate inputs and edge cases
+- 异步操作使用 try/catch
+- 提供有意义的中文错误信息
+- 验证输入和边界情况
 
-## Linting & Testing Stack
+## 代码检查与测试工具
 
-- **ESLint**: Flat config with Vue and Vitest plugins (`eslint.config.js`)
-- **Oxlint**: Fast correctness linter (`.oxlintrc.json`)
-- **Prettier**: Code formatting (`.prettierrc.json`)
-- **Vitest**: Testing framework with jsdom and `@vue/test-utils`
+- **ESLint**: 扁平配置，含 Vue 和 Vitest 插件 (`eslint.config.js`)
+- **Oxlint**: 快速正确性检查 (`.oxlintrc.json`)
+- **Prettier**: 代码格式化 (`.prettierrc.json`)
+- **Vitest**: 测试框架，配合 jsdom 和 `@vue/test-utils`
 
-## Key Configuration Files
+## 关键配置文件
 
-- `package.json` - Dependencies and scripts
-- `eslint.config.js` - ESLint configuration
-- `vitest.config.js` - Vitest configuration
-- `.prettierrc.json` - Prettier rules
-- `.oxlintrc.json` - Oxlint configuration
-- `../CLAUDE.md` - Project guidelines (Chinese)
+所有应用文件在 `app/` 目录下：
+- `app/package.json` - 依赖和脚本
+- `app/eslint.config.js` - ESLint 配置
+- `app/vitest.config.js` - Vitest 配置
+- `app/.prettierrc.json` - Prettier 规则
+- `app/.oxlintrc.json` - Oxlint 配置
+- `CLAUDE.md` - 项目指南（中文）
 
-## Development Workflow
+## 开发工作流
 
-1. Run `npm install` for dependencies
-2. `npm run dev` for Vite dev server
-3. `npm run start` for full Electron app
-4. `npm run lint` and `npm run format` before commits
-5. `npm run test:unit` to verify tests pass
+1. `cd app` - 进入应用目录
+2. 运行 `npm install` 安装依赖
+3. `npm run dev` 启动 Vite 开发服务器
+4. `npm run start` 启动完整 Electron 应用
+5. 提交前运行 `npm run lint` 和 `npm run format`
+6. 运行 `npm run test:unit` 验证测试通过
 
-## Agent/Cursor/Copilot Rules
+## Agent/Cursor/Copilot 规则
 
-No existing Cursor or Copilot rule files found. Follow:
+未找到现有的 Cursor 或 Copilot 规则文件。请遵循：
 
-- Guidelines in this AGENTS.md
-- Principles in CLAUDE.md
-- Existing code patterns in the codebase
+- 本 AGENTS.md 中的指南
+- CLAUDE.md 中的原则
+- 代码库中的现有代码模式
