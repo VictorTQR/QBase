@@ -27,7 +27,7 @@
 
 - [v0.1 实施报告](./implementation/v0.1-complete.md) - 核心文件浏览功能
 - [v0.2 实施报告](./implementation/v0.2-complete.md) - AI 助手功能
-- [v0.3 实施报告](./implementation/v0.3-complete.md) - 多会话持久化
+- [v0.3 实施报告](./implementation/v0.3-complete.md) - 增强功能（多会话、测试连接、多轮对话、手动刷新）
 
 ### 问题记录
 Bug 修复记录和问题追踪。
