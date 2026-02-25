@@ -29,7 +29,7 @@ export class LocalStorageSessionRepository extends SessionRepository {
 
   async getById(id) {
     const sessions = this._getAllSessions()
-    return sessions.find(s => s.id === id) || null
+    return sessions.find((s) => s.id === id) || null
   }
 
   async create(session) {
@@ -41,7 +41,7 @@ export class LocalStorageSessionRepository extends SessionRepository {
 
   async update(id, updates) {
     const sessions = this._getAllSessions()
-    const index = sessions.findIndex(s => s.id === id)
+    const index = sessions.findIndex((s) => s.id === id)
     if (index !== -1) {
       sessions[index] = { ...sessions[index], ...updates, updatedAt: new Date().toISOString() }
       this._saveSessions(sessions)
@@ -52,7 +52,7 @@ export class LocalStorageSessionRepository extends SessionRepository {
 
   async delete(id) {
     const sessions = this._getAllSessions()
-    const filtered = sessions.filter(s => s.id !== id)
+    const filtered = sessions.filter((s) => s.id !== id)
     this._saveSessions(filtered)
   }
 }
