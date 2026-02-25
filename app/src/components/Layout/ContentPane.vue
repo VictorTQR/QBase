@@ -5,7 +5,7 @@
       <span class="file-path">{{ documentStore.currentFile.path }}</span>
     </div>
     <div v-else class="empty-state">
-      <el-empty description="请选择一个 Markdown 文件" />
+      <el-empty description="请选择一个文件" />
     </div>
     <div v-if="documentStore.isLoading" class="loading">
       <el-icon class="is-loading"><Loading /></el-icon>
@@ -15,14 +15,14 @@
       <el-icon><Warning /></el-icon>
       <span>{{ documentStore.error }}</span>
     </div>
-    <MarkdownViewer v-else-if="documentStore.content" :content="documentStore.content" />
+    <DocumentViewer v-else-if="documentStore.currentFile" />
   </div>
 </template>
 
 <script setup>
 import { Document, Loading, Warning } from '@element-plus/icons-vue'
 import { useDocumentStore } from '@/stores/document'
-import MarkdownViewer from '@/components/MarkdownViewer.vue'
+import DocumentViewer from '@/components/DocumentViewer.vue'
 
 const documentStore = useDocumentStore()
 </script>
