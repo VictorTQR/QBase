@@ -11,7 +11,9 @@ function generateId() {
   array[8] = (array[8] & 0x3f) | 0x80
   return [...array]
     .map((b, i) =>
-      [4, 6, 8, 10].includes(i) ? '-' + b.toString(16).padStart(2, '0') : b.toString(16).padStart(2, '0')
+      [4, 6, 8, 10].includes(i)
+        ? '-' + b.toString(16).padStart(2, '0')
+        : b.toString(16).padStart(2, '0'),
     )
     .join('')
 }
@@ -26,7 +28,7 @@ export const useAgentStore = defineStore(
   'agent',
   () => {
     const repository = new LocalStorageSessionRepository()
-    
+
     const sessions = ref([])
     const currentSessionId = ref(null)
     const isLoading = ref(false)
@@ -40,7 +42,7 @@ export const useAgentStore = defineStore(
     })
 
     const currentSession = computed(() => {
-      return sessions.value.find(s => s.id === currentSessionId.value) || null
+      return sessions.value.find((s) => s.id === currentSessionId.value) || null
     })
 
     const messages = computed(() => {
@@ -71,14 +73,14 @@ export const useAgentStore = defineStore(
     }
 
     async function switchSession(sessionId) {
-      if (sessions.value.find(s => s.id === sessionId)) {
+      if (sessions.value.find((s) => s.id === sessionId)) {
         currentSessionId.value = sessionId
       }
     }
 
     async function deleteSession(sessionId) {
       await repository.delete(sessionId)
-      const index = sessions.value.findIndex(s => s.id === sessionId)
+      const index = sessions.value.findIndex((s) => s.id === sessionId)
       if (index !== -1) {
         sessions.value.splice(index, 1)
         if (currentSessionId.value === sessionId) {
@@ -93,7 +95,7 @@ export const useAgentStore = defineStore(
 
     async function renameSession(sessionId, newTitle) {
       await repository.update(sessionId, { title: newTitle })
-      const session = sessions.value.find(s => s.id === sessionId)
+      const session = sessions.value.find((s) => s.id === sessionId)
       if (session) {
         session.title = newTitle
       }
@@ -101,7 +103,7 @@ export const useAgentStore = defineStore(
 
     function addMessage(role, content) {
       if (!currentSession.value) return
-      
+
       const message = {
         id: generateId(),
         role,
@@ -111,12 +113,12 @@ export const useAgentStore = defineStore(
         isMarkdown: true,
       }
       currentSession.value.messages.push(message)
-      
+
       if (currentSession.value.messages.length === 1 && role === 'user') {
         const title = generateSessionTitle(content)
         renameSession(currentSessionId.value, title)
       }
-      
+
       _saveCurrentSession()
       return message
     }
@@ -125,9 +127,9 @@ export const useAgentStore = defineStore(
       if (!currentSession.value) return
       const index = currentSession.value.messages.findIndex((m) => m.id === id)
       if (index !== -1) {
-        currentSession.value.messages[index] = { 
-          ...currentSession.value.messages[index], 
-          ...updates 
+        currentSession.value.messages[index] = {
+          ...currentSession.value.messages[index],
+          ...updates,
         }
         _saveCurrentSession()
       }
@@ -150,6 +152,23 @@ export const useAgentStore = defineStore(
 
     function setLlmConfig(config) {
       llmConfig.value = { ...llmConfig.value, ...config }
+    }
+
+    async function testConnection() {
+      try {
+        const api = createLlmApi(llmConfig.value.baseUrl, llmConfig.value.apiKey)
+        const request = api.post('/chat/completions', {
+          model: llmConfig.value.model,
+          messages: [{ role: 'user', content: 'Hi' }],
+          stream: false,
+          max_tokens: 5,
+        })
+
+        await request.json()
+        return { success: true, message: '连接成功！' }
+      } catch (err) {
+        return { success: false, message: `连接失败：${err.message}` }
+      }
     }
 
     async function sendMessage(userContent, includeContext = false) {
@@ -227,6 +246,7 @@ export const useAgentStore = defineStore(
       updateMessage,
       clearMessages,
       setLlmConfig,
+      testConnection,
       sendMessage,
     }
   },
