@@ -1,5 +1,5 @@
 {
-  "name": "app",
+  "name": "qbase",
   "version": "0.0.0",
   "private": true,
   "main": "electron/main.js",
