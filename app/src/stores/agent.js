@@ -1,21 +1,8 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useDocumentStore } from './document'
 import { createLlmApi } from '@/utils/api'
-
-export const useAgentStore = defineStore(
-  'agent',
-  () => {
-    const messages = ref([])
-    const isLoading = ref(false)
-    const error = ref(null)
-
-    const llmConfig = ref({
-      type: 'openai',
-      baseUrl: 'https://api.openai.com/v1',
-      apiKey: '',
-      model: 'gpt-3.5-turbo',
-    })
+import { LocalStorageSessionRepository } from '@/repositories/LocalStorageSessionRepository'
 
 function generateId() {
   const array = new Uint8Array(16)
@@ -29,29 +16,136 @@ function generateId() {
     .join('')
 }
 
-function addMessage(role, content) {
-  const message = {
-    id: generateId(),
-    role,
-    content,
-    timestamp: new Date().toISOString(),
-    typing: false,
-    isMarkdown: true,
-  }
-  messages.value.push(message)
-  return message
+function generateSessionTitle(firstMessage) {
+  const maxLength = 30
+  const content = firstMessage || '新对话'
+  return content.length > maxLength ? content.slice(0, maxLength) + '...' : content
 }
 
-    function updateMessage(id, updates) {
-      const index = messages.value.findIndex((m) => m.id === id)
+export const useAgentStore = defineStore(
+  'agent',
+  () => {
+    const repository = new LocalStorageSessionRepository()
+    
+    const sessions = ref([])
+    const currentSessionId = ref(null)
+    const isLoading = ref(false)
+    const error = ref(null)
+
+    const llmConfig = ref({
+      type: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: '',
+      model: 'gpt-3.5-turbo',
+    })
+
+    const currentSession = computed(() => {
+      return sessions.value.find(s => s.id === currentSessionId.value) || null
+    })
+
+    const messages = computed(() => {
+      return currentSession.value?.messages || []
+    })
+
+    async function loadSessions() {
+      sessions.value = await repository.getAll()
+      if (sessions.value.length === 0) {
+        await createSession()
+      } else if (!currentSessionId.value) {
+        currentSessionId.value = sessions.value[0].id
+      }
+    }
+
+    async function createSession() {
+      const session = {
+        id: generateId(),
+        title: '新对话',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        messages: [],
+      }
+      await repository.create(session)
+      sessions.value.push(session)
+      currentSessionId.value = session.id
+      return session
+    }
+
+    async function switchSession(sessionId) {
+      if (sessions.value.find(s => s.id === sessionId)) {
+        currentSessionId.value = sessionId
+      }
+    }
+
+    async function deleteSession(sessionId) {
+      await repository.delete(sessionId)
+      const index = sessions.value.findIndex(s => s.id === sessionId)
       if (index !== -1) {
-        messages.value[index] = { ...messages.value[index], ...updates }
+        sessions.value.splice(index, 1)
+        if (currentSessionId.value === sessionId) {
+          if (sessions.value.length > 0) {
+            currentSessionId.value = sessions.value[0].id
+          } else {
+            await createSession()
+          }
+        }
+      }
+    }
+
+    async function renameSession(sessionId, newTitle) {
+      await repository.update(sessionId, { title: newTitle })
+      const session = sessions.value.find(s => s.id === sessionId)
+      if (session) {
+        session.title = newTitle
+      }
+    }
+
+    function addMessage(role, content) {
+      if (!currentSession.value) return
+      
+      const message = {
+        id: generateId(),
+        role,
+        content,
+        timestamp: new Date().toISOString(),
+        typing: false,
+        isMarkdown: true,
+      }
+      currentSession.value.messages.push(message)
+      
+      if (currentSession.value.messages.length === 1 && role === 'user') {
+        const title = generateSessionTitle(content)
+        renameSession(currentSessionId.value, title)
+      }
+      
+      _saveCurrentSession()
+      return message
+    }
+
+    function updateMessage(id, updates) {
+      if (!currentSession.value) return
+      const index = currentSession.value.messages.findIndex((m) => m.id === id)
+      if (index !== -1) {
+        currentSession.value.messages[index] = { 
+          ...currentSession.value.messages[index], 
+          ...updates 
+        }
+        _saveCurrentSession()
       }
     }
 
     function clearMessages() {
-      messages.value = []
+      if (!currentSession.value) return
+      currentSession.value.messages = []
       error.value = null
+      _saveCurrentSession()
+    }
+
+    function _saveCurrentSession() {
+      if (currentSession.value) {
+        repository.update(currentSessionId.value, {
+          messages: currentSession.value.messages,
+        })
+      }
     }
 
     function setLlmConfig(config) {
@@ -114,11 +208,21 @@ function addMessage(role, content) {
       }
     }
 
+    loadSessions()
+
     return {
+      sessions,
+      currentSessionId,
+      currentSession,
       messages,
       isLoading,
       error,
       llmConfig,
+      loadSessions,
+      createSession,
+      switchSession,
+      deleteSession,
+      renameSession,
       addMessage,
       updateMessage,
       clearMessages,
@@ -129,7 +233,7 @@ function addMessage(role, content) {
   {
     persist: {
       key: 'qbase-agent',
-      paths: ['llmConfig'],
+      paths: ['llmConfig', 'currentSessionId'],
     },
   },
 )
