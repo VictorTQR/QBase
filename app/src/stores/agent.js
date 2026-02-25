@@ -175,6 +175,11 @@ export const useAgentStore = defineStore(
       isLoading.value = true
       error.value = null
 
+      const historyMessages = messages.value.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }))
+
       addMessage('user', userContent)
       const assistantMessage = addMessage('assistant', '')
       updateMessage(assistantMessage.id, { typing: true, loading: true })
@@ -187,13 +192,16 @@ export const useAgentStore = defineStore(
           context = `\n\n当前文档内容：\n${documentStore.content}`
         }
 
+        const apiMessages = [
+          { role: 'system', content: '你是一个有用的助手。请用 Markdown 格式回复。' },
+          ...historyMessages,
+          { role: 'user', content: userContent + context },
+        ]
+
         const api = createLlmApi(llmConfig.value.baseUrl, llmConfig.value.apiKey)
         const request = api.post('/chat/completions', {
           model: llmConfig.value.model,
-          messages: [
-            { role: 'system', content: '你是一个有用的助手。请用 Markdown 格式回复。' },
-            { role: 'user', content: userContent + context },
-          ],
+          messages: apiMessages,
           stream: true,
         })
 
