@@ -65,7 +65,7 @@ npm run format  # 格式化代码
 |------|------|------|
 | v0.1 | ✅ 已完成 | 核心文件浏览 |
 | v0.2 | ✅ 已完成 | AI 助手 |
-| v0.3 | 📋 已规划 | 增强功能 |
+| v0.3 | 🔄 进行中 | 增强功能 |
 
 详见 [项目路线图](./docs/roadmap.md)
 
@@ -77,6 +77,7 @@ QBase/
 │   ├── src/               # 源代码
 │   │   ├── components/    # Vue 组件
 │   │   ├── stores/        # Pinia stores
+│   │   ├── repositories/  # 数据存储抽象层
 │   │   ├── views/         # 页面视图
 │   │   └── router/        # 路由配置
 │   ├── electron/          # Electron 主进程

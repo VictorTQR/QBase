@@ -1,6 +1,6 @@
 # QBase 系统架构
 
-**版本**: v0.2
+**版本**: v0.3
 **更新日期**: 2026-02-25
 
 ## 核心定位
@@ -41,6 +41,7 @@ QBase 是一个本地知识库管理系统，核心特性：
 | workspace | 工作区管理（添加/移除文件夹） | ✅ |
 | document | 文档加载和展示 | ✅ |
 | agent | AI 助手对话 | ✅ |
+| repositories | 数据存储抽象层 | ✅ |
 | search | 全文搜索 | 📋 |
 
 ## UI 布局
@@ -62,13 +63,17 @@ src/
 │   │   ├── MainLayout.vue      # 主布局容器
 │   │   ├── Sidebar.vue         # 左侧文件夹树
 │   │   ├── ContentPane.vue     # 中间内容区
-│   │   └── AgentPanel.vue      # 右侧Agent面板
+│   │   ├── AgentPanel.vue      # 右侧Agent面板
+│   │   └── SessionSidebar.vue  # 会话列表侧边栏
 │   ├── LlmConfigDialog.vue     # LLM配置对话框
 │   └── MarkdownViewer.vue      # Markdown渲染组件
 ├── stores/
 │   ├── workspace.js            # 工作区状态
 │   ├── document.js             # 文档状态
 │   └── agent.js                # Agent状态
+├── repositories/
+│   ├── SessionRepository.js              # 会话存储抽象接口
+│   └── LocalStorageSessionRepository.js  # localStorage 实现
 ├── views/
 │   └── Home.vue                # 首页
 ├── router/
