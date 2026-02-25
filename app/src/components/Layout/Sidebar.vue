@@ -1,6 +1,11 @@
 <template>
   <div class="sidebar">
-    <div class="workspace-title">工作区</div>
+    <div class="workspace-header">
+      <span class="workspace-title">工作区</span>
+      <el-button :loading="isRefreshing" link type="primary" @click="handleRefresh">
+        <el-icon><Refresh /></el-icon>
+      </el-button>
+    </div>
     <el-tree
       :data="treeData"
       :props="treeProps"
@@ -14,6 +19,7 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import { Refresh } from '@element-plus/icons-vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDocumentStore } from '@/stores/document'
 
@@ -26,6 +32,16 @@ const treeProps = {
 }
 
 const treeData = ref([])
+const isRefreshing = ref(false)
+
+async function handleRefresh() {
+  isRefreshing.value = true
+  try {
+    await refreshTree()
+  } finally {
+    isRefreshing.value = false
+  }
+}
 
 async function loadFolderTree(folder) {
   const result = await window.electronAPI.readDir(folder.path)
@@ -84,12 +100,18 @@ onMounted(() => {
   overflow: hidden;
 }
 
-.workspace-title {
+.workspace-header {
   padding: 12px 16px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.workspace-title {
   font-weight: 600;
   font-size: 14px;
   color: var(--el-text-color-secondary);
-  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
 .sidebar :deep(.el-tree) {
