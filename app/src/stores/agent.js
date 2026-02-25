@@ -138,6 +138,7 @@ export const useAgentStore = defineStore(
     function clearMessages() {
       if (!currentSession.value) return
       currentSession.value.messages = []
+      currentSession.value.title = '新对话'
       error.value = null
       _saveCurrentSession()
     }
@@ -146,6 +147,7 @@ export const useAgentStore = defineStore(
       if (currentSession.value) {
         repository.update(currentSessionId.value, {
           messages: currentSession.value.messages,
+          title: currentSession.value.title,
         })
       }
     }
