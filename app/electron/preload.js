@@ -1,7 +1,10 @@
-const { contextBridge } = require('electron/renderer')
+const { contextBridge, ipcRenderer } = require('electron/renderer')
 
 contextBridge.exposeInMainWorld('electronAPI', {
   getVersion: () => process.versions.electron,
-  // 后续可添加更多通信方法
-  // showDialog: (message) => ipcRenderer.invoke('show-dialog', message)
+  selectFolder: () => ipcRenderer.invoke('select-folder'),
+  readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
+  readDir: (dirPath) => ipcRenderer.invoke('read-dir', dirPath),
+  getFileStats: (filePath) => ipcRenderer.invoke('get-file-stats', filePath),
+  searchFiles: (folderPath, query) => ipcRenderer.invoke('search-files', folderPath, query)
 })
