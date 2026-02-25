@@ -15,7 +15,9 @@
 
 - [工作区管理](./features/workspace.md) - 文件夹管理和文件树导航
 - [Markdown 预览](./features/markdown-preview.md) - 文档渲染功能
+- [文件格式支持](./features/file-format-support.md) - PDF、音视频播放
 - [AI 助手](./features/ai-assistant.md) - LLM 对话功能
+- [智能闪卡生成](./features/flashcard-generation.md) - 基于文档的闪卡生成
 - [搜索增强](./features/search.md) - 全文搜索功能
 
 ### 项目规划
@@ -29,6 +31,7 @@
 - [v0.1 实施报告](./implementation/v0.1-complete.md) - 核心文件浏览功能
 - [v0.2 实施报告](./implementation/v0.2-complete.md) - AI 助手功能
 - [v0.3 实施报告](./implementation/v0.3-complete.md) - 增强功能（多会话、测试连接、多轮对话、手动刷新、搜索增强）
+- [v0.4 实施报告](./implementation/v0.4-complete.md) - 文件格式增强与智能闪卡生成
 
 ### 问题记录
 Bug 修复记录和问题追踪。
