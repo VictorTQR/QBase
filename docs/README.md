@@ -18,6 +18,7 @@
 - [文件格式支持](./features/file-format-support.md) - PDF、音视频播放
 - [AI 助手](./features/ai-assistant.md) - LLM 对话功能
 - [智能闪卡生成](./features/flashcard-generation.md) - 基于文档的闪卡生成
+- [智能生成功能](./features/ai-generation.md) - 闪卡、思维导图、摘要生成
 - [搜索增强](./features/search.md) - 全文搜索功能
 
 ### 项目规划
@@ -32,6 +33,7 @@
 - [v0.2 实施报告](./implementation/v0.2-complete.md) - AI 助手功能
 - [v0.3 实施报告](./implementation/v0.3-complete.md) - 增强功能（多会话、测试连接、多轮对话、手动刷新、搜索增强）
 - [v0.4 实施报告](./implementation/v0.4-complete.md) - 文件格式增强与智能闪卡生成
+- [v0.5 实施报告](./implementation/0.5-ai-generation-enhancement.md) - 智能生成功能增强
 
 ### 问题记录
 Bug 修复记录和问题追踪。
