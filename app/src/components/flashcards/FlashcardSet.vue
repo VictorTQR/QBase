@@ -19,12 +19,7 @@
             <span>{{ formatDate(set.createdAt) }}</span>
           </div>
         </div>
-        <el-button
-          type="danger"
-          size="small"
-          circle
-          @click.stop="deleteSet(set.id)"
-        >
+        <el-button type="danger" size="small" circle @click.stop="deleteSet(set.id)">
           <el-icon><Delete /></el-icon>
         </el-button>
       </div>
@@ -52,8 +47,7 @@ async function deleteSet(id) {
       type: 'warning',
     })
     await flashcardStore.deleteSet(id)
-  } catch {
-  }
+  } catch {}
 }
 
 function formatDate(dateStr) {

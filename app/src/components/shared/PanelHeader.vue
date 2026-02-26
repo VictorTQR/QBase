@@ -4,8 +4,8 @@ import { Setting, Minus } from '@element-plus/icons-vue'
 defineProps({
   title: {
     type: String,
-    default: 'AI 助手'
-  }
+    default: 'AI 助手',
+  },
 })
 
 const emit = defineEmits(['settings', 'minimize'])

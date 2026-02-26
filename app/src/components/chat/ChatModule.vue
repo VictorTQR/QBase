@@ -39,11 +39,14 @@ const handleClear = () => {
   agentStore.clearMessages()
 }
 
-watch(() => agentStore.messages.length, () => {
-  nextTick(() => {
-    bubbleListRef.value?.scrollToBottom()
-  })
-})
+watch(
+  () => agentStore.messages.length,
+  () => {
+    nextTick(() => {
+      bubbleListRef.value?.scrollToBottom()
+    })
+  },
+)
 </script>
 
 <template>
@@ -60,7 +63,7 @@ watch(() => agentStore.messages.length, () => {
         </el-button>
       </div>
     </div>
-    
+
     <div class="chat-body">
       <SessionSidebar v-if="showSessionSidebar" />
       <div class="chat-content">

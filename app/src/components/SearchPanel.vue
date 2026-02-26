@@ -41,7 +41,10 @@
             <span>搜索出错: {{ searchStore.error }}</span>
           </div>
 
-          <div v-else-if="searchStore.results.length === 0 && searchStore.query" class="search-empty">
+          <div
+            v-else-if="searchStore.results.length === 0 && searchStore.query"
+            class="search-empty"
+          >
             <el-icon><Document /></el-icon>
             <span>未找到匹配的文件</span>
           </div>
@@ -60,7 +63,9 @@
               <div class="result-content">
                 <div class="result-name">
                   <span v-html="highlightText(result.name, searchStore.query)"></span>
-                  <el-tag v-if="result.matchType === 'name'" size="small" type="info">文件名</el-tag>
+                  <el-tag v-if="result.matchType === 'name'" size="small" type="info"
+                    >文件名</el-tag
+                  >
                   <el-tag v-else size="small" type="success">内容</el-tag>
                 </div>
                 <div v-if="result.snippet" class="result-snippet">

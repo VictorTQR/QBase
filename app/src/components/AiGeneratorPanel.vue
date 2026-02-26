@@ -48,12 +48,7 @@
           </el-tab-pane>
         </el-tabs>
 
-        <el-alert
-          v-if="error"
-          type="error"
-          :closable="false"
-          style="margin-top: 16px"
-        >
+        <el-alert v-if="error" type="error" :closable="false" style="margin-top: 16px">
           {{ error }}
         </el-alert>
 
@@ -76,7 +71,7 @@
                     />
                   </g>
                 </template>
-                
+
                 <!-- 绘制节点 -->
                 <template v-for="node in mindmapResult.nodes" :key="node.id">
                   <g>
@@ -202,20 +197,20 @@ async function generateSummary() {
 }
 
 function getNodeById(nodes, id) {
-  return nodes.find(node => node.parent === id)
+  return nodes.find((node) => node.parent === id)
 }
 
 function getNodePosition(nodeId) {
   const positions = {
-    'root': { x: 400, y: 50 },
-    'node1': { x: 200, y: 150 },
-    'node2': { x: 600, y: 150 },
-    'node3': { x: 100, y: 250 },
-    'node4': { x: 300, y: 250 },
-    'node5': { x: 500, y: 250 },
-    'node6': { x: 700, y: 250 }
+    root: { x: 400, y: 50 },
+    node1: { x: 200, y: 150 },
+    node2: { x: 600, y: 150 },
+    node3: { x: 100, y: 250 },
+    node4: { x: 300, y: 250 },
+    node5: { x: 500, y: 250 },
+    node6: { x: 700, y: 250 },
   }
-  
+
   return positions[nodeId] || { x: 400, y: 350 }
 }
 </script>

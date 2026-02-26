@@ -4,18 +4,8 @@
       <el-empty description="无媒体文件" />
     </div>
     <div v-else class="media-container">
-      <audio
-        v-if="mediaType === 'audio'"
-        :src="mediaSrc"
-        controls
-        class="audio-player"
-      />
-      <video
-        v-else-if="mediaType === 'video'"
-        :src="mediaSrc"
-        controls
-        class="video-player"
-      />
+      <audio v-if="mediaType === 'audio'" :src="mediaSrc" controls class="audio-player" />
+      <video v-else-if="mediaType === 'video'" :src="mediaSrc" controls class="video-player" />
     </div>
   </div>
 </template>

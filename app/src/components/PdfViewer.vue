@@ -38,8 +38,7 @@
 
 <script setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue'
-import {
-  Warning, Loading, DArrowLeft, DArrowRight, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
+import { Warning, Loading, DArrowLeft, DArrowRight, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
@@ -148,11 +147,15 @@ function zoomOut() {
   renderPage(currentPage.value)
 }
 
-watch(() => props.base64Data, () => {
-  if (props.base64Data) {
-    loadPdf()
-  }
-}, { immediate: true })
+watch(
+  () => props.base64Data,
+  () => {
+    if (props.base64Data) {
+      loadPdf()
+    }
+  },
+  { immediate: true },
+)
 
 onUnmounted(() => {
   if (currentRenderTask.value) {

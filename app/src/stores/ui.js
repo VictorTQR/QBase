@@ -24,6 +24,6 @@ export const useUiStore = defineStore('ui', () => {
     isFlashcardFocusMode,
     setActiveModule,
     toggleAgentPanel,
-    toggleFlashcardFocusMode
+    toggleFlashcardFocusMode,
   }
 })

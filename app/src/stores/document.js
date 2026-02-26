@@ -20,7 +20,7 @@ function getMimeType(fileType) {
     flac: 'audio/flac',
     mp4: 'video/mp4',
     webm: 'video/webm',
-    mov: 'video/quicktime'
+    mov: 'video/quicktime',
   }
   return mimes[fileType] || 'application/octet-stream'
 }

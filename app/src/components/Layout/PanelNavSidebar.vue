@@ -5,8 +5,8 @@ import { ChatDotRound, Tickets, MagicStick } from '@element-plus/icons-vue'
 const props = defineProps({
   activeModule: {
     type: String,
-    default: 'chat'
-  }
+    default: 'chat',
+  },
 })
 
 const emit = defineEmits(['change'])
@@ -14,7 +14,7 @@ const emit = defineEmits(['change'])
 const navItems = [
   { id: 'chat', icon: ChatDotRound, label: '对话' },
   { id: 'flashcard', icon: Tickets, label: '闪卡' },
-  { id: 'generate', icon: MagicStick, label: '生成' }
+  { id: 'generate', icon: MagicStick, label: '生成' },
 ]
 
 const isActive = computed(() => (id) => props.activeModule === id)

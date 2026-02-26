@@ -2,7 +2,11 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useDocumentStore } from './document'
 import { createLlmApi } from '@/utils/api'
-import { generateFlashcardPrompt, generateMindmapPrompt, generateSummaryPrompt } from '@/utils/prompts'
+import {
+  generateFlashcardPrompt,
+  generateMindmapPrompt,
+  generateSummaryPrompt,
+} from '@/utils/prompts'
 import { LocalStorageSessionRepository } from '@/repositories/LocalStorageSessionRepository'
 
 function generateId() {

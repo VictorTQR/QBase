@@ -42,7 +42,8 @@ export const useSearchStore = defineStore(
 
     function selectPreviousResult() {
       if (results.value.length > 0) {
-        selectedIndex.value = (selectedIndex.value - 1 + results.value.length) % results.value.length
+        selectedIndex.value =
+          (selectedIndex.value - 1 + results.value.length) % results.value.length
       }
     }
 
@@ -67,9 +68,10 @@ export const useSearchStore = defineStore(
       results.value = []
 
       try {
-        const foldersToSearch = searchScope.value === 'all'
-          ? workspaceStore.folders
-          : workspaceStore.folders.filter(f => f.id === searchScope.value)
+        const foldersToSearch =
+          searchScope.value === 'all'
+            ? workspaceStore.folders
+            : workspaceStore.folders.filter((f) => f.id === searchScope.value)
 
         const allResults = []
 
