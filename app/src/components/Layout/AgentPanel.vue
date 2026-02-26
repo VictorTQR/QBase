@@ -42,7 +42,9 @@ const renderModule = () => {
     <PanelHeader @settings="handleSettings" @minimize="handleMinimize" />
     <div class="panel-body">
       <div class="panel-content">
-        <component :is="renderModule()" />
+        <transition name="fade" mode="out-in">
+          <component :is="renderModule()" :key="uiStore.activeModule" />
+        </transition>
       </div>
       <PanelNavSidebar :active-module="uiStore.activeModule" @change="handleModuleChange" />
     </div>
@@ -70,5 +72,15 @@ const renderModule = () => {
 .panel-content {
   flex: 1;
   overflow: hidden;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
