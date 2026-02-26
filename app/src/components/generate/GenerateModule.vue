@@ -1,28 +1,16 @@
 <script setup>
+import AiGeneratorPanel from '@/components/AiGeneratorPanel.vue'
 </script>
 
 <template>
-  <div class="placeholder-module">
-    <el-empty description="生成模块开发中...">
-      <template #image>
-        <el-icon :size="60"><MagicStick /></el-icon>
-      </template>
-    </el-empty>
+  <div class="generate-module">
+    <AiGeneratorPanel />
   </div>
 </template>
 
-<script>
-import { MagicStick } from '@element-plus/icons-vue'
-export default {
-  components: { MagicStick }
-}
-</script>
-
 <style scoped>
-.placeholder-module {
+.generate-module {
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow-y: auto;
 }
 </style>
