@@ -1,0 +1,28 @@
+<script setup>
+</script>
+
+<template>
+  <div class="placeholder-module">
+    <el-empty description="对话模块开发中...">
+      <template #image>
+        <el-icon :size="60"><ChatDotRound /></el-icon>
+      </template>
+    </el-empty>
+  </div>
+</template>
+
+<script>
+import { ChatDotRound } from '@element-plus/icons-vue'
+export default {
+  components: { ChatDotRound }
+}
+</script>
+
+<style scoped>
+.placeholder-module {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+</style>
