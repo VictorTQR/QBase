@@ -5,7 +5,8 @@ import PanelHeader from '@/components/shared/PanelHeader.vue'
 import PanelNavSidebar from './PanelNavSidebar.vue'
 import ChatModule from '@/components/chat/ChatModule.vue'
 import FlashcardModule from '@/components/flashcard/FlashcardModule.vue'
-import GenerateModule from '@/components/generate/GenerateModule.vue'
+import MindmapModule from '@/components/generate/MindmapModule.vue'
+import SummaryModule from '@/components/generate/SummaryModule.vue'
 import LlmConfigDialog from '../LlmConfigDialog.vue'
 
 const uiStore = useUiStore()
@@ -29,8 +30,10 @@ const renderModule = () => {
       return ChatModule
     case 'flashcard':
       return FlashcardModule
-    case 'generate':
-      return GenerateModule
+    case 'mindmap':
+      return MindmapModule
+    case 'summary':
+      return SummaryModule
     default:
       return ChatModule
   }
