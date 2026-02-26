@@ -19,6 +19,14 @@
           <el-icon><DocumentCopy /></el-icon>
           <span>闪卡</span>
         </div>
+        <div
+          class="mode-tab"
+          :class="{ active: activeMode === 'generator' }"
+          @click="activeMode = 'generator'"
+        >
+          <el-icon><MagicStick /></el-icon>
+          <span>智能生成</span>
+        </div>
       </div>
 
       <div v-if="activeMode === 'chat'" class="chat-area">
@@ -60,19 +68,21 @@
         <LlmConfigDialog v-model="showConfig" />
       </div>
 
-      <FlashcardPanel v-else class="flashcard-area" />
+      <FlashcardPanel v-else-if="activeMode === 'flashcard'" class="flashcard-area" />
+      <AiGeneratorPanel v-else-if="activeMode === 'generator'" class="generator-area" />
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, nextTick } from 'vue'
-import { Setting, Delete, ChatDotRound, DocumentCopy } from '@element-plus/icons-vue'
+import { Setting, Delete, ChatDotRound, DocumentCopy, MagicStick } from '@element-plus/icons-vue'
 import { BubbleList, Sender } from 'vue-element-plus-x'
 import { useAgentStore } from '@/stores/agent'
 import LlmConfigDialog from '../LlmConfigDialog.vue'
 import SessionSidebar from './SessionSidebar.vue'
 import FlashcardPanel from '../flashcards/FlashcardPanel.vue'
+import AiGeneratorPanel from '../AiGeneratorPanel.vue'
 
 const agentStore = useAgentStore()
 
@@ -157,7 +167,8 @@ function handleClear() {
 }
 
 .chat-area,
-.flashcard-area {
+.flashcard-area,
+.generator-area {
   flex: 1;
   display: flex;
   flex-direction: column;
