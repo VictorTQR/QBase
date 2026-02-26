@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QBase 智能生成 - 极简设计预览</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --color-primary: #409eff;
+      --color-text-primary: #1f2937;
+      --color-text-secondary: #6b7280;
+      --color-text-tertiary: #9ca3af;
+      --color-border: #e5e7eb;
+      --color-bg: #ffffff;
+      --color-bg-secondary: #f9fafb;
+      --color-bg-hover: #f3f4f6;
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --spacing-xl: 32px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+      min-height: 100vh;
+      padding: var(--spacing-xl);
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-xl);
+    }
+
+    .demo-header {
+      text-align: center;
+      margin-bottom: var(--spacing-md);
+    }
+
+    .demo-header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      margin-bottom: var(--spacing-xs);
+    }
+
+    .demo-header p {
+      font-size: 14px;
+      color: var(--color-text-secondary);
+    }
+
+    .demo-section {
+      display: flex;
+      gap: var(--spacing-xl);
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .demo-column {
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-md);
+    }
+
+    .demo-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--color-text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* 原始设计 */
+    .original-panel {
+      width: 400px;
+      background: var(--color-bg);
+      border-radius: var(--radius-md);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+    }
+
+    .original-card {
+      border: 1px solid var(--color-border);
+    }
+
+    .original-card-header {
+      padding: var(--spacing-md);
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-bg-secondary);
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    .original-content {
+      padding: var(--spacing-md);
+    }
+
+    .original-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--color-border);
+      margin-bottom: var(--spacing-md);
+    }
+
+    .original-tab {
+      padding: var(--spacing-sm) var(--spacing-md);
+      border: 1px solid var(--color-border);
+      border-bottom: none;
+      background: var(--color-bg-secondary);
+      margin-right: -1px;
+      cursor: pointer;
+      font-size: 14px;
+      color: var(--color-text-secondary);
+    }
+
+    .original-tab:first-child {
+      border-radius: var(--radius-sm) 0 0 0;
+    }
+
+    .original-tab.active {
+      background: var(--color-bg);
+      color: var(--color-primary);
+      border-bottom: 1px solid var(--color-bg);
+      margin-bottom: -1px;
+    }
+
+    .original-form-item {
+      margin-bottom: var(--spacing-md);
+    }
+
+    .original-label {
+      display: block;
+      margin-bottom: var(--spacing-sm);
+      font-size: 14px;
+      color: var(--color-text-secondary);
+    }
+
+    .original-slider {
+      width: 100%;
+      height: 6px;
+      background: var(--color-border);
+      border-radius: 3px;
+      appearance: none;
+    }
+
+    .original-btn {
+      width: 100%;
+      padding: var(--spacing-sm) var(--spacing-md);
+      background: var(--color-primary);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .original-result {
+      margin-top: var(--spacing-md);
+      padding: var(--spacing-md);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-bg-secondary);
+    }
+
+    /* 新设计 - 极简主义 */
+    .new-panel {
+      width: 400px;
+      background: var(--color-bg);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .new-content {
+      padding: var(--spacing-lg);
+    }
+
+    .new-tabs {
+      display: flex;
+      gap: var(--spacing-lg);
+      margin-bottom: var(--spacing-lg);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .new-tab {
+      padding: var(--spacing-sm) 0;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--color-text-tertiary);
+      cursor: pointer;
+      position: relative;
+      transition: color 0.2s ease;
+      border: none;
+      background: none;
+    }
+
+    .new-tab:hover {
+      color: var(--color-text-secondary);
+    }
+
+    .new-tab.active {
+      color: var(--color-text-primary);
+    }
+
+    .new-tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--color-text-primary);
+      border-radius: 2px 2px 0 0;
+    }
+
+    .new-form-item {
+      margin-bottom: var(--spacing-lg);
+    }
+
+    .new-label {
+      display: block;
+      margin-bottom: var(--spacing-sm);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-secondary);
+    }
+
+    .new-slider-container {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-md);
+    }
+
+    .new-slider {
+      flex: 1;
+      height: 4px;
+      background: var(--color-border);
+      border-radius: 2px;
+      appearance: none;
+      cursor: pointer;
+    }
+
+    .new-slider::-webkit-slider-thumb {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      background: var(--color-text-primary);
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .new-slider-value {
+      min-width: 40px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--color-text-primary);
+    }
+
+    .new-btn {
+      width: 100%;
+      padding: var(--spacing-sm) var(--spacing-md);
+      background: var(--color-text-primary);
+      color: white;
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.2s ease, transform 0.1s ease;
+    }
+
+    .new-btn:hover {
+      opacity: 0.9;
+    }
+
+    .new-btn:active {
+      transform: scale(0.98);
+    }
+
+    .new-result {
+      margin-top: var(--spacing-lg);
+      padding-top: var(--spacing-lg);
+      border-top: 1px solid var(--color-border);
+    }
+
+    .new-result-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: var(--spacing-sm);
+    }
+
+    .new-result-content {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--color-text-secondary);
+    }
+
+    /* Agent Panel 对比 */
+    .agent-panel-container {
+      width: 400px;
+      background: var(--color-bg);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    .original-agent-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-bg-secondary);
+    }
+
+    .original-agent-tab {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: var(--spacing-sm) var(--spacing-md);
+      font-size: 14px;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+    }
+
+    .original-agent-tab.active {
+      color: var(--color-primary);
+      border-bottom-color: var(--color-primary);
+    }
+
+    .new-agent-tabs {
+      display: flex;
+      padding: var(--spacing-sm);
+      gap: var(--spacing-xs);
+    }
+
+    .new-agent-tab {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: var(--spacing-sm);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-tertiary);
+      cursor: pointer;
+      border-radius: var(--radius-md);
+      transition: all 0.2s ease;
+      border: none;
+      background: none;
+    }
+
+    .new-agent-tab:hover {
+      background: var(--color-bg-hover);
+      color: var(--color-text-secondary);
+    }
+
+    .new-agent-tab.active {
+      background: var(--color-text-primary);
+      color: white;
+    }
+
+    .icon {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* 思维导图预览 */
+    .mindmap-preview {
+      margin-top: var(--spacing-md);
+      padding: var(--spacing-md);
+      background: var(--color-bg-secondary);
+      border-radius: var(--radius-md);
+    }
+
+    .mindmap-node {
+      display: inline-block;
+      padding: var(--spacing-xs) var(--spacing-sm);
+      background: var(--color-bg);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      margin: var(--spacing-xs);
+    }
+
+    .mindmap-node.root {
+      background: var(--color-text-primary);
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-header">
+    <h1>QBase 智能生成 - 极简设计预览</h1>
+    <p>Minimalist Design Redesign</p>
+  </div>
+
+  <div class="demo-section">
+    <!-- 智能生成面板对比 -->
+    <div class="demo-column">
+      <span class="demo-label">Original 原始设计</span>
+      <div class="original-panel">
+        <div class="original-card">
+          <div class="original-card-header">智能生成</div>
+          <div class="original-content">
+            <div class="original-tabs">
+              <div class="original-tab active">闪卡</div>
+              <div class="original-tab">思维导图</div>
+              <div class="original-tab">摘要</div>
+            </div>
+            <div class="original-form-item">
+              <span class="original-label">闪卡数量</span>
+              <input type="range" class="original-slider" min="5" max="20" value="10">
+            </div>
+            <button class="original-btn">生成闪卡</button>
+            <div class="original-result">
+              <h4 style="margin-bottom: 8px; font-size: 14px;">文档摘要</h4>
+              <p style="font-size: 13px; color: #666; line-height: 1.6;">
+                这是一个示例摘要，展示了文档的主要内容和核心要点...
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-column">
+      <span class="demo-label">New 极简设计</span>
+      <div class="new-panel">
+        <div class="new-content">
+          <div class="new-tabs">
+            <button class="new-tab active">闪卡</button>
+            <button class="new-tab">思维导图</button>
+            <button class="new-tab">摘要</button>
+          </div>
+          <div class="new-form-item">
+            <span class="new-label">闪卡数量</span>
+            <div class="new-slider-container">
+              <input type="range" class="new-slider" min="5" max="20" value="10">
+              <span class="new-slider-value">10</span>
+            </div>
+          </div>
+          <button class="new-btn">生成闪卡</button>
+          <div class="new-result">
+            <div class="new-result-title">摘要</div>
+            <div class="new-result-content">
+              这是一个示例摘要，展示了文档的主要内容和核心要点...
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-section">
+    <!-- Agent 模式标签对比 -->
+    <div class="demo-column">
+      <span class="demo-label">Original 原始设计</span>
+      <div class="agent-panel-container">
+        <div class="original-agent-tabs">
+          <div class="original-agent-tab active">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span>对话</span>
+          </div>
+          <div class="original-agent-tab">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+            </svg>
+            <span>闪卡</span>
+          </div>
+          <div class="original-agent-tab">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2l6.5 12H5.5L12 2z"></path>
+              <circle cx="12" cy="12" r="10"></circle>
+            </svg>
+            <span>智能生成</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-column">
+      <span class="demo-label">New 极简设计</span>
+      <div class="agent-panel-container">
+        <div class="new-agent-tabs">
+          <button class="new-agent-tab active">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span>对话</span>
+          </button>
+          <button class="new-agent-tab">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+            </svg>
+            <span>闪卡</span>
+          </button>
+          <button class="new-agent-tab">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2l6.5 12H5.5L12 2z"></path>
+              <circle cx="12" cy="12" r="10"></circle>
+            </svg>
+            <span>智能生成</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 滑块交互
+    const sliders = document.querySelectorAll('.new-slider');
+    sliders.forEach(slider => {
+      const valueDisplay = slider.nextElementSibling;
+      slider.addEventListener('input', () => {
+        valueDisplay.textContent = slider.value;
+      });
+    });
+
+    // 标签页交互
+    const tabs = document.querySelectorAll('.new-tab');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+      });
+    });
+
+    const agentTabs = document.querySelectorAll('.new-agent-tab');
+    agentTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        agentTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>
