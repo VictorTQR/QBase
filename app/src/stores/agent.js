@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useDocumentStore } from './document'
 import { createLlmApi } from '@/utils/api'
-import { generateFlashcardPrompt } from '@/utils/prompts'
+import { generateFlashcardPrompt, generateMindmapPrompt, generateSummaryPrompt } from '@/utils/prompts'
 import { LocalStorageSessionRepository } from '@/repositories/LocalStorageSessionRepository'
 
 function generateId() {
@@ -271,6 +271,54 @@ export const useAgentStore = defineStore(
       }
     }
 
+    async function generateMindmap(content) {
+      try {
+        const prompt = generateMindmapPrompt(content)
+        const api = createLlmApi(llmConfig.value.baseUrl, llmConfig.value.apiKey)
+        const request = api.post('/chat/completions', {
+          model: llmConfig.value.model,
+          messages: [{ role: 'user', content: prompt }],
+          stream: false,
+          temperature: 0.7,
+        })
+
+        const result = await request.json()
+        const responseText = result.choices?.[0]?.message?.content || ''
+
+        let mindmap = null
+        try {
+          mindmap = JSON.parse(responseText)
+        } catch (parseErr) {
+          console.error('Failed to parse mindmap JSON:', parseErr)
+          throw new Error('思维导图生成失败：无法解析响应格式')
+        }
+
+        return { success: true, mindmap }
+      } catch (err) {
+        return { success: false, error: err.message }
+      }
+    }
+
+    async function generateSummary(content) {
+      try {
+        const prompt = generateSummaryPrompt(content)
+        const api = createLlmApi(llmConfig.value.baseUrl, llmConfig.value.apiKey)
+        const request = api.post('/chat/completions', {
+          model: llmConfig.value.model,
+          messages: [{ role: 'user', content: prompt }],
+          stream: false,
+          temperature: 0.7,
+        })
+
+        const result = await request.json()
+        const summary = result.choices?.[0]?.message?.content || ''
+
+        return { success: true, summary }
+      } catch (err) {
+        return { success: false, error: err.message }
+      }
+    }
+
     loadSessions()
 
     return {
@@ -293,6 +341,8 @@ export const useAgentStore = defineStore(
       testConnection,
       sendMessage,
       generateFlashcards,
+      generateMindmap,
+      generateSummary,
     }
   },
   {
