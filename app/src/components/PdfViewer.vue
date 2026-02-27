@@ -37,7 +37,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted, shallowRef, nextTick } from 'vue'
 import { Warning, Loading, DArrowLeft, DArrowRight, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
@@ -45,6 +45,10 @@ import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 
 const props = defineProps({
+  filePath: {
+    type: String,
+    default: '',
+  },
   base64Data: {
     type: String,
     default: '',
@@ -55,14 +59,23 @@ const pdfCanvas = ref(null)
 const canvasWrapper = ref(null)
 const isLoading = ref(true)
 const error = ref(null)
-const pdfDoc = ref(null)
+const pdfDoc = shallowRef(null)
 const currentPage = ref(1)
 const totalPages = ref(0)
 const scale = ref(1)
 const currentRenderTask = ref(null)
 
+function base64ToUint8Array(base64) {
+  const binaryData = atob(base64)
+  const uint8Array = new Uint8Array(binaryData.length)
+  for (let i = 0; i < binaryData.length; i++) {
+    uint8Array[i] = binaryData.charCodeAt(i)
+  }
+  return uint8Array
+}
+
 async function loadPdf() {
-  if (!props.base64Data) {
+  if (!props.filePath && !props.base64Data) {
     return
   }
 
@@ -70,20 +83,26 @@ async function loadPdf() {
   error.value = null
 
   try {
-    const binaryData = atob(props.base64Data)
-    const uint8Array = new Uint8Array(binaryData.length)
-    for (let i = 0; i < binaryData.length; i++) {
-      uint8Array[i] = binaryData.charCodeAt(i)
+    let loadingTask
+
+    if (props.filePath) {
+      const formattedPath = props.filePath.replace(/\\/g, '/')
+      const url = `local-file://${formattedPath.replace(/^\/+/, '')}`
+      loadingTask = pdfjsLib.getDocument({ url })
+    } else if (props.base64Data) {
+      const uint8Array = base64ToUint8Array(props.base64Data)
+      loadingTask = pdfjsLib.getDocument({ data: uint8Array })
     }
 
-    const loadingTask = pdfjsLib.getDocument({ data: uint8Array })
     pdfDoc.value = await loadingTask.promise
     totalPages.value = pdfDoc.value.numPages
     currentPage.value = 1
+    
+    isLoading.value = false
+    await nextTick()
     await renderPage(currentPage.value)
   } catch (err) {
     error.value = `加载 PDF 失败：${err.message}`
-  } finally {
     isLoading.value = false
   }
 }
@@ -98,10 +117,21 @@ async function renderPage(pageNum) {
   }
 
   try {
-    const page = await pdfDoc.value.getPage(pageNum)
+    await nextTick()
+    
     const canvas = pdfCanvas.value
+    if (!canvas) {
+      console.error('Canvas 元素未找到')
+      return
+    }
+    
     const context = canvas.getContext('2d')
+    if (!context) {
+      console.error('无法获取 canvas 上下文')
+      return
+    }
 
+    const page = await pdfDoc.value.getPage(pageNum)
     const viewport = page.getViewport({ scale: 1 })
     const containerWidth = canvasWrapper.value?.clientWidth || 800
     const desiredScale = containerWidth / viewport.width
@@ -148,9 +178,9 @@ function zoomOut() {
 }
 
 watch(
-  () => props.base64Data,
+  [() => props.filePath, () => props.base64Data],
   () => {
-    if (props.base64Data) {
+    if (props.filePath || props.base64Data) {
       loadPdf()
     }
   },
@@ -160,6 +190,9 @@ watch(
 onUnmounted(() => {
   if (currentRenderTask.value) {
     currentRenderTask.value.cancel()
+  }
+  if (pdfDoc.value) {
+    pdfDoc.value.destroy()
   }
 })
 </script>
