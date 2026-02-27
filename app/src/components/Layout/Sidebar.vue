@@ -1,23 +1,30 @@
 <template>
   <div class="sidebar">
-    <div class="workspace-header">
-      <span class="workspace-title">工作区</span>
-      <el-button :loading="isRefreshing" link type="primary" @click="handleRefresh">
-        <el-icon><Refresh /></el-icon>
-      </el-button>
-    </div>
-    <el-tree
-      ref="treeRef"
-      :data="treeData"
-      :props="treeProps"
-      lazy
-      :load="loadNode"
-      node-key="id"
-      default-expand-all
-      @node-click="handleNodeClick"
-      @node-contextmenu="handleContextMenu"
-      :highlight-current="true"
-    />
+    <el-tabs v-model="activeTab" class="sidebar-tabs">
+      <el-tab-pane label="文件树" name="filetree">
+        <div class="workspace-header">
+          <span class="workspace-title">工作区</span>
+          <el-button :loading="isRefreshing" link type="primary" @click="handleRefresh">
+            <el-icon><Refresh /></el-icon>
+          </el-button>
+        </div>
+        <el-tree
+          ref="treeRef"
+          :data="treeData"
+          :props="treeProps"
+          lazy
+          :load="loadNode"
+          node-key="id"
+          default-expand-all
+          @node-click="handleNodeClick"
+          @node-contextmenu="handleContextMenu"
+          :highlight-current="true"
+        />
+      </el-tab-pane>
+      <el-tab-pane label="解析管理" name="parse">
+        <ParseManager />
+      </el-tab-pane>
+    </el-tabs>
     <teleport to="body">
       <div v-if="contextMenu.visible" class="context-menu" :style="contextMenu.style" @click.stop>
         <div class="context-menu-item" @click="handleRemoveFolder">移除文件夹</div>
@@ -32,6 +39,9 @@ import { Refresh } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDocumentStore } from '@/stores/document'
+import ParseManager from './ParseManager.vue'
+
+const activeTab = ref('filetree')
 
 const workspaceStore = useWorkspaceStore()
 const documentStore = useDocumentStore()
@@ -163,12 +173,34 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.sidebar-tabs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-tabs :deep(.el-tabs__content) {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-tabs :deep(.el-tab-pane) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .workspace-header {
   padding: 12px 16px;
   border-bottom: 1px solid var(--el-border-color-lighter);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
 }
 
 .workspace-title {
