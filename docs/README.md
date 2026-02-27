@@ -34,6 +34,7 @@
 - [v0.3 实施报告](./implementation/v0.3-complete.md) - 增强功能（多会话、测试连接、多轮对话、手动刷新、搜索增强）
 - [v0.4 实施报告](./implementation/v0.4-complete.md) - 文件格式增强与智能闪卡生成
 - [v0.5 实施报告](./implementation/0.5-ai-generation-enhancement.md) - 智能生成功能增强
+- [v0.6 实施报告](./implementation/v0.6-core-architecture-complete.md) - 智能体能力增强（核心架构）
 
 ### 问题记录
 Bug 修复记录和问题追踪。

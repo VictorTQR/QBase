@@ -11,6 +11,7 @@
 | v0.3 | ✅ 已完成 | 增强功能 | 2026-02-25 |
 | v0.4 | ✅ 已完成 | 文件格式+闪卡 | 2026-02-25 |
 | v0.5 | ✅ 已完成 | 智能生成与UI优化 | 2026-02-26 |
+| v0.6 | ✅ 核心架构完成 | 智能体能力增强 | 2026-02-27 |
 
 ---
 
@@ -212,6 +213,52 @@
 
 - [实施报告](./implementation/0.5-ai-generation-enhancement.md)
 - [重构计划](./plans/2026-02-26-sidebar-refactor.md)
+
+---
+
+## v0.6 - 智能体能力增强（核心架构完成）✅
+
+**状态**: 核心架构完成
+**发布日期**: 2026-02-27
+
+### 功能列表
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| DocumentProcessor 接口 | ✅ | 统一文档处理接口层（预埋架构） |
+| MinerUProcessor 实现 | ✅ | MinerU API 集成 |
+| VectorStore 接口 | ✅ | 统一向量存储接口层（预埋架构） |
+| MemoryVectorStore 实现 | ✅ | 内存向量索引 + 余弦相似度 |
+| Electron IPC 集成 | ✅ | MinerU + SiliconFlow IPC 处理器 |
+| 配置扩展 | ✅ | MinerU + SiliconFlow 配置管理 |
+| 配置 UI | ✅ | LlmConfigDialog 新增 Tab 页 |
+
+### 已完成部分
+
+**架构层预埋** (2026-02-27):
+- DocumentProcessor 统一接口定义
+- VectorStore 统一接口定义
+- 支持后期无缝切换本地实现
+
+**Electron 主进程集成** (2026-02-27):
+- preload.js 新增 mineru 和 siliconflow 命名空间
+- main.js 新增完整的 IPC 处理器
+- 支持文件上传、任务轮询、结果下载
+
+**UI 配置** (2026-02-27):
+- agent.js 新增 mineru 和 siliconflow 配置
+- LlmConfigDialog 新增 3 个 Tab 页（LLM、MinerU、SiliconFlow）
+
+### 核心架构
+
+- **B+ 架构**: MVP 快速迭代 + 预埋统一接口层
+- **云端先行**: MinerU + SiliconFlow API
+- **本地跟进**: 后期支持 transformers.js / Ollama
+
+### 相关文档
+
+- [设计文档](./plans/2026-02-27-v0.6-ai-agent-enhancement-design.md)
+- [实施计划](./plans/2026-02-27-v0.6-implementation.md)
 
 ---
 
