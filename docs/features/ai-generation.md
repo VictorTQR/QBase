@@ -97,6 +97,8 @@ generateSummaryPrompt(content)
 - 一键生成思维导图
 - 生成状态显示
 - SVG 格式结果预览
+- 数据结构验证
+- 调试面板（原始 JSON 数据）
 - 错误处理
 
 **文件位置**：`src/components/mindmap/MindmapGenerator.vue`
@@ -140,6 +142,11 @@ async function generateSummary(content)
   error?: string
 }
 ```
+
+**JSON 解析策略**：
+- `generateFlashcards` 和 `generateMindmap` 使用正则表达式提取 JSON
+- 支持 LLM 返回包含额外文本的响应（如 markdown 代码块）
+- 添加 console.log 输出原始响应便于调试
 
 ### Prompt 模板
 
@@ -240,3 +247,4 @@ AgentPanel 包含四个模式标签：
 - [实施报告](../implementation/0.5-ai-generation-enhancement.md)
 - [AI 助手功能](./ai-assistant.md)
 - [闪卡生成功能](./flashcard-generation.md)
+- [Bug 修复记录](../bugs/2026-02-27-mindmap-json-parsing.md)
