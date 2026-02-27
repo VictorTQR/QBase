@@ -1,8 +1,8 @@
 # 工作区管理
 
 **状态**: ✅ 已完成
-**版本**: v0.1
-**更新日期**: 2026-02-25
+**版本**: v0.5.x
+**更新日期**: 2026-02-27
 
 ## 功能概述
 
@@ -13,18 +13,21 @@
 ### 添加文件夹
 
 - 通过 Electron API 打开系统文件夹选择对话框
-- 递归扫描文件夹内容
-- 构建文件树结构
+- 重复路径检测，防止重复添加
+- 操作成功/失败提示
 
 ### 移除文件夹
 
+- 右键点击根文件夹显示菜单
+- 确认弹窗防止误操作
 - 从工作区列表中移除
-- 清除相关缓存
 
 ### 文件树导航
 
 - 树形展示文件夹结构
+- 支持按需 lazy 加载（无限层级）
 - 支持展开/折叠
+- 手动刷新功能
 - 点击文件预览内容
 
 ## 实现细节
@@ -34,15 +37,16 @@
 ```javascript
 // stores/workspace.js
 export const useWorkspaceStore = defineStore('workspace', () => {
-  const folders = ref([])      // 工作区文件夹列表
-  const activeFileId = ref(null)  // 当前选中文件
-  const fileTree = ref([])     // 文件树数据
+  const folders = ref([])          // 工作区文件夹列表
+  const activeFileId = ref(null)    // 当前选中文件
+  const needsRefresh = ref(false)    // 刷新标记
 
-  function addFolder(folder) { /* ... */ }
+  function addFolder(folder) { /* 含重复检测 */ }
   function removeFolder(folderId) { /* ... */ }
+  function refreshFileTree() { /* ... */ }
   function selectFile(fileId) { /* ... */ }
 
-  return { folders, activeFileId, fileTree, addFolder, removeFolder, selectFile }
+  return { folders, activeFileId, needsRefresh, addFolder, removeFolder, refreshFileTree, selectFile }
 })
 ```
 
@@ -77,13 +81,15 @@ persist: {
 
 ## 使用方式
 
-1. 点击左侧栏顶部「添加文件夹」按钮
+1. 点击顶部「添加文件夹」按钮
 2. 在系统对话框中选择文件夹
-3. 文件夹内容自动加载到文件树
-4. 点击文件即可预览
+3. 文件夹显示在左侧文件树中
+4. 展开文件夹按需加载内容
+5. 点击文件即可预览
+6. 右键点击根文件夹可选择「移除文件夹」
 
 ## 注意事项
 
-- 大型文件夹可能需要较长加载时间
-- 仅支持文本文件预览（Markdown、代码等）
+- 文件树采用按需加载，性能更优
+- 支持无限层级文件夹
 - 暂不支持文件夹实时监听（计划 v0.3）

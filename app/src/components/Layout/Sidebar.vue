@@ -7,19 +7,29 @@
       </el-button>
     </div>
     <el-tree
+      ref="treeRef"
       :data="treeData"
       :props="treeProps"
+      lazy
+      :load="loadNode"
       node-key="id"
       default-expand-all
       @node-click="handleNodeClick"
+      @node-contextmenu="handleContextMenu"
       :highlight-current="true"
     />
+    <teleport to="body">
+      <div v-if="contextMenu.visible" class="context-menu" :style="contextMenu.style" @click.stop>
+        <div class="context-menu-item" @click="handleRemoveFolder">移除文件夹</div>
+      </div>
+    </teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, onUnmounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
+import { ElMessageBox } from 'element-plus'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDocumentStore } from '@/stores/document'
 
@@ -32,42 +42,90 @@ const treeProps = {
 }
 
 const treeData = ref([])
+const treeRef = ref(null)
 const isRefreshing = ref(false)
+
+const contextMenu = ref({
+  visible: false,
+  style: { left: '0px', top: '0px' },
+  nodeData: null,
+})
+
+async function loadNode(node, resolve) {
+  if (node.level === 0) {
+    return resolve([])
+  }
+
+  const nodeData = node.data
+  if (nodeData.type === 'file') {
+    return resolve([])
+  }
+
+  try {
+    const result = await window.electronAPI.readDir(nodeData.path)
+    if (result.success) {
+      const children = [
+        ...result.folders.map((f) => ({ ...f, leaf: false, loaded: false })),
+        ...result.files.map((f) => ({ ...f, leaf: true })),
+      ]
+      return resolve(children)
+    }
+    return resolve([])
+  } catch (error) {
+    console.error('加载文件夹失败:', error)
+    return resolve([])
+  }
+}
+
+function initTreeData() {
+  treeData.value = workspaceStore.folders.map((f) => ({
+    ...f,
+    leaf: false,
+    loaded: false,
+  }))
+}
+
+function handleContextMenu(event, data) {
+  if (data.type === 'folder' && workspaceStore.folders.some((f) => f.id === data.id)) {
+    event.preventDefault()
+    event.stopPropagation()
+    contextMenu.value = {
+      visible: true,
+      style: { left: `${event.clientX}px`, top: `${event.clientY}px` },
+      nodeData: data,
+    }
+  }
+}
+
+function handleClickOutside() {
+  contextMenu.value.visible = false
+}
+
+async function handleRemoveFolder() {
+  contextMenu.value.visible = false
+  try {
+    await ElMessageBox.confirm(
+      `确定要移除文件夹「${contextMenu.value.nodeData.name}」吗？`,
+      '移除文件夹',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+    workspaceStore.removeFolder(contextMenu.value.nodeData.id)
+  } catch {
+    // 用户取消操作，忽略错误
+  }
+}
 
 async function handleRefresh() {
   isRefreshing.value = true
   try {
-    await refreshTree()
+    initTreeData()
   } finally {
     isRefreshing.value = false
   }
-}
-
-async function loadFolderTree(folder) {
-  const result = await window.electronAPI.readDir(folder.path)
-  if (result.success) {
-    const children = [...result.folders, ...result.files]
-    for (const child of result.folders) {
-      const childResult = await window.electronAPI.readDir(child.path)
-      if (childResult.success) {
-        child.children = [...childResult.folders, ...childResult.files]
-      }
-    }
-    return {
-      ...folder,
-      children,
-    }
-  }
-  return folder
-}
-
-async function refreshTree() {
-  const data = []
-  for (const folder of workspaceStore.folders) {
-    const treeNode = await loadFolderTree(folder)
-    data.push(treeNode)
-  }
-  treeData.value = data
 }
 
 function handleNodeClick(data) {
@@ -80,13 +138,18 @@ function handleNodeClick(data) {
 watch(
   () => workspaceStore.folders,
   () => {
-    refreshTree()
+    initTreeData()
   },
   { deep: true },
 )
 
 onMounted(() => {
-  refreshTree()
+  initTreeData()
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -118,5 +181,26 @@ onMounted(() => {
   flex: 1;
   overflow-y: auto;
   border: none;
+}
+
+.context-menu {
+  position: fixed;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  z-index: 3000;
+  min-width: 120px;
+}
+
+.context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+
+.context-menu-item:hover {
+  background: var(--el-fill-color-light);
 }
 </style>
