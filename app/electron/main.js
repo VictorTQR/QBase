@@ -288,7 +288,7 @@ ipcMain.handle('siliconflow:create-embedding', async (event, text, config) => {
 
 ipcMain.handle('read-dir', async (event, dirPath) => {
   try {
-    const entries = await fs.readdir(dirPath, { withFileTypes: true })
+    const entries = await fsPromises.readdir(dirPath, { withFileTypes: true })
     const files = []
     const folders = []
     for (const entry of entries) {
