@@ -321,7 +321,7 @@ ipcMain.handle('read-dir', async (event, dirPath) => {
 
 ipcMain.handle('get-file-stats', async (event, filePath) => {
   try {
-    const stats = await fs.stat(filePath)
+    const stats = await fsPromises.stat(filePath)
     return { success: true, stats }
   } catch (error) {
     return { success: false, error: error.message }
@@ -332,7 +332,7 @@ ipcMain.handle('search-files', async (event, folderPath, query) => {
   try {
     const results = []
     const searchInDir = async (dir) => {
-      const entries = await fs.readdir(dir, { withFileTypes: true })
+      const entries = await fsPromises.readdir(dir, { withFileTypes: true })
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name)
         if (entry.isDirectory()) {
@@ -351,7 +351,7 @@ ipcMain.handle('search-files', async (event, folderPath, query) => {
                 snippet: ''
               })
             } else if (ext === '.md') {
-              const content = await fs.readFile(fullPath, 'utf-8')
+              const content = await fsPromises.readFile(fullPath, 'utf-8')
               const lowerContent = content.toLowerCase()
               const lowerQuery = query.toLowerCase()
               const index = lowerContent.indexOf(lowerQuery)
