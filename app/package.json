@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "element-plus": "^2.13.2",
+    "gray-matter": "^4.0.3",
     "hook-fetch": "^2.3.2",
     "pdfjs-dist": "^5.4.624",
     "pinia": "^3.0.4",
