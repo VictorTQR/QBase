@@ -18,6 +18,7 @@
 ### 2. 搜索能力
 - 支持文件名搜索
 - 支持文件内容搜索
+- 支持 YAML frontmatter 搜索（title, date, author, tags, description 等）
 - 显示匹配内容的上下文片段
 - 大小写不敏感匹配
 - 自动防抖搜索（300ms）
@@ -168,3 +169,11 @@ app/
 - 搜索结果排序选项
 - 实时搜索索引缓存
 - 搜索结果内打开新标签页
+
+## 更新记录
+
+### 2026-02-27 - YAML Frontmatter 搜索集成
+- 搜索内容包含 Markdown 文档的 YAML frontmatter
+- frontmatter 的所有字段值都参与搜索匹配
+- 使用 gray-matter 在 Electron 主进程解析 frontmatter
+- 相关 bug 记录：[XMarkdown CSP 修复](../bugs/2026-02-27-xmarkdown-csp-wasm-eval.md)

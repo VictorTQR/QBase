@@ -1,12 +1,12 @@
 # Markdown 预览
 
 **状态**: ✅ 已完成
-**版本**: v0.1
-**更新日期**: 2026-02-25
+**版本**: v0.5
+**更新日期**: 2026-02-27
 
 ## 功能概述
 
-Markdown 预览功能提供高质量的文档渲染，支持代码高亮、数学公式和图表。
+Markdown 预览功能提供高质量的文档渲染，支持代码高亮、数学公式、图表和 YAML frontmatter 元数据。
 
 ## 核心功能
 
@@ -14,6 +14,14 @@ Markdown 预览功能提供高质量的文档渲染，支持代码高亮、数�
 
 - 标准 Markdown 语法
 - GFM (GitHub Flavored Markdown) 扩展
+
+### YAML Frontmatter 支持
+
+- 自动解析文档顶部的 YAML frontmatter
+- 结构化显示常见元数据字段
+- 支持的字段：title, date, author, tags, description
+- 其他字段自动降级显示
+- frontmatter 内容参与全文搜索
 
 ### 代码高亮
 
@@ -132,6 +140,36 @@ graph TD
 | Markdown 解析失败 | 显示原始文本 |
 | 公式渲染失败 | 显示 LaTeX 源码 |
 | 图表渲染失败 | 显示 Mermaid 源码 |
+
+## YAML Frontmatter 使用
+
+### 示例
+
+```markdown
+---
+title: 我的文档标题
+date: 2026-02-27
+author: 作者姓名
+tags: [vue, electron, 笔记]
+description: 这是文档的描述信息
+category: 技术
+---
+
+# 正文开始
+
+这里是正文内容...
+```
+
+### 支持的字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `title` | string | 文档标题（大标题显示） |
+| `date` | string/Date | 发布日期 |
+| `author` | string | 作者名称 |
+| `tags` | string[] | 标签数组 |
+| `description` | string | 文档描述 |
+| 其他字段 | any | 自动降级显示为键值对 |
 
 ## 性能优化
 
