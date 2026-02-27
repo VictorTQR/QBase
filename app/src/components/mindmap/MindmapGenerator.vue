@@ -22,7 +22,8 @@ function validateMindmap(mindmap) {
     if (!node.id) return { valid: false, reason: `节点 ${i} 缺少 id` }
     if (!node.text) return { valid: false, reason: `节点 ${i} 缺少 text` }
     if (!('parent' in node)) return { valid: false, reason: `节点 ${i} 缺少 parent` }
-    if (!Array.isArray(node.children)) return { valid: false, reason: `节点 ${i} 的 children 不是数组` }
+    if (!Array.isArray(node.children))
+      return { valid: false, reason: `节点 ${i} 的 children 不是数组` }
   }
 
   return { valid: true }
@@ -43,7 +44,7 @@ async function generateMindmap() {
     const result = await agentStore.generateMindmap(documentStore.content)
     if (result.success) {
       rawResponse.value = JSON.stringify(result.mindmap, null, 2)
-      
+
       const validation = validateMindmap(result.mindmap)
       if (!validation.valid) {
         error.value = `数据验证失败：${validation.reason}`

@@ -97,7 +97,7 @@ async function loadPdf() {
     pdfDoc.value = await loadingTask.promise
     totalPages.value = pdfDoc.value.numPages
     currentPage.value = 1
-    
+
     isLoading.value = false
     await nextTick()
     await renderPage(currentPage.value)
@@ -118,13 +118,13 @@ async function renderPage(pageNum) {
 
   try {
     await nextTick()
-    
+
     const canvas = pdfCanvas.value
     if (!canvas) {
       console.error('Canvas 元素未找到')
       return
     }
-    
+
     const context = canvas.getContext('2d')
     if (!context) {
       console.error('无法获取 canvas 上下文')
