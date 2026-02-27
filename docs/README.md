@@ -37,6 +37,7 @@
 - [v0.5 实施报告](./implementation/0.5-ai-generation-enhancement.md) - 智能生成功能增强
 - [v0.6 实施报告](./implementation/v0.6-core-architecture-complete.md) - 智能体能力增强（核心架构）
 - [v0.7 设计文档](./plans/2026-02-27-parse-manager-design.md) - 文档解析管理设计
+- [v0.7 实施报告](./implementation/v0.7-text-extraction-complete.md) - 文档解析管理与文本提取
 
 ### 问题记录
 Bug 修复记录和问题追踪。

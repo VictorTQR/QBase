@@ -12,7 +12,7 @@
 | v0.4 | ✅ 已完成 | 文件格式+闪卡 | 2026-02-25 |
 | v0.5 | ✅ 已完成 | 智能生成与UI优化 | 2026-02-26 |
 | v0.6 | ✅ 核心架构完成 | 智能体能力增强 | 2026-02-27 |
-| v0.7 | 🔄 进行中 | 文档解析管理 | 2026-02-27 |
+| v0.7 | ✅ 已完成 | 文档解析管理与文本提取 | 2026-02-27 |
 
 ---
 
@@ -263,9 +263,9 @@
 
 ---
 
-## v0.7 - 文档解析管理 🔄
+## v0.7 - 文档解析管理 ✅
 
-**状态**: 进行中
+**状态**: 已完成
 **发布日期**: 2026-02-27
 
 ### 功能列表
@@ -280,7 +280,7 @@
 | 解析详情 | ✅ | 查看解析结果、重新解析 |
 | 混合存储方案 | ✅ | LocalStorage + IndexedDB (Dexie.js) |
 | Repository 抽象 | ✅ | 数据访问层封装 |
-| 文本提取 | 📋 | 待实现（占位文件已创建） |
+| 文本提取 | ✅ | Markdown + PDF 本地提取，混合策略 |
 | 音频转录 | 📋 | 待实现（占位文件已创建） |
 | 向量化表示 | 📋 | 待实现（占位文件已创建） |
 
@@ -306,10 +306,24 @@
 - Vectorizer 占位文件
 - 为后续功能扩展预留接口
 
+**文本提取功能 (2026-02-27)**:
+- TextExtractor 核心类实现
+- Markdown 文本提取（去除 frontmatter）
+- PDF 本地文本提取（基于 pdfjs-dist）
+- 混合策略：优先本地，可选云端 MinerU 降级
+- 解析状态管理集成
+- IndexedDB 存储提取结果
+- Sidebar 右键菜单"添加到解析"
+- ParseManager 批量解析功能
+- ParseDetails 提取文本预览
+
 ### 相关文档
 
 - [设计文档](./plans/2026-02-27-parse-manager-design.md)
 - [实施计划](./plans/2026-02-27-parse-manager-implementation.md)
+- [文本提取设计文档](./plans/2026-02-27-text-extraction-design.md)
+- [文本提取实施计划](./plans/2026-02-27-text-extraction-implementation.md)
+- [实施报告](./implementation/v0.7-text-extraction-complete.md)
 
 ---
 
