@@ -38,7 +38,7 @@ export class MemoryVectorStore extends VectorStore {
           id: doc.id,
           content: doc.content,
           score,
-          metadata: doc.metadata
+          metadata: doc.metadata,
         })
       }
     }

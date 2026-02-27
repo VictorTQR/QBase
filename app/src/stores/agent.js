@@ -46,14 +46,14 @@ export const useAgentStore = defineStore(
       model: 'gpt-3.5-turbo',
       mineru: {
         apiKey: '',
-        baseUrl: 'https://mineru.net'
+        baseUrl: 'https://mineru.net',
       },
       siliconflow: {
         apiKey: '',
         baseUrl: 'https://api.siliconflow.cn',
         embeddingModel: 'BAAI/bge-large-zh-v1.5',
-        asrModel: 'FunAudioLLM/SenseVoiceSmall'
-      }
+        asrModel: 'FunAudioLLM/SenseVoiceSmall',
+      },
     })
 
     const currentSession = computed(() => {

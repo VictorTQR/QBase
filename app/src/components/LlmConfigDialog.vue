@@ -90,14 +90,14 @@ const form = ref({
   model: '',
   mineru: {
     apiKey: '',
-    baseUrl: 'https://mineru.net'
+    baseUrl: 'https://mineru.net',
   },
   siliconflow: {
     apiKey: '',
     baseUrl: 'https://api.siliconflow.cn',
     embeddingModel: 'BAAI/bge-large-zh-v1.5',
-    asrModel: 'FunAudioLLM/SenseVoiceSmall'
-  }
+    asrModel: 'FunAudioLLM/SenseVoiceSmall',
+  },
 })
 
 const isTesting = ref(false)
