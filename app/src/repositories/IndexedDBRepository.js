@@ -6,7 +6,7 @@ class QBaseParseDatabase extends Dexie {
     this.version(1).stores({
       extractedTexts: 'filePath, type, parsedAt',
       vectors: 'filePath',
-      transcripts: 'filePath'
+      transcripts: 'filePath',
     })
   }
 }
@@ -18,7 +18,7 @@ export class IndexedDBRepository {
     await db.extractedTexts.put({
       filePath,
       ...data,
-      parsedAt: Date.now()
+      parsedAt: Date.now(),
     })
   }
 
@@ -34,7 +34,7 @@ export class IndexedDBRepository {
     await db.vectors.put({
       filePath,
       vectors,
-      savedAt: Date.now()
+      savedAt: Date.now(),
     })
   }
 
@@ -51,7 +51,7 @@ export class IndexedDBRepository {
     await db.transcripts.put({
       filePath,
       ...transcript,
-      savedAt: Date.now()
+      savedAt: Date.now(),
     })
   }
 
@@ -67,7 +67,7 @@ export class IndexedDBRepository {
     await Promise.all([
       this.deleteExtractedText(filePath),
       this.deleteVectors(filePath),
-      this.deleteTranscript(filePath)
+      this.deleteTranscript(filePath),
     ])
   }
 }
