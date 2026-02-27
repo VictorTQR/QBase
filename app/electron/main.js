@@ -1,6 +1,63 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const path = require('path')
-const fs = require('fs').promises
+const fs = require('fs')
+const fsPromises = fs.promises
+const https = require('https')
+const http = require('http')
+const { URL } = require('url')
+
+function makeRequest(options, data = null) {
+  return new Promise((resolve, reject) => {
+    const lib = options.protocol === 'https:' ? https : http
+    const req = lib.request(options, (res) => {
+      let body = ''
+      res.on('data', (chunk) => body += chunk)
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(body)
+          resolve({ statusCode: res.statusCode, data: result })
+        } catch (e) {
+          resolve({ statusCode: res.statusCode, data: body })
+        }
+      })
+    })
+    req.on('error', reject)
+    if (data) req.write(JSON.stringify(data))
+    req.end()
+  })
+}
+
+function uploadFile(url, fileData) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url)
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: 'PUT'
+    }
+    const lib = parsedUrl.protocol === 'https:' ? https : http
+    const req = lib.request(options, (res) => {
+      let body = ''
+      res.on('data', (chunk) => body += chunk)
+      res.on('end', () => resolve({ statusCode: res.statusCode, data: body }))
+    })
+    req.on('error', reject)
+    req.write(fileData)
+    req.end()
+  })
+}
+
+function downloadFile(url) {
+  return new Promise((resolve, reject) => {
+    const lib = url.startsWith('https') ? https : http
+    lib.get(url, (res) => {
+      const chunks = []
+      res.on('data', (chunk) => chunks.push(chunk))
+      res.on('end', () => resolve(Buffer.concat(chunks)))
+    }).on('error', reject)
+  })
+}
 
 const supportedExtensions = [
   '.md',
@@ -73,7 +130,7 @@ ipcMain.handle('select-folder', async () => {
 
 ipcMain.handle('read-file', async (event, filePath) => {
   try {
-    const content = await fs.readFile(filePath, 'utf-8')
+    const content = await fsPromises.readFile(filePath, 'utf-8')
     return { success: true, content }
   } catch (error) {
     return { success: false, error: error.message }
@@ -82,12 +139,151 @@ ipcMain.handle('read-file', async (event, filePath) => {
 
 ipcMain.handle('read-binary-file', async (event, filePath) => {
   try {
-    const buffer = await fs.readFile(filePath)
+    const buffer = await fsPromises.readFile(filePath)
     const base64 = buffer.toString('base64')
     return { success: true, content: base64 }
   } catch (error) {
     return { success: false, error: error.message }
   }
+})
+
+ipcMain.handle('mineru:create-upload-urls', async (event, files, apiKey) => {
+  const options = {
+    hostname: 'mineru.net',
+    port: 443,
+    path: '/api/v4/file-urls/batch',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    }
+  }
+  const result = await makeRequest(options, { files, model_version: 'vlm' })
+  return result.data
+})
+
+ipcMain.handle('mineru:upload-file', async (event, url, fileData) => {
+  return await uploadFile(url, fileData)
+})
+
+ipcMain.handle('mineru:submit-task', async (event, batchId, apiKey) => {
+  const options = {
+    hostname: 'mineru.net',
+    port: 443,
+    path: `/api/v4/extract-results/batch/${batchId}`,
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`
+    }
+  }
+  const result = await makeRequest(options)
+  return result.data
+})
+
+ipcMain.handle('mineru:poll-task-status', async (event, taskId, apiKey) => {
+  const options = {
+    hostname: 'mineru.net',
+    port: 443,
+    path: `/api/v4/extract/task/${taskId}`,
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`
+    }
+  }
+  const result = await makeRequest(options)
+  return result.data
+})
+
+ipcMain.handle('mineru:download-result', async (event, url) => {
+  return await downloadFile(url)
+})
+
+ipcMain.handle('mineru:extract-pdf', async (event, filePath, apiKey) => {
+  const fileName = path.basename(filePath)
+  const fileData = fs.readFileSync(filePath)
+
+  const uploadResult = await makeRequest({
+    hostname: 'mineru.net',
+    port: 443,
+    path: '/api/v4/file-urls/batch',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    }
+  }, {
+    files: [{ name: fileName }],
+    model_version: 'vlm'
+  })
+
+  if (uploadResult.data.code !== 0) {
+    throw new Error(uploadResult.data.msg || 'Failed to get upload URL')
+  }
+
+  const batchId = uploadResult.data.data.batch_id
+  const uploadUrl = uploadResult.data.data.file_urls[0]
+
+  await uploadFile(uploadUrl, fileData)
+
+  await new Promise(resolve => setTimeout(resolve, 5000))
+
+  let maxAttempts = 60
+  let attempts = 0
+  let taskResult = null
+
+  while (attempts < maxAttempts) {
+    const pollResult = await makeRequest({
+      hostname: 'mineru.net',
+      port: 443,
+      path: `/api/v4/extract-results/batch/${batchId}`,
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`
+      }
+    })
+
+    if (pollResult.data.code === 0 && pollResult.data.data.extract_result) {
+      const fileResult = pollResult.data.data.extract_result[0]
+      if (fileResult.state === 'done') {
+        taskResult = fileResult
+        break
+      } else if (fileResult.state === 'failed') {
+        throw new Error(fileResult.err_msg || 'Parsing failed')
+      }
+    }
+
+    attempts++
+    await new Promise(resolve => setTimeout(resolve, 3000))
+  }
+
+  if (!taskResult) {
+    throw new Error('Timeout waiting for parsing result')
+  }
+
+  const zipBuffer = await downloadFile(taskResult.full_zip_url)
+
+  return {
+    success: true,
+    zipUrl: taskResult.full_zip_url,
+  }
+})
+
+ipcMain.handle('siliconflow:create-embedding', async (event, text, config) => {
+  const options = {
+    hostname: 'api.siliconflow.cn',
+    port: 443,
+    path: '/v1/embeddings',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`
+    }
+  }
+  const result = await makeRequest(options, {
+    model: config.model || 'BAAI/bge-large-zh-v1.5',
+    input: text
+  })
+  return result.data
 })
 
 ipcMain.handle('read-dir', async (event, dirPath) => {
