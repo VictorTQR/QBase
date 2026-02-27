@@ -48,14 +48,7 @@ export const useDocumentStore = defineStore('document', () => {
     mimeType.value = getMimeType(fileType)
 
     try {
-      if (isBinaryFile.value) {
-        const result = await window.electronAPI.readBinaryFile(file.path)
-        if (result.success) {
-          binaryContent.value = result.content
-        } else {
-          error.value = result.error
-        }
-      } else {
+      if (!isBinaryFile.value) {
         const result = await window.electronAPI.readFile(file.path)
         if (result.success) {
           content.value = result.content

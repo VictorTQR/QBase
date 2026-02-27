@@ -1,9 +1,10 @@
 <template>
   <div class="document-viewer">
     <MarkdownViewer v-if="contentType === 'markdown'" :content="content" />
-    <PdfViewer v-else-if="contentType === 'pdf'" :base64Data="binaryContent" />
+    <PdfViewer v-else-if="contentType === 'pdf'" :filePath="filePath" :base64Data="binaryContent" />
     <MediaViewer
       v-else-if="contentType === 'audio' || contentType === 'video'"
+      :filePath="filePath"
       :base64Data="binaryContent"
       :mimeType="mimeType"
       :mediaType="contentType"
@@ -27,6 +28,7 @@ const content = computed(() => documentStore.content)
 const binaryContent = computed(() => documentStore.binaryContent)
 const contentType = computed(() => documentStore.contentType)
 const mimeType = computed(() => documentStore.mimeType)
+const filePath = computed(() => documentStore.currentFile?.path || '')
 </script>
 
 <style scoped>

@@ -1,6 +1,6 @@
 <template>
   <div class="media-viewer">
-    <div v-if="!base64Data" class="empty">
+    <div v-if="!filePath && !base64Data" class="empty">
       <el-empty description="无媒体文件" />
     </div>
     <div v-else class="media-container">
@@ -14,6 +14,10 @@
 import { computed } from 'vue'
 
 const props = defineProps({
+  filePath: {
+    type: String,
+    default: '',
+  },
   base64Data: {
     type: String,
     default: '',
@@ -30,10 +34,14 @@ const props = defineProps({
 })
 
 const mediaSrc = computed(() => {
-  if (!props.base64Data) {
-    return ''
+  if (props.filePath) {
+    const formattedPath = props.filePath.replace(/\\/g, '/')
+    return `local-file://${formattedPath.replace(/^\/+/, '')}`
   }
-  return `data:${props.mimeType};base64,${props.base64Data}`
+  if (props.base64Data) {
+    return `data:${props.mimeType};base64,${props.base64Data}`
+  }
+  return ''
 })
 </script>
 

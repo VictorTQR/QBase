@@ -1,10 +1,14 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, protocol, net } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const fsPromises = fs.promises
 const https = require('https')
 const http = require('http')
 const { URL } = require('url')
+
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'local-file', privileges: { standard: true, secure: true, supportFetchAPI: true } }
+])
 
 function makeRequest(options, data = null) {
   return new Promise((resolve, reject) => {
@@ -102,7 +106,60 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  createWindow()
+  
+  protocol.handle('local-file', (request) => {
+    const filePath = request.url.slice('local-file://'.length)
+    // URL 解码
+    const decodedPath = decodeURIComponent(filePath)
+    // 处理 Windows 路径格式
+    const normalizedPath = decodedPath
+      .replace(/^([a-zA-Z])(?=\/)/, '$1:') // 确保驱动器号后有冒号
+      .replace(/\//g, '\\') // 转换为反斜杠
+    
+    try {
+      // 检查文件是否存在
+      if (!fs.existsSync(normalizedPath)) {
+        console.error('File not found:', normalizedPath)
+        return new Response('File not found', { status: 404 })
+      }
+      
+      // 获取文件统计信息
+      const stats = fs.statSync(normalizedPath)
+      
+      // 确定 MIME 类型
+      const ext = path.extname(normalizedPath).toLowerCase()
+      const mimeTypes = {
+        '.pdf': 'application/pdf',
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+        '.ogg': 'audio/ogg',
+        '.m4a': 'audio/mp4',
+        '.flac': 'audio/flac',
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.mov': 'video/quicktime',
+        '.mkv': 'video/x-matroska'
+      }
+      const mimeType = mimeTypes[ext] || 'application/octet-stream'
+      
+      // 创建文件流
+      const fileStream = fs.createReadStream(normalizedPath)
+      
+      // 返回带有正确 MIME 类型的响应
+      return new Response(fileStream, {
+        headers: {
+          'Content-Type': mimeType,
+          'Content-Length': stats.size.toString()
+        }
+      })
+    } catch (error) {
+      console.error('Error serving file:', normalizedPath, error)
+      return new Response('Internal server error', { status: 500 })
+    }
+  })
+})
 
 // macOS 特殊处理
 app.on('window-all-closed', () => {
