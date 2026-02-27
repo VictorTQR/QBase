@@ -50,7 +50,7 @@ import { Clock, Loading, CircleClose, WarningFilled } from '@element-plus/icons-
 defineProps({
   pendingFiles: { type: Array, default: () => [] },
   parsingFiles: { type: Array, default: () => [] },
-  failedFiles: { type: Array, default: () => [] }
+  failedFiles: { type: Array, default: () => [] },
 })
 
 function getFileName(filePath) {
@@ -123,7 +123,11 @@ function getFileName(filePath) {
 }
 
 @keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

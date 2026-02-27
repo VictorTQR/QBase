@@ -1,6 +1,11 @@
 <template>
   <div class="parse-manager">
-    <ParseStats :stats="stats" @parse-all="handleParseAll" @retry-failed="handleRetryFailed" />
+    <ParseStats
+      :stats="stats"
+      :loading="isParsing"
+      @parse-all="handleParseAll"
+      @retry-failed="handleRetryFailed"
+    />
     <div class="manager-content">
       <ParseQueue
         :pending-files="pendingFiles"
@@ -16,6 +21,7 @@
         <ParseDetails
           :file-path="selectedFile"
           :file-data="selectedFileData"
+          :loading="isParsing"
           @close="handleCloseDetails"
           @reparse="handleReparse"
           @delete="handleDelete"
@@ -26,7 +32,8 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useParseStore } from '@/stores/parse'
 import ParseStats from './ParseStats.vue'
 import ParseQueue from './ParseQueue.vue'
@@ -34,6 +41,7 @@ import ParseDocumentList from './ParseDocumentList.vue'
 import ParseDetails from './ParseDetails.vue'
 
 const parseStore = useParseStore()
+const isParsing = ref(false)
 
 const parseIndex = computed(() => parseStore.parseIndex)
 const stats = computed(() => parseStore.stats)
@@ -47,8 +55,26 @@ const selectedFileData = computed(() => {
   return parseIndex.value[selectedFile.value] || null
 })
 
-function handleParseAll() {
-  console.log('批量解析功能待实现')
+async function handleParseAll() {
+  const pending = Object.entries(parseIndex.value)
+    .filter(([, data]) => data.status === 'pending')
+    .map(([filePath, data]) => ({ filePath, fileType: data.type || data.fileType }))
+
+  if (pending.length === 0) {
+    ElMessage.info('没有待解析的文件')
+    return
+  }
+
+  isParsing.value = true
+  try {
+    ElMessage.info(`开始解析 ${pending.length} 个文件...`)
+    await parseStore.startParseBatch(pending)
+    ElMessage.success('批量解析完成')
+  } catch (error) {
+    ElMessage.error(`批量解析失败: ${error.message}`)
+  } finally {
+    isParsing.value = false
+  }
 }
 
 function handleRetryFailed() {
@@ -63,9 +89,20 @@ function handleCloseDetails() {
   parseStore.closeDetails()
 }
 
-function handleReparse() {
+async function handleReparse() {
   if (selectedFile.value) {
-    parseStore.reparse(selectedFile.value)
+    const data = parseIndex.value[selectedFile.value]
+    if (!data) return
+
+    try {
+      isParsing.value = true
+      await parseStore.startParse(selectedFile.value, data.type || data.fileType)
+      ElMessage.success('重新解析完成')
+    } catch (error) {
+      ElMessage.error(`解析失败: ${error.message}`)
+    } finally {
+      isParsing.value = false
+    }
   }
 }
 

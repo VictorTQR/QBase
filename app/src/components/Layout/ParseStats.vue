@@ -23,8 +23,13 @@
       </div>
     </div>
     <div class="actions">
-      <el-button size="small" @click="$emit('parse-all')">批量解析</el-button>
-      <el-button size="small" type="warning" @click="$emit('retry-failed')" :disabled="stats.failed === 0">
+      <el-button size="small" :loading="loading" @click="$emit('parse-all')">批量解析</el-button>
+      <el-button
+        size="small"
+        type="warning"
+        @click="$emit('retry-failed')"
+        :disabled="stats.failed === 0 || loading"
+      >
         重试失败
       </el-button>
     </div>
@@ -35,8 +40,12 @@
 defineProps({
   stats: {
     type: Object,
-    required: true
-  }
+    required: true,
+  },
+  loading: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 defineEmits(['parse-all', 'retry-failed'])

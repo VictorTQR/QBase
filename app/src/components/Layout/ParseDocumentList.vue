@@ -23,7 +23,9 @@
             <div class="file-name">{{ getFileName(filePath) }}</div>
             <div class="file-meta">
               <span class="file-type">{{ data.type || '未知' }}</span>
-              <span v-if="data.duration" class="file-duration">{{ (data.duration / 1000).toFixed(1) }}s</span>
+              <span v-if="data.duration" class="file-duration"
+                >{{ (data.duration / 1000).toFixed(1) }}s</span
+              >
               <span v-if="data.size" class="file-size">{{ formatSize(data.size) }}</span>
             </div>
           </div>
@@ -38,7 +40,7 @@ import { CircleCheck, Loading, Clock, CircleClose } from '@element-plus/icons-vu
 
 defineProps({
   parseIndex: { type: Object, default: () => ({}) },
-  selectedFile: { type: String, default: null }
+  selectedFile: { type: String, default: null },
 })
 
 const emit = defineEmits(['select'])
@@ -158,7 +160,11 @@ function handleSelect(filePath) {
 }
 
 @keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

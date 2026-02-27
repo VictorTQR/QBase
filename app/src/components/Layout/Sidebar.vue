@@ -27,7 +27,23 @@
     </el-tabs>
     <teleport to="body">
       <div v-if="contextMenu.visible" class="context-menu" :style="contextMenu.style" @click.stop>
-        <div class="context-menu-item" @click="handleRemoveFolder">移除文件夹</div>
+        <div
+          v-if="contextMenu.nodeData?.type === 'file'"
+          class="context-menu-item"
+          @click="handleAddToParse"
+        >
+          添加到解析
+        </div>
+        <div
+          v-if="
+            contextMenu.nodeData?.type === 'folder' &&
+            workspaceStore.folders.some((f) => f.id === contextMenu.nodeData?.id)
+          "
+          class="context-menu-item"
+          @click="handleRemoveFolder"
+        >
+          移除文件夹
+        </div>
       </div>
     </teleport>
   </div>
@@ -36,15 +52,26 @@
 <script setup>
 import { ref, onMounted, watch, onUnmounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import { ElMessageBox } from 'element-plus'
+import { ElMessageBox, ElMessage } from 'element-plus'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDocumentStore } from '@/stores/document'
+import { useParseStore } from '@/stores/parse'
 import ParseManager from './ParseManager.vue'
+
+function getFileType(fileName) {
+  const ext = fileName.split('.').pop().toLowerCase()
+  if (ext === 'md') return 'markdown'
+  if (ext === 'pdf') return 'pdf'
+  if (['mp3', 'wav', 'ogg', 'm4a', 'flac'].includes(ext)) return 'audio'
+  if (['mp4', 'webm', 'mov', 'mkv'].includes(ext)) return 'video'
+  return 'unknown'
+}
 
 const activeTab = ref('filetree')
 
 const workspaceStore = useWorkspaceStore()
 const documentStore = useDocumentStore()
+const parseStore = useParseStore()
 
 const treeProps = {
   children: 'children',
@@ -96,7 +123,10 @@ function initTreeData() {
 }
 
 function handleContextMenu(event, data) {
-  if (data.type === 'folder' && workspaceStore.folders.some((f) => f.id === data.id)) {
+  if (
+    data.type === 'file' ||
+    (data.type === 'folder' && workspaceStore.folders.some((f) => f.id === data.id))
+  ) {
     event.preventDefault()
     event.stopPropagation()
     contextMenu.value = {
@@ -105,6 +135,22 @@ function handleContextMenu(event, data) {
       nodeData: data,
     }
   }
+}
+
+function handleAddToParse() {
+  contextMenu.value.visible = false
+  const data = contextMenu.value.nodeData
+  if (!data || data.type !== 'file') return
+
+  const fileType = getFileType(data.name)
+  if (fileType !== 'markdown' && fileType !== 'pdf') {
+    ElMessage.warning('仅支持 Markdown 和 PDF 文件')
+    return
+  }
+
+  parseStore.addFile(data.path, fileType)
+  ElMessage.success('已添加到解析队列')
+  activeTab.value = 'parse'
 }
 
 function handleClickOutside() {
