@@ -9,6 +9,24 @@ const documentStore = useDocumentStore()
 const isGenerating = ref(false)
 const error = ref(null)
 const mindmapResult = ref(null)
+const rawResponse = ref(null)
+
+function validateMindmap(mindmap) {
+  if (!mindmap) return { valid: false, reason: '数据为空' }
+  if (!mindmap.title) return { valid: false, reason: '缺少 title 字段' }
+  if (!Array.isArray(mindmap.nodes)) return { valid: false, reason: 'nodes 不是数组' }
+  if (mindmap.nodes.length === 0) return { valid: false, reason: 'nodes 数组为空' }
+
+  for (let i = 0; i < mindmap.nodes.length; i++) {
+    const node = mindmap.nodes[i]
+    if (!node.id) return { valid: false, reason: `节点 ${i} 缺少 id` }
+    if (!node.text) return { valid: false, reason: `节点 ${i} 缺少 text` }
+    if (!('parent' in node)) return { valid: false, reason: `节点 ${i} 缺少 parent` }
+    if (!Array.isArray(node.children)) return { valid: false, reason: `节点 ${i} 的 children 不是数组` }
+  }
+
+  return { valid: true }
+}
 
 async function generateMindmap() {
   if (!documentStore.currentFile || !documentStore.content) {
@@ -19,11 +37,20 @@ async function generateMindmap() {
   isGenerating.value = true
   error.value = null
   mindmapResult.value = null
+  rawResponse.value = null
 
   try {
     const result = await agentStore.generateMindmap(documentStore.content)
     if (result.success) {
-      mindmapResult.value = result.mindmap
+      rawResponse.value = JSON.stringify(result.mindmap, null, 2)
+      
+      const validation = validateMindmap(result.mindmap)
+      if (!validation.valid) {
+        error.value = `数据验证失败：${validation.reason}`
+        console.error('Mindmap validation failed:', validation.reason, result.mindmap)
+      } else {
+        mindmapResult.value = result.mindmap
+      }
     } else {
       error.value = result.error
     }
@@ -117,6 +144,14 @@ function getNodePosition(nodeId) {
             </div>
           </div>
         </div>
+
+        <div v-if="rawResponse" class="debug-panel">
+          <el-collapse>
+            <el-collapse-item title="调试信息 (原始数据)">
+              <pre>{{ rawResponse }}</pre>
+            </el-collapse-item>
+          </el-collapse>
+        </div>
       </div>
     </el-card>
   </div>
@@ -165,5 +200,19 @@ function getNodePosition(nodeId) {
 .mindmap-svg-container svg {
   width: 100%;
   height: 100%;
+}
+
+.debug-panel {
+  margin-top: 16px;
+}
+
+.debug-panel pre {
+  background-color: #f5f7fa;
+  padding: 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 </style>

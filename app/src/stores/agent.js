@@ -299,11 +299,19 @@ export const useAgentStore = defineStore(
         const result = await request.json()
         const responseText = result.choices?.[0]?.message?.content || ''
 
+        console.log('LLM Response for mindmap:', responseText)
+
         let mindmap = null
         try {
-          mindmap = JSON.parse(responseText)
+          const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+          if (jsonMatch) {
+            mindmap = JSON.parse(jsonMatch[0])
+          } else {
+            mindmap = JSON.parse(responseText)
+          }
         } catch (parseErr) {
           console.error('Failed to parse mindmap JSON:', parseErr)
+          console.error('Response text was:', responseText)
           throw new Error('思维导图生成失败：无法解析响应格式')
         }
 
