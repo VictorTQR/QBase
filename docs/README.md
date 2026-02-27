@@ -19,6 +19,7 @@
 - [AI 助手](./features/ai-assistant.md) - LLM 对话功能
 - [智能闪卡生成](./features/flashcard-generation.md) - 基于文档的闪卡生成
 - [智能生成功能](./features/ai-generation.md) - 闪卡、思维导图、摘要生成
+- [文档解析管理](./features/parse-management.md) - 文本提取、转录、向量化管理
 - [搜索增强](./features/search.md) - 全文搜索功能
 
 ### 项目规划
@@ -35,6 +36,7 @@
 - [v0.4 实施报告](./implementation/v0.4-complete.md) - 文件格式增强与智能闪卡生成
 - [v0.5 实施报告](./implementation/0.5-ai-generation-enhancement.md) - 智能生成功能增强
 - [v0.6 实施报告](./implementation/v0.6-core-architecture-complete.md) - 智能体能力增强（核心架构）
+- [v0.7 设计文档](./plans/2026-02-27-parse-manager-design.md) - 文档解析管理设计
 
 ### 问题记录
 Bug 修复记录和问题追踪。
