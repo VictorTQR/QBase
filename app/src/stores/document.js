@@ -28,6 +28,7 @@ function getMimeType(fileType) {
 export const useDocumentStore = defineStore('document', () => {
   const currentFile = ref(null)
   const content = ref('')
+  const frontmatter = ref({})
   const binaryContent = ref(null)
   const contentType = ref('markdown')
   const mimeType = ref('')
@@ -41,6 +42,7 @@ export const useDocumentStore = defineStore('document', () => {
     isLoading.value = true
     error.value = null
     content.value = ''
+    frontmatter.value = {}
     binaryContent.value = null
 
     const fileType = file.fileType || getFileType(file.name)
@@ -49,10 +51,21 @@ export const useDocumentStore = defineStore('document', () => {
 
     try {
       if (!isBinaryFile.value) {
-        const result = await window.electronAPI.readFile(file.path)
-        if (result.success) {
-          content.value = result.content
+        let result
+        if (fileType === 'markdown') {
+          result = await window.electronAPI.readMarkdown(file.path)
+          if (result.success) {
+            content.value = result.content
+            frontmatter.value = result.frontmatter || {}
+          }
         } else {
+          result = await window.electronAPI.readFile(file.path)
+          if (result.success) {
+            content.value = result.content
+          }
+        }
+
+        if (result && !result.success) {
           error.value = result.error
         }
       }
@@ -66,6 +79,7 @@ export const useDocumentStore = defineStore('document', () => {
   function clearContent() {
     currentFile.value = null
     content.value = ''
+    frontmatter.value = {}
     binaryContent.value = null
     contentType.value = 'markdown'
     mimeType.value = ''
@@ -75,6 +89,7 @@ export const useDocumentStore = defineStore('document', () => {
   return {
     currentFile,
     content,
+    frontmatter,
     binaryContent,
     contentType,
     mimeType,

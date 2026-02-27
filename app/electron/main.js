@@ -5,6 +5,7 @@ const fsPromises = fs.promises
 const https = require('https')
 const http = require('http')
 const { URL } = require('url')
+const matter = require('gray-matter')
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'local-file', privileges: { standard: true, secure: true, supportFetchAPI: true } }
@@ -189,6 +190,20 @@ ipcMain.handle('read-file', async (event, filePath) => {
   try {
     const content = await fsPromises.readFile(filePath, 'utf-8')
     return { success: true, content }
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+})
+
+ipcMain.handle('read-markdown', async (event, filePath) => {
+  try {
+    const content = await fsPromises.readFile(filePath, 'utf-8')
+    const parsed = matter(content)
+    return { 
+      success: true, 
+      content: parsed.content,
+      frontmatter: parsed.data
+    }
   } catch (error) {
     return { success: false, error: error.message }
   }
@@ -409,13 +424,22 @@ ipcMain.handle('search-files', async (event, folderPath, query) => {
               })
             } else if (ext === '.md') {
               const content = await fsPromises.readFile(fullPath, 'utf-8')
-              const lowerContent = content.toLowerCase()
+              const parsed = matter(content)
+              
+              const frontmatterText = Object.values(parsed.data)
+                .filter(v => v !== null && v !== undefined)
+                .map(v => Array.isArray(v) ? v.join(', ') : String(v))
+                .join('\n')
+              
+              const searchableContent = frontmatterText + '\n' + parsed.content
+              const lowerContent = searchableContent.toLowerCase()
               const lowerQuery = query.toLowerCase()
               const index = lowerContent.indexOf(lowerQuery)
+              
               if (index !== -1) {
                 const start = Math.max(0, index - 50)
-                const end = Math.min(content.length, index + query.length + 50)
-                const snippet = content.slice(start, end)
+                const end = Math.min(searchableContent.length, index + query.length + 50)
+                const snippet = searchableContent.slice(start, end)
                 results.push({
                   id: fullPath,
                   name: entry.name,
