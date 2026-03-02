@@ -1,7 +1,9 @@
 import os
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import Response
+from pydantic import BaseModel
 from loguru import logger
+import aiofiles
 
 import sys
 from pathlib import Path
@@ -15,6 +17,10 @@ from models.schemas import TaskResponse, ErrorResponse
 from utils.zip_handler import extract_markdown_from_zip
 
 router = APIRouter(prefix="/api/mineru", tags=["MinerU"])
+
+
+class LocalFileParseRequest(BaseModel):
+    file_path: str
 
 
 @router.post("/parse", response_model=TaskResponse)
@@ -40,6 +46,36 @@ async def parse_document(
 
     except Exception as e:
         logger.error(f"解析文档失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/parse-local", response_model=TaskResponse)
+async def parse_local_document(
+    background_tasks: BackgroundTasks,
+    request: LocalFileParseRequest,
+):
+    try:
+        file_path = Path(request.file_path)
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="文件不存在")
+
+        async with aiofiles.open(file_path, "rb") as f:
+            file_content = await f.read()
+
+        files = [{"name": file_path.name}]
+        apply_result = await mineru_client.batch_apply_upload_urls(files)
+        batch_id = apply_result["batch_id"]
+        upload_url = apply_result["file_urls"][0]
+
+        await mineru_client.upload_file(upload_url, file_content)
+        task = task_manager.create_task(batch_id, file_path.name or "unknown")
+        background_tasks.add_task(task_manager.poll_task_status, task["id"])
+
+        return task
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"解析本地文档失败: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
