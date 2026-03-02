@@ -9,7 +9,7 @@
         <el-button size="small" :loading="isParsing" @click="handleParseAll">
           开始全部解析
         </el-button>
-        <el-button size="small" @click="handleExportAll" :disabled="stats.completed === 0">
+        <el-button size="small" @click="handleExportAll" :disabled="stats.completed === 0" :loading="exportingAll">
           导出全部
         </el-button>
       </div>
@@ -29,6 +29,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Download } from '@element-plus/icons-vue'
 import { useParseStore } from '@/stores/parse'
+import { exportAllTexts } from '@/utils/export'
 import ParseSidebar from '@/components/Layout/ParseSidebar.vue'
 import ParseQueueView from '@/components/parse/ParseQueueView.vue'
 import ParseDocumentsView from '@/components/parse/ParseDocumentsView.vue'
@@ -38,6 +39,7 @@ const router = useRouter()
 const parseStore = useParseStore()
 const activeTab = ref('queue')
 const isParsing = ref(false)
+const exportingAll = ref(false)
 
 const stats = computed(() => parseStore.stats)
 
@@ -75,8 +77,24 @@ async function handleParseAll() {
   }
 }
 
-function handleExportAll() {
-  ElMessage.info('导出功能开发中')
+async function handleExportAll() {
+  const completed = parseStore.getCompletedFiles()
+  if (completed.length === 0) {
+    ElMessage.info('没有已完成解析的文件')
+    return
+  }
+
+  exportingAll.value = true
+  try {
+    ElMessage.info('正在准备导出文件...')
+    const allTexts = await parseStore.getAllCompletedTexts()
+    await exportAllTexts(allTexts)
+  } catch (error) {
+    console.error('导出全部失败:', error)
+    ElMessage.error('导出失败: ' + (error.message || '未知错误'))
+  } finally {
+    exportingAll.value = false
+  }
 }
 </script>
 
