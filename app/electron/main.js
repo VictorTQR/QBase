@@ -6,6 +6,7 @@ const https = require('https')
 const http = require('http')
 const { URL } = require('url')
 const matter = require('gray-matter')
+const JSZip = require('jszip')
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'local-file', privileges: { standard: true, secure: true, supportFetchAPI: true } }
@@ -14,7 +15,14 @@ protocol.registerSchemesAsPrivileged([
 function makeRequest(options, data = null) {
   return new Promise((resolve, reject) => {
     const lib = options.protocol === 'https:' ? https : http
-    const req = lib.request(options, (res) => {
+    const req = lib.request({
+      ...options,
+      timeout: 30000,
+      headers: {
+        'User-Agent': 'QBase/1.0',
+        ...options.headers,
+      }
+    }, (res) => {
       let body = ''
       res.on('data', (chunk) => body += chunk)
       res.on('end', () => {
@@ -26,7 +34,20 @@ function makeRequest(options, data = null) {
         }
       })
     })
-    req.on('error', reject)
+
+    req.on('error', (err) => {
+      if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT') {
+        reject(new Error(`网络连接失败: ${err.message}。请检查网络连接或稍后重试。`))
+      } else {
+        reject(err)
+      }
+    })
+
+    req.on('timeout', () => {
+      req.destroy()
+      reject(new Error('请求超时，请稍后重试。'))
+    })
+
     if (data) req.write(JSON.stringify(data))
     req.end()
   })
@@ -36,10 +57,16 @@ function uploadFile(url, fileData) {
   return new Promise((resolve, reject) => {
     const parsedUrl = new URL(url)
     const options = {
+      protocol: parsedUrl.protocol,
       hostname: parsedUrl.hostname,
       port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
       path: parsedUrl.pathname + parsedUrl.search,
-      method: 'PUT'
+      method: 'PUT',
+      timeout: 120000,
+      headers: {
+        'User-Agent': 'QBase/1.0',
+        'Content-Length': fileData.length
+      }
     }
     const lib = parsedUrl.protocol === 'https:' ? https : http
     const req = lib.request(options, (res) => {
@@ -47,7 +74,20 @@ function uploadFile(url, fileData) {
       res.on('data', (chunk) => body += chunk)
       res.on('end', () => resolve({ statusCode: res.statusCode, data: body }))
     })
-    req.on('error', reject)
+    
+    req.on('error', (err) => {
+      if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT') {
+        reject(new Error(`文件上传失败: ${err.message}。请检查网络连接或稍后重试。`))
+      } else {
+        reject(err)
+      }
+    })
+    
+    req.on('timeout', () => {
+      req.destroy()
+      reject(new Error('文件上传超时，请稍后重试。'))
+    })
+    
     req.write(fileData)
     req.end()
   })
@@ -288,6 +328,7 @@ ipcMain.handle('mineru:extract-pdf', async (event, filePath, config) => {
   const fileData = fs.readFileSync(filePath)
 
   const uploadResult = await makeRequest({
+    protocol: parsedBaseUrl.protocol,
     hostname,
     port,
     path: '/api/v4/file-urls/batch',
@@ -323,6 +364,7 @@ ipcMain.handle('mineru:extract-pdf', async (event, filePath, config) => {
 
   while (attempts < maxAttempts) {
     const pollResult = await makeRequest({
+      protocol: parsedBaseUrl.protocol,
       hostname,
       port,
       path: `/api/v4/extract-results/batch/${batchId}`,
@@ -352,10 +394,21 @@ ipcMain.handle('mineru:extract-pdf', async (event, filePath, config) => {
 
   const zipBuffer = await downloadFile(taskResult.full_zip_url)
 
-  return {
-    success: true,
-    zipUrl: taskResult.full_zip_url,
+  const zip = await JSZip.loadAsync(zipBuffer)
+  let markdownContent = ''
+
+  for (const [filename, file] of Object.entries(zip.files)) {
+    if (filename.endsWith('.md') && !file.dir) {
+      markdownContent = await file.async('string')
+      break
+    }
   }
+
+  if (!markdownContent) {
+    throw new Error('No markdown file found in ZIP result')
+  }
+
+  return markdownContent
 })
 
 ipcMain.handle('mineru:test-connection', async (event, config) => {
