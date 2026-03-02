@@ -160,6 +160,8 @@ function getNodePosition(nodeId) {
 
 <style scoped>
 .mindmap-generator {
+  height: 100%;
+  overflow-y: auto;
   padding: 16px;
 }
 
