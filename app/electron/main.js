@@ -331,13 +331,8 @@ ipcMain.handle('mineru:extract-pdf', async (event, filePath, config) => {
     language,
     enable_formula: enableFormula,
     enable_table: enableTable,
-    files: [{
-      name: fileName,
-      is_ocr: enableOcr
-    }]
+    files: [fileName]
   }
-
-  console.log('MinerU request body:', JSON.stringify(requestBody, null, 2))
 
   const uploadResult = await makeRequest({
     protocol: parsedBaseUrl.protocol,
@@ -350,8 +345,6 @@ ipcMain.handle('mineru:extract-pdf', async (event, filePath, config) => {
       'Authorization': `Bearer ${apiKey}`
     }
   }, requestBody)
-
-  console.log('MinerU response:', JSON.stringify(uploadResult, null, 2))
 
   if (uploadResult.data.code !== 0) {
     throw new Error(uploadResult.data.msg || 'Failed to get upload URL')
@@ -442,7 +435,7 @@ ipcMain.handle('mineru:test-connection', async (event, config) => {
       language: 'auto',
       enable_formula: true,
       enable_table: true,
-      files: [{ name: 'test.pdf', is_ocr: true }]
+      files: ['test.pdf']
     })
 
     if (result.data.code === 0 || result.data.code === -60002) {
