@@ -1,6 +1,6 @@
 # QBase 项目路线图
 
-**更新日期**: 2026-02-27
+**更新日期**: 2026-03-02
 
 ## 版本概览
 
@@ -13,6 +13,7 @@
 | v0.5 | ✅ 已完成 | 智能生成与UI优化 | 2026-02-26 |
 | v0.6 | ✅ 核心架构完成 | 智能体能力增强 | 2026-02-27 |
 | v0.7 | ✅ 已完成 | 文档解析管理与文本提取 | 2026-02-27 |
+| v0.8 | ✅ 已完成 | 应用设置页面与 PDF 解析策略 | 2026-03-02 |
 
 ---
 
@@ -324,6 +325,56 @@
 - [文本提取设计文档](./plans/2026-02-27-text-extraction-design.md)
 - [文本提取实施计划](./plans/2026-02-27-text-extraction-implementation.md)
 - [实施报告](./implementation/v0.7-text-extraction-complete.md)
+
+---
+
+## v0.8 - 应用设置页面与 PDF 解析策略 ✅
+
+**状态**: 已完成
+**发布日期**: 2026-03-02
+
+### 功能列表
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| 统一设置页面 | ✅ | 独立 /settings 路由页面 |
+| 设置页面导航 | ✅ | 左侧导航栏（LLM、PDF 解析、向量存储） |
+| 设置模块拆分 | ✅ | LlmSettings、PdfParseSettings、VectorSettings |
+| PDF 解析配置 | ✅ | MinerU 高级选项（公式/表格/OCR/语言） |
+| MinerU 连接测试 | ✅ | 测试连接功能 |
+| MinerU API 增强 | ✅ | 完整 API Payload 支持 |
+| 错误处理增强 | ✅ | 友好中文提示 + 修复建议 |
+| 入口清理 | ✅ | 移除 AgentPanel 设置按钮，删除 LlmConfigDialog |
+
+### 已完成部分
+
+**统一设置页面 (2026-03-02)**:
+- 新增 Settings.vue 主页面（二栏布局）
+- 新增 SettingsSidebar.vue 导航组件
+- 路由配置 /settings
+- MainLayout Header 添加设置图标按钮
+- 左上角返回首页功能
+
+**设置模块拆分 (2026-03-02)**:
+- LlmSettings.vue - LLM 配置（API 类型、Base URL、Key、Model）
+- PdfParseSettings.vue - PDF 解析配置（MinerU 高级选项）
+- VectorSettings.vue - 向量存储配置（SiliconFlow）
+
+**MinerU 增强 (2026-03-02)**:
+- API Payload 完善（enable_formula、enable_table、is_ocr、language）
+- 自定义 Base URL 支持
+- 测试连接 IPC 处理器
+- 增强错误处理（分类错误 + 中文提示）
+
+**旧代码清理 (2026-03-02)**:
+- 从 PanelHeader 移除设置按钮
+- 从 AgentPanel 移除 LlmConfigDialog 引用
+- 删除 LlmConfigDialog.vue 文件
+
+### 相关文档
+
+- [实施报告](./implementation/v0.8-settings-page-complete.md)
+- [MinerU 增强计划](./plans/2026-03-02-mineru-enhancements.md)
 
 ---
 
