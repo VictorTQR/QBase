@@ -222,6 +222,26 @@ export const useParseStore = defineStore(
       return await indexedDBRepo.getExtractedText(filePath)
     }
 
+    function getStatusType(status) {
+      const map = {
+        completed: 'success',
+        parsing: 'primary',
+        pending: 'warning',
+        failed: 'danger',
+      }
+      return map[status] || 'info'
+    }
+
+    function getStatusLabel(status) {
+      const map = {
+        completed: '已完成',
+        parsing: '解析中',
+        pending: '待解析',
+        failed: '失败',
+      }
+      return map[status] || status
+    }
+
     loadIndex()
 
     return {
@@ -249,6 +269,8 @@ export const useParseStore = defineStore(
       startParse,
       startParseBatch,
       getExtractedText,
+      getStatusType,
+      getStatusLabel,
     }
   },
   {
