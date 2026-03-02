@@ -12,8 +12,8 @@
           <el-descriptions-item label="文件路径">{{ filePath }}</el-descriptions-item>
           <el-descriptions-item label="文件类型">{{ fileData.type || '未知' }}</el-descriptions-item>
           <el-descriptions-item label="解析状态">
-            <el-tag :type="getStatusType(fileData.status)">
-              {{ getStatusLabel(fileData.status) }}
+            <el-tag :type="parseStore.getStatusType(fileData.status)">
+              {{ parseStore.getStatusLabel(fileData.status) }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item v-if="fileData.duration" label="解析耗时">
@@ -80,25 +80,7 @@ watch(() => props.visible, (val) => {
   if (!val) emit('close')
 })
 
-function getStatusType(status) {
-  const map = {
-    completed: 'success',
-    parsing: 'primary',
-    pending: 'warning',
-    failed: 'danger',
-  }
-  return map[status] || 'info'
-}
 
-function getStatusLabel(status) {
-  const map = {
-    completed: '已完成',
-    parsing: '解析中',
-    pending: '待解析',
-    failed: '失败',
-  }
-  return map[status] || status
-}
 
 function formatSize(bytes) {
   if (bytes < 1024) return bytes + ' B'
