@@ -53,8 +53,23 @@
 ### 解析详情抽屉
 
 - 文件信息展示（路径、类型、状态、耗时、大小）
-- 文本预览（已完成的文件）
-- 操作按钮（重新解析、导出文本、删除记录）
+- **文本预览**（已完成的文件）
+  - 自动从 IndexedDB 加载完整文本
+  - 默认显示前 2000 字符，支持"显示更多"展开
+  - 加载状态和空状态提示
+- 操作按钮（重新解析、**导出文本**、删除记录）
+
+### 导出功能
+
+#### 单个文件导出
+- 在解析详情抽屉中点击「导出文本」按钮
+- 自动下载 TXT 文件，命名为 `原文件名_extracted.txt`
+
+#### 批量导出
+- 在解析管理页面顶部点击「导出全部」按钮
+- 自动打包所有已完成解析的文件为 ZIP 压缩包
+- 文件名格式：`qbase_extracted_时间戳.zip`
+- 显示导出进度和结果提示
 
 ## 技术实现
 
@@ -72,9 +87,11 @@ app/src/
 │       ├── ParseDocumentsView.vue    # 已解析文档视图
 │       ├── ParseStatsView.vue        # 解析统计视图
 │       ├── FileList.vue              # 通用文件列表
-│       └── ParseDetailsDrawer.vue    # 详情抽屉
-└── stores/
-    └── parse.js                      # useParseStore (已更新)
+│       └── ParseDetailsDrawer.vue    # 详情抽屉（含文本预览和导出）
+├── stores/
+│   └── parse.js                      # useParseStore (已更新)
+└── utils/
+    └── export.js                     # 导出工具模块（新增）
 ```
 
 ### 数据存储方案
@@ -116,6 +133,9 @@ app/src/
   retryFailed(),   // 重试失败
   reparse(),       // 重新解析
   removeFile(),    // 删除记录
+  getExtractedText(), // 获取单个文件提取的文本
+  getAllCompletedTexts(), // 获取所有已完成文件的文本（新增）
+  getCompletedFiles(), // 获取所有已完成文件列表（新增）
 }
 ```
 
@@ -148,4 +168,5 @@ app/src/
 
 - [实施报告](../implementation/2026-03-02-parse-management-refactor.md)
 - [实施计划](../plans/2026-03-02-parse-management-refactor.md)
+- [导出和预览功能实施计划](../plans/2026-03-02-export-preview-features.md)
 - [旧版设计文档](../plans/2026-02-27-parse-manager-design.md)
