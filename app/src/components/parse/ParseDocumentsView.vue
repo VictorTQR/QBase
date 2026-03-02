@@ -249,9 +249,4 @@ function handleSelectDocument(filePath) {
   font-size: 12px;
   color: var(--el-text-color-secondary);
 }
-
-@keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
 </style>
