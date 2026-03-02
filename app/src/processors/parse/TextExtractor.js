@@ -1,8 +1,4 @@
-import * as pdfjsLib from 'pdfjs-dist'
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { MinerUProcessor } from '../MinerUProcessor.js'
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 
 export class TextExtractor {
   static async extract(filePath, fileType, config = {}) {
@@ -33,55 +29,14 @@ export class TextExtractor {
   }
 
   static async extractPdf(filePath, config = {}) {
-    try {
-      return await this.extractPdfLocal(filePath)
-    } catch (localError) {
-      console.warn('本地 PDF 提取失败，尝试云端 MinerU:', localError.message)
-
-      if (config.mineru?.apiKey) {
-        try {
-          return await this.extractWithMinerU(filePath, config.mineru)
-        } catch (mineruError) {
-          console.error('MinerU 提取也失败:', mineruError)
-          throw new Error(`PDF 提取失败: ${localError.message}`)
-        }
-      }
-
-      throw new Error(`PDF 提取失败: ${localError.message}`)
+    if (!config.mineru?.apiKey) {
+      throw new Error('PDF 文本提取需要配置 MinerU API Key，请在设置中完成配置')
     }
-  }
 
-  static async extractPdfLocal(filePath) {
     try {
-      const formattedPath = filePath.replace(/\\/g, '/')
-      const url = `local-file://${formattedPath.replace(/^\/+/, '')}`
-
-      const loadingTask = pdfjsLib.getDocument({ url })
-      const pdfDoc = await loadingTask.promise
-
-      let fullText = ''
-      const totalPages = pdfDoc.numPages
-
-      for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-        const page = await pdfDoc.getPage(pageNum)
-        const textContent = await page.getTextContent()
-        const pageText = textContent.items.map((item) => item.str).join(' ')
-
-        fullText += `--- 第 ${pageNum} 页 ---\n${pageText}\n\n`
-      }
-
-      await pdfDoc.destroy()
-
-      return {
-        text: fullText,
-        fileType: 'pdf',
-        extractedBy: 'local',
-        extractedAt: new Date(),
-        pageCount: totalPages,
-        wordCount: fullText.split(/\s+/).filter(Boolean).length,
-      }
+      return await this.extractWithMinerU(filePath, config.mineru)
     } catch (error) {
-      console.error('本地 PDF 提取失败:', error)
+      console.error('MinerU PDF 提取失败:', error)
       throw error
     }
   }
