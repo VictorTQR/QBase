@@ -331,7 +331,10 @@ ipcMain.handle('mineru:extract-pdf', async (event, filePath, config) => {
     language,
     enable_formula: enableFormula,
     enable_table: enableTable,
-    files: [fileName]
+    files: [{
+      name: fileName,
+      is_ocr: enableOcr
+    }]
   }
 
   const uploadResult = await makeRequest({
@@ -423,6 +426,7 @@ ipcMain.handle('mineru:test-connection', async (event, config) => {
     const port = parsedBaseUrl.port || (parsedBaseUrl.protocol === 'https:' ? 443 : 80)
 
     const result = await makeRequest({
+      protocol: parsedBaseUrl.protocol,
       hostname,
       port,
       path: '/api/v4/file-urls/batch',
@@ -435,7 +439,7 @@ ipcMain.handle('mineru:test-connection', async (event, config) => {
       language: 'auto',
       enable_formula: true,
       enable_table: true,
-      files: ['test.pdf']
+      files: [{ name: 'test.pdf', is_ocr: true }]
     })
 
     if (result.data.code === 0 || result.data.code === -60002) {
