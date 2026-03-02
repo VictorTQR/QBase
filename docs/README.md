@@ -38,6 +38,8 @@
 - [v0.6 实施报告](./implementation/v0.6-core-architecture-complete.md) - 智能体能力增强（核心架构）
 - [v0.7 设计文档](./plans/2026-02-27-parse-manager-design.md) - 文档解析管理设计
 - [v0.7 实施报告](./implementation/v0.7-text-extraction-complete.md) - 文档解析管理与文本提取
+- [v0.8 实施报告](./implementation/v0.8-settings-page-complete.md) - 应用设置页面与 PDF 解析策略
+- [v0.9 实施报告](./implementation/v0.9-mineru-fastapi-backend.md) - MinerU FastAPI 后端服务
 
 ### 问题记录
 Bug 修复记录和问题追踪。

@@ -1,9 +1,9 @@
 # QBase 技术栈
 
-**版本**: v0.3
-**更新日期**: 2026-02-25
+**版本**: v0.9
+**更新日期**: 2026-03-02
 
-## 核心技术
+## 前端技术
 
 | 技术 | 版本 | 用途 |
 |------|------|------|
@@ -12,6 +12,21 @@
 | Electron | ^40.6.0 | 桌面应用 |
 | Pinia | ^3.0.4 | 状态管理 |
 | Vite | ^7.3.1 | 构建工具 |
+
+## 后端技术
+
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Python | >=3.12 | 编程语言 |
+| FastAPI | >=0.135.1 | Web 框架 |
+| Uvicorn | >=0.41.0 | ASGI 服务器 |
+| HTTPX | >=0.27.0 | 异步 HTTP 客户端 |
+| Pydantic | - | 数据验证 |
+| pydantic-settings | >=2.0.0 | 配置管理 |
+| python-multipart | >=0.0.9 | 文件上传支持 |
+| aiofiles | >=24.1.0 | 异步文件操作 |
+| Loguru | >=0.7.3 | 日志记录 |
+| uv | - | 包管理器 |
 
 ## UI 组件库
 
@@ -76,7 +91,7 @@
 
 ```
 QBase/
-├── app/                    # 应用主目录
+├── app/                    # Electron + Vue 3 前端应用
 │   ├── src/               # 源代码
 │   │   ├── components/    # Vue 组件
 │   │   ├── stores/        # Pinia stores
@@ -87,6 +102,15 @@ QBase/
 │   │   └── __tests__/     # 测试文件
 │   ├── electron/          # Electron 主进程
 │   └── public/            # 静态资源
+├── backend/                # FastAPI 后端服务
+│   ├── src/               # 源代码
+│   │   ├── api/           # API 路由
+│   │   ├── mineru/        # MinerU 相关模块
+│   │   ├── models/        # 数据模型
+│   │   ├── utils/         # 工具函数
+│   │   └── config.py      # 配置管理
+│   ├── main.py            # 主应用入口
+│   └── pyproject.toml     # Python 项目配置
 ├── docs/                   # 项目文档
 ├── official_docs/          # 第三方库文档
 ├── AGENTS.md              # AI 代理开发指南
@@ -94,7 +118,7 @@ QBase/
 └── README.md              # 项目概述
 ```
 
-## 开发命令
+## 前端开发命令
 
 ```bash
 cd app
@@ -107,6 +131,20 @@ npm run build        # 构建生产版本
 npm run test:unit    # 运行测试
 npm run lint         # 运行 lint
 npm run format       # 格式化代码
+```
+
+## 后端开发命令
+
+```bash
+cd backend
+
+uv pip install .     # 安装依赖
+cp .env.example .env # 配置环境变量（填入 MINERU_API_KEY）
+uv run python -m uvicorn main:app --reload  # 启动开发服务器
+
+# 访问 API 文档
+# Swagger UI: http://localhost:8000/docs
+# ReDoc: http://localhost:8000/redoc
 ```
 
 ## 运行环境
