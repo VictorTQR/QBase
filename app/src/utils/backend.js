@@ -12,8 +12,8 @@ class BackendService {
   }
 
   async healthCheck() {
-    const response = await this.client.get('/health')
-    return response.data
+    const request = this.client.get('/health')
+    return await request.json()
   }
 }
 
@@ -23,37 +23,37 @@ class MinerUApi {
   }
 
   async parseLocalFile(filePath) {
-    const response = await this.backend.client.post('/api/mineru/parse-local', {
+    const request = this.backend.client.post('/api/mineru/parse-local', {
       file_path: filePath,
     })
-    return response.data
+    return await request.json()
   }
 
   async uploadAndParseFile(file) {
     const formData = new FormData()
     formData.append('file', file)
     
-    const response = await this.backend.client.post('/api/mineru/parse', formData, {
+    const request = this.backend.client.post('/api/mineru/parse', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
-    return response.data
+    return await request.json()
   }
 
   async getTaskStatus(taskId) {
-    const response = await this.backend.client.get(`/api/mineru/tasks/${taskId}`)
-    return response.data
+    const request = this.backend.client.get(`/api/mineru/tasks/${taskId}`)
+    return await request.json()
   }
 
   async getParseResult(taskId) {
-    const response = await this.backend.client.get(`/api/mineru/tasks/${taskId}/result`)
-    return response.data
+    const request = this.backend.client.get(`/api/mineru/tasks/${taskId}/result`)
+    return await request.json()
   }
 
   async downloadZip(taskId) {
-    const response = await this.backend.client.get(`/api/mineru/tasks/${taskId}/download`, {
+    const request = this.backend.client.get(`/api/mineru/tasks/${taskId}/download`, {
       responseType: 'blob',
     })
-    return response.data
+    return await request.blob()
   }
 }
 
