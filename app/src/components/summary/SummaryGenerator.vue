@@ -71,6 +71,8 @@ async function generateSummary() {
 
 <style scoped>
 .summary-generator {
+  height: 100%;
+  overflow-y: auto;
   padding: 16px;
 }
 
