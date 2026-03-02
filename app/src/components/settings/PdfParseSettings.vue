@@ -16,12 +16,6 @@
         <el-input v-model="mineruConfig.baseUrl" />
       </el-form-item>
 
-      <el-form-item>
-        <el-button :loading="isTesting" @click="handleTestConnection" type="primary">
-          测试连接
-        </el-button>
-      </el-form-item>
-
       <el-divider content-position="left">高级选项</el-divider>
 
       <el-form-item label="启用公式识别">
@@ -50,11 +44,9 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useAgentStore } from '@/stores/agent'
-import { ElMessage } from 'element-plus'
 
 const agentStore = useAgentStore()
 const isUpdating = ref(false)
-const isTesting = ref(false)
 
 const mineruConfig = ref({
   apiKey: '',
@@ -93,28 +85,6 @@ watch(
   },
   { deep: true },
 )
-
-async function handleTestConnection() {
-  if (!mineruConfig.value.apiKey) {
-    ElMessage.warning('请先输入 MinerU API Key')
-    return
-  }
-
-  isTesting.value = true
-  try {
-    ElMessage.info('正在测试 MinerU 连接...')
-    const result = await window.electronAPI.mineru.testConnection(mineruConfig.value)
-    if (result.success) {
-      ElMessage.success('MinerU 连接成功！')
-    } else {
-      ElMessage.error(`连接失败: ${result.message}`)
-    }
-  } catch (err) {
-    ElMessage.error(`连接测试失败: ${err.message}`)
-  } finally {
-    isTesting.value = false
-  }
-}
 </script>
 
 <style scoped>

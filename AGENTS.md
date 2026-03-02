@@ -16,7 +16,7 @@ QBase 是一个本地知识库管理系统，基于 Vue 3 + Electron 构建。
 - 三栏布局
 - Electron 文件系统 API
 - AI 助手对话面板 (BubbleList + Sender)
-- LLM 配置管理 (本地/云端模型) + 测试连接功能
+- LLM 配置管理 (本地/云端模型)
 - 流式 AI 响应 (SSE)
 - 多轮对话上下文管理
 - 多会话管理（对话历史持久化）
