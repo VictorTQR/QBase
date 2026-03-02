@@ -37,8 +37,8 @@
             <Clock v-else-if="data.status === 'pending'" />
             <CircleClose v-else />
           </el-icon>
-          <el-tag :type="getStatusType(data.status)" size="small">
-            {{ getStatusLabel(data.status) }}
+          <el-tag :type="parseStore.getStatusType(data.status)" size="small">
+            {{ parseStore.getStatusLabel(data.status) }}
           </el-tag>
         </div>
         <div class="card-body">
@@ -105,26 +105,6 @@ function formatSize(bytes) {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-}
-
-function getStatusType(status) {
-  const map = {
-    completed: 'success',
-    parsing: 'primary',
-    pending: 'warning',
-    failed: 'danger',
-  }
-  return map[status] || 'info'
-}
-
-function getStatusLabel(status) {
-  const map = {
-    completed: '已完成',
-    parsing: '解析中',
-    pending: '待解析',
-    failed: '失败',
-  }
-  return map[status] || status
 }
 
 function handleSelectDocument(filePath) {
