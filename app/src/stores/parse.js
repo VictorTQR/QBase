@@ -222,6 +222,27 @@ export const useParseStore = defineStore(
       return await indexedDBRepo.getExtractedText(filePath)
     }
 
+    async function getAllCompletedTexts() {
+      const completedFiles = Object.entries(parseIndex.value)
+        .filter(([, data]) => data.status === 'completed')
+        .map(([filePath]) => filePath)
+
+      const texts = {}
+      for (const filePath of completedFiles) {
+        const textData = await indexedDBRepo.getExtractedText(filePath)
+        if (textData) {
+          texts[filePath] = textData
+        }
+      }
+      return texts
+    }
+
+    function getCompletedFiles() {
+      return Object.entries(parseIndex.value)
+        .filter(([, data]) => data.status === 'completed')
+        .map(([filePath, data]) => ({ filePath, ...data }))
+    }
+
     function getStatusType(status) {
       const map = {
         completed: 'success',
@@ -269,6 +290,8 @@ export const useParseStore = defineStore(
       startParse,
       startParseBatch,
       getExtractedText,
+      getAllCompletedTexts,
+      getCompletedFiles,
       getStatusType,
       getStatusLabel,
     }
