@@ -15,7 +15,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     submitTask: (batchId, apiKey) => ipcRenderer.invoke('mineru:submit-task', batchId, apiKey),
     pollTaskStatus: (taskId, apiKey) => ipcRenderer.invoke('mineru:poll-task-status', taskId, apiKey),
     downloadResult: (url) => ipcRenderer.invoke('mineru:download-result', url),
-    extractPdf: (filePath, apiKey) => ipcRenderer.invoke('mineru:extract-pdf', filePath, apiKey)
+    extractPdf: (filePath, config) => ipcRenderer.invoke('mineru:extract-pdf', filePath, config),
+    testConnection: (config) => ipcRenderer.invoke('mineru:test-connection', config)
   },
   siliconflow: {
     createEmbedding: (text, config) => ipcRenderer.invoke('siliconflow:create-embedding', text, config)

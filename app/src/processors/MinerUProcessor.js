@@ -10,7 +10,7 @@ export class MinerUProcessor extends DocumentProcessor {
     if (!this.config.apiKey) {
       throw new Error('MinerU API key not configured')
     }
-    const result = await window.electronAPI.mineru.extractPdf(file.path, this.config.apiKey)
+    const result = await window.electronAPI.mineru.extractPdf(file.path, this.config)
     return result
   }
 

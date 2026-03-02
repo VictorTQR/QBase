@@ -270,13 +270,26 @@ ipcMain.handle('mineru:download-result', async (event, url) => {
   return await downloadFile(url)
 })
 
-ipcMain.handle('mineru:extract-pdf', async (event, filePath, apiKey) => {
+ipcMain.handle('mineru:extract-pdf', async (event, filePath, config) => {
+  const {
+    apiKey,
+    baseUrl = 'https://mineru.net',
+    enableFormula = true,
+    enableTable = true,
+    enableOcr = true,
+    language = 'auto'
+  } = config || {}
+  
+  const parsedBaseUrl = new URL(baseUrl)
+  const hostname = parsedBaseUrl.hostname
+  const port = parsedBaseUrl.port || (parsedBaseUrl.protocol === 'https:' ? 443 : 80)
+  
   const fileName = path.basename(filePath)
   const fileData = fs.readFileSync(filePath)
 
   const uploadResult = await makeRequest({
-    hostname: 'mineru.net',
-    port: 443,
+    hostname,
+    port,
     path: '/api/v4/file-urls/batch',
     method: 'POST',
     headers: {
@@ -284,8 +297,13 @@ ipcMain.handle('mineru:extract-pdf', async (event, filePath, apiKey) => {
       'Authorization': `Bearer ${apiKey}`
     }
   }, {
-    files: [{ name: fileName }],
-    model_version: 'vlm'
+    language,
+    enable_formula: enableFormula,
+    enable_table: enableTable,
+    files: [{
+      name: fileName,
+      is_ocr: enableOcr
+    }]
   })
 
   if (uploadResult.data.code !== 0) {
@@ -305,8 +323,8 @@ ipcMain.handle('mineru:extract-pdf', async (event, filePath, apiKey) => {
 
   while (attempts < maxAttempts) {
     const pollResult = await makeRequest({
-      hostname: 'mineru.net',
-      port: 443,
+      hostname,
+      port,
       path: `/api/v4/extract-results/batch/${batchId}`,
       method: 'GET',
       headers: {
@@ -337,6 +355,44 @@ ipcMain.handle('mineru:extract-pdf', async (event, filePath, apiKey) => {
   return {
     success: true,
     zipUrl: taskResult.full_zip_url,
+  }
+})
+
+ipcMain.handle('mineru:test-connection', async (event, config) => {
+  const { apiKey, baseUrl = 'https://mineru.net' } = config || {}
+  
+  if (!apiKey) {
+    return { success: false, message: 'API Key 未配置' }
+  }
+
+  try {
+    const parsedBaseUrl = new URL(baseUrl)
+    const hostname = parsedBaseUrl.hostname
+    const port = parsedBaseUrl.port || (parsedBaseUrl.protocol === 'https:' ? 443 : 80)
+
+    const result = await makeRequest({
+      hostname,
+      port,
+      path: '/api/v4/file-urls/batch',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      }
+    }, {
+      language: 'auto',
+      enable_formula: true,
+      enable_table: true,
+      files: [{ name: 'test.pdf', is_ocr: true }]
+    })
+
+    if (result.data.code === 0 || result.data.code === -60002) {
+      return { success: true, message: '连接成功' }
+    } else {
+      return { success: false, message: result.data.msg || `错误码: ${result.data.code}` }
+    }
+  } catch (error) {
+    return { success: false, message: error.message }
   }
 })
 

@@ -47,6 +47,10 @@ export const useAgentStore = defineStore(
       mineru: {
         apiKey: '',
         baseUrl: 'https://mineru.net',
+        enableFormula: true,
+        enableTable: true,
+        enableOcr: true,
+        language: 'auto',
       },
       siliconflow: {
         apiKey: '',
