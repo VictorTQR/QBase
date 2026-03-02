@@ -7,6 +7,9 @@
           <el-icon><Search /></el-icon>
           <span class="search-hint">搜索 (Ctrl+K)</span>
         </el-button>
+        <el-button @click="handleOpenSettings" link>
+          <el-icon><Setting /></el-icon>
+        </el-button>
         <el-button @click="handleAddFolder" type="primary">
           <el-icon><FolderAdd /></el-icon>
           添加文件夹
@@ -21,11 +24,13 @@
 </template>
 
 <script setup>
-import { FolderAdd, Search } from '@element-plus/icons-vue'
+import { FolderAdd, Search, Setting } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useSearchStore } from '@/stores/search'
 import SearchPanel from '@/components/SearchPanel.vue'
 
+const router = useRouter()
 const workspaceStore = useWorkspaceStore()
 const searchStore = useSearchStore()
 
@@ -38,6 +43,10 @@ async function handleAddFolder() {
 
 function handleOpenSearch() {
   searchStore.openPanel()
+}
+
+function handleOpenSettings() {
+  router.push('/settings')
 }
 </script>
 

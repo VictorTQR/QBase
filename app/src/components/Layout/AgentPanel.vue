@@ -1,5 +1,4 @@
 <script setup>
-import { ref } from 'vue'
 import { useUiStore } from '@/stores/ui'
 import PanelHeader from '@/components/shared/PanelHeader.vue'
 import PanelNavSidebar from './PanelNavSidebar.vue'
@@ -7,17 +6,11 @@ import ChatModule from '@/components/chat/ChatModule.vue'
 import FlashcardModule from '@/components/flashcard/FlashcardModule.vue'
 import MindmapModule from '@/components/generate/MindmapModule.vue'
 import SummaryModule from '@/components/generate/SummaryModule.vue'
-import LlmConfigDialog from '../LlmConfigDialog.vue'
 
 const uiStore = useUiStore()
-const showConfig = ref(false)
 
 const handleModuleChange = (moduleId) => {
   uiStore.setActiveModule(moduleId)
-}
-
-const handleSettings = () => {
-  showConfig.value = true
 }
 
 const handleMinimize = () => {
@@ -42,7 +35,7 @@ const renderModule = () => {
 
 <template>
   <div class="agent-panel">
-    <PanelHeader @settings="handleSettings" @minimize="handleMinimize" />
+    <PanelHeader @minimize="handleMinimize" />
     <div class="panel-body">
       <div class="panel-content">
         <transition name="fade" mode="out-in">
@@ -51,7 +44,6 @@ const renderModule = () => {
       </div>
       <PanelNavSidebar :active-module="uiStore.activeModule" @change="handleModuleChange" />
     </div>
-    <LlmConfigDialog v-model="showConfig" />
   </div>
 </template>
 

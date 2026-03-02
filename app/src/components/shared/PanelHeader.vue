@@ -1,5 +1,5 @@
 <script setup>
-import { Setting, Minus } from '@element-plus/icons-vue'
+import { Minus } from '@element-plus/icons-vue'
 
 defineProps({
   title: {
@@ -8,16 +8,13 @@ defineProps({
   },
 })
 
-const emit = defineEmits(['settings', 'minimize'])
+const emit = defineEmits(['minimize'])
 </script>
 
 <template>
   <div class="panel-header">
     <span class="panel-title">{{ title }}</span>
     <div class="header-actions">
-      <el-button size="small" circle @click="$emit('settings')">
-        <el-icon><Setting /></el-icon>
-      </el-button>
       <el-button size="small" circle @click="$emit('minimize')">
         <el-icon><Minus /></el-icon>
       </el-button>
