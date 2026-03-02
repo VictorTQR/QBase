@@ -1,30 +1,36 @@
 <template>
   <div class="sidebar">
-    <el-tabs v-model="activeTab" class="sidebar-tabs">
-      <el-tab-pane label="文件树" name="filetree">
-        <div class="workspace-header">
-          <span class="workspace-title">工作区</span>
-          <el-button :loading="isRefreshing" link type="primary" @click="handleRefresh">
-            <el-icon><Refresh /></el-icon>
-          </el-button>
-        </div>
-        <el-tree
-          ref="treeRef"
-          :data="treeData"
-          :props="treeProps"
-          lazy
-          :load="loadNode"
-          node-key="id"
-          default-expand-all
-          @node-click="handleNodeClick"
-          @node-contextmenu="handleContextMenu"
-          :highlight-current="true"
-        />
-      </el-tab-pane>
-      <el-tab-pane label="解析管理" name="parse">
-        <ParseManager />
-      </el-tab-pane>
-    </el-tabs>
+    <div class="sidebar-header">
+      <span class="workspace-title">工作区</span>
+      <div class="header-actions">
+        <el-button :loading="isRefreshing" link type="primary" @click="handleRefresh">
+          <el-icon><Refresh /></el-icon>
+        </el-button>
+      </div>
+    </div>
+    
+    <div class="file-tree-container">
+      <el-tree
+        ref="treeRef"
+        :data="treeData"
+        :props="treeProps"
+        lazy
+        :load="loadNode"
+        node-key="id"
+        default-expand-all
+        @node-click="handleNodeClick"
+        @node-contextmenu="handleContextMenu"
+        :highlight-current="true"
+      />
+    </div>
+
+    <div class="sidebar-footer">
+      <el-button type="primary" class="parse-management-btn" @click="goToParseManagement">
+        <el-icon><Document /></el-icon>
+        <span>解析管理</span>
+      </el-button>
+    </div>
+
     <teleport to="body">
       <div v-if="contextMenu.visible" class="context-menu" :style="contextMenu.style" @click.stop>
         <div
@@ -51,12 +57,14 @@
 
 <script setup>
 import { ref, onMounted, watch, onUnmounted } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
+import { Refresh, Document } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDocumentStore } from '@/stores/document'
 import { useParseStore } from '@/stores/parse'
-import ParseManager from './ParseManager.vue'
+
+const router = useRouter()
 
 function getFileType(fileName) {
   const ext = fileName.split('.').pop().toLowerCase()
@@ -66,8 +74,6 @@ function getFileType(fileName) {
   if (['mp4', 'webm', 'mov', 'mkv'].includes(ext)) return 'video'
   return 'unknown'
 }
-
-const activeTab = ref('filetree')
 
 const workspaceStore = useWorkspaceStore()
 const documentStore = useDocumentStore()
@@ -150,7 +156,6 @@ function handleAddToParse() {
 
   parseStore.addFile(data.path, fileType)
   ElMessage.success('已添加到解析队列')
-  activeTab.value = 'parse'
 }
 
 function handleClickOutside() {
@@ -191,6 +196,10 @@ function handleNodeClick(data) {
   }
 }
 
+function goToParseManagement() {
+  router.push('/parse-management')
+}
+
 watch(
   () => workspaceStore.folders,
   () => {
@@ -219,28 +228,7 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.sidebar-tabs {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.sidebar-tabs :deep(.el-tabs__content) {
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar-tabs :deep(.el-tab-pane) {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.workspace-header {
+.sidebar-header {
   padding: 12px 16px;
   border-bottom: 1px solid var(--el-border-color-lighter);
   display: flex;
@@ -255,10 +243,32 @@ onUnmounted(() => {
   color: var(--el-text-color-secondary);
 }
 
-.sidebar :deep(.el-tree) {
+.header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.file-tree-container {
   flex: 1;
   overflow-y: auto;
+}
+
+.file-tree-container :deep(.el-tree) {
   border: none;
+}
+
+.sidebar-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--el-border-color-lighter);
+  flex-shrink: 0;
+}
+
+.parse-management-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .context-menu {

@@ -41,6 +41,7 @@
 - [v0.8 实施报告](./implementation/v0.8-settings-page-complete.md) - 应用设置页面与 PDF 解析策略
 - [v0.9 实施报告](./implementation/v0.9-mineru-fastapi-backend.md) - MinerU FastAPI 后端服务
 - [v1.0 实施报告](./implementation/v1.0-backend-integration.md) - 后端服务集成（策略模式）
+- [解析管理重构报告](./implementation/2026-03-02-parse-management-refactor.md) - 解析管理 UI 重构与增强
 
 ### 问题记录
 Bug 修复记录和问题追踪。

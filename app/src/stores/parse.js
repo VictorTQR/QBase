@@ -32,29 +32,41 @@ export const useParseStore = defineStore(
     const pendingFiles = computed(() => {
       return Object.entries(parseIndex.value)
         .filter(([, data]) => data.status === 'pending')
-        .map(([filePath, data]) => ({ filePath, ...data }))
+        .map(([filePath, data]) => ({ 
+          filePath, 
+          fileType: data.fileType || data.type,
+          ...data 
+        }))
     })
 
     const parsingFiles = computed(() => {
       return Object.entries(parseIndex.value)
         .filter(([, data]) => data.status === 'parsing')
-        .map(([filePath, data]) => ({ filePath, ...data }))
+        .map(([filePath, data]) => ({ 
+          filePath, 
+          fileType: data.fileType || data.type,
+          ...data 
+        }))
     })
 
     const failedFiles = computed(() => {
       return Object.entries(parseIndex.value)
         .filter(([, data]) => data.status === 'failed')
-        .map(([filePath, data]) => ({ filePath, ...data }))
+        .map(([filePath, data]) => ({ 
+          filePath, 
+          fileType: data.fileType || data.type,
+          ...data 
+        }))
     })
 
     async function loadIndex() {
       parseIndex.value = await repository.getAll()
     }
 
-    async function addFile(filePath, type) {
+    async function addFile(filePath, fileType) {
       await repository.update(filePath, {
         status: 'pending',
-        type,
+        fileType,
         addedAt: Date.now(),
       })
       await loadIndex()

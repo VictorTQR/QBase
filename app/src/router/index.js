@@ -11,6 +11,11 @@ const routes = [
     name: 'settings',
     component: () => import('@/views/Settings.vue'),
   },
+  {
+    path: '/parse-management',
+    name: 'parse-management',
+    component: () => import('@/views/ParseManagement.vue'),
+  },
 ]
 
 const router = createRouter({
