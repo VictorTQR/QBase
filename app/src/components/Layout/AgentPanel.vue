@@ -3,9 +3,9 @@ import { useUiStore } from '@/stores/ui'
 import PanelHeader from '@/components/shared/PanelHeader.vue'
 import PanelNavSidebar from './PanelNavSidebar.vue'
 import ChatModule from '@/components/chat/ChatModule.vue'
-import FlashcardModule from '@/components/flashcard/FlashcardModule.vue'
-import MindmapModule from '@/components/generate/MindmapModule.vue'
-import SummaryModule from '@/components/generate/SummaryModule.vue'
+import FlashcardPanel from '@/components/flashcards/FlashcardPanel.vue'
+import MindmapGenerator from '@/components/mindmap/MindmapGenerator.vue'
+import SummaryGenerator from '@/components/summary/SummaryGenerator.vue'
 
 const uiStore = useUiStore()
 
@@ -22,11 +22,11 @@ const renderModule = () => {
     case 'chat':
       return ChatModule
     case 'flashcard':
-      return FlashcardModule
+      return FlashcardPanel
     case 'mindmap':
-      return MindmapModule
+      return MindmapGenerator
     case 'summary':
-      return SummaryModule
+      return SummaryGenerator
     default:
       return ChatModule
   }
