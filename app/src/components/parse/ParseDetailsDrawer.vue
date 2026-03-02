@@ -28,10 +28,22 @@
         </el-descriptions>
       </div>
 
-      <div v-if="fileData.status === 'completed' && fileData.textPreview" class="detail-section">
+      <div v-if="fileData.status === 'completed'" class="detail-section">
         <h4>文本预览</h4>
-        <div class="text-preview">
-          {{ fileData.textPreview }}
+        <div v-if="loadingText" class="text-preview loading">
+          <el-icon class="is-loading"><Loading /></el-icon>
+          加载中...
+        </div>
+        <div v-else-if="displayText" class="text-preview">
+          {{ displayText }}
+        </div>
+        <div v-else class="text-preview empty">
+          暂无文本内容
+        </div>
+        <div v-if="fullText?.text && fullText.text.length > PREVIEW_LENGTH" class="preview-toggle">
+          <el-button link type="primary" size="small" @click="showFullPreview = !showFullPreview">
+            {{ showFullPreview ? '收起' : '显示更多' }}
+          </el-button>
         </div>
       </div>
 
@@ -56,7 +68,9 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
 import { useParseStore } from '@/stores/parse'
+import { exportSingleText } from '@/utils/export'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -76,8 +90,43 @@ const fileData = computed(() => {
   return parseStore.parseIndex[props.filePath] || null
 })
 
-watch(() => props.visible, (val) => {
-  if (!val) emit('close')
+const loadingText = ref(false)
+const fullText = ref(null)
+const showFullPreview = ref(false)
+const PREVIEW_LENGTH = 2000
+
+watch(() => props.visible, async (val) => {
+  if (!val) {
+    emit('close')
+    fullText.value = null
+    showFullPreview.value = false
+    return
+  }
+  if (val && props.filePath && fileData.value?.status === 'completed') {
+    await loadExtractedText()
+  }
+})
+
+async function loadExtractedText() {
+  if (!props.filePath) return
+  loadingText.value = true
+  try {
+    fullText.value = await parseStore.getExtractedText(props.filePath)
+  } catch (error) {
+    console.error('加载文本失败:', error)
+    ElMessage.error('加载文本失败')
+  } finally {
+    loadingText.value = false
+  }
+}
+
+const displayText = computed(() => {
+  if (!fullText.value?.text) return null
+  const text = fullText.value.text
+  if (showFullPreview.value || text.length <= PREVIEW_LENGTH) {
+    return text
+  }
+  return text.slice(0, PREVIEW_LENGTH) + '...'
 })
 
 
@@ -98,8 +147,22 @@ async function handleReparse() {
   }
 }
 
-function handleExport() {
-  ElMessage.info('导出功能开发中')
+async function handleExport() {
+  if (!props.filePath || !fileData.value) return
+
+  if (!fullText.value) {
+    await loadExtractedText()
+  }
+
+  if (!fullText.value?.text) {
+    ElMessage.warning('没有可导出的文本内容')
+    return
+  }
+
+  const success = exportSingleText(props.filePath, fullText.value.text)
+  if (success) {
+    ElMessage.success('导出成功')
+  }
 }
 
 async function handleDelete() {
@@ -153,6 +216,24 @@ async function handleDelete() {
 
 .error-text {
   color: var(--el-color-danger);
+}
+
+.text-preview.loading,
+.text-preview.empty {
+  color: var(--el-text-color-placeholder);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+}
+
+.text-preview.loading .el-icon {
+  margin-right: 8px;
+}
+
+.preview-toggle {
+  margin-top: 8px;
+  text-align: center;
 }
 
 .detail-actions {
