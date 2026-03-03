@@ -36,6 +36,37 @@ async def startup_event():
     os.makedirs(settings.STORAGE_DIR, exist_ok=True)
     logger.info(f"Storage directory created at: {settings.STORAGE_DIR}")
 
+    import subprocess
+
+    logger.info("=" * 50)
+    logger.info("执行启动健康检查...")
+
+    try:
+        subprocess.run(["ffprobe", "-version"], capture_output=True, check=True)
+        logger.info("✓ ffprobe 检查通过")
+    except Exception as e:
+        logger.error(f"✗ ffprobe 未安装或不可用: {e}")
+        logger.error("  请安装 ffmpeg: https://ffmpeg.org/download.html")
+
+    try:
+        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
+        logger.info("✓ ffmpeg 检查通过")
+    except Exception as e:
+        logger.error(f"✗ ffmpeg 未安装或不可用: {e}")
+        logger.error("  请安装 ffmpeg: https://ffmpeg.org/download.html")
+
+    if settings.SILICONFLOW_API_KEY:
+        logger.info("✓ SILICONFLOW_API_KEY 已配置")
+    else:
+        logger.warning("⚠ SILICONFLOW_API_KEY 未配置，音频转录功能可能不可用")
+
+    if settings.MINERU_API_KEY:
+        logger.info("✓ MINERU_API_KEY 已配置")
+    else:
+        logger.warning("⚠ MINERU_API_KEY 未配置，文档解析功能可能不可用")
+
+    logger.info("=" * 50)
+
 
 if __name__ == "__main__":
     import uvicorn
