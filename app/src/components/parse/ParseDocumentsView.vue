@@ -46,7 +46,7 @@
           <div class="document-path" :title="filePath">{{ filePath }}</div>
         </div>
         <div class="card-footer">
-          <span class="file-type">{{ data.type || '未知' }}</span>
+          <span class="file-type">{{ getFileTypeLabel(data.fileType || data.type) }}</span>
           <span v-if="data.duration" class="file-duration">
             {{ (data.duration / 1000).toFixed(1) }}s
           </span>
@@ -99,6 +99,16 @@ const filteredDocuments = computed(() => {
 
 function getFileName(filePath) {
   return filePath.split(/[\\/]/).pop() || filePath
+}
+
+function getFileTypeLabel(fileType) {
+  const labels = {
+    markdown: 'Markdown',
+    pdf: 'PDF',
+    audio: '音频',
+    video: '视频'
+  }
+  return labels[fileType] || fileType || '未知'
 }
 
 function formatSize(bytes) {

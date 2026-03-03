@@ -149,8 +149,8 @@ function handleAddToParse() {
   if (!data || data.type !== 'file') return
 
   const fileType = getFileType(data.name)
-  if (fileType !== 'markdown' && fileType !== 'pdf') {
-    ElMessage.warning('仅支持 Markdown 和 PDF 文件')
+  if (fileType !== 'markdown' && fileType !== 'pdf' && fileType !== 'audio') {
+    ElMessage.warning('仅支持 Markdown、PDF 和音频文件')
     return
   }
 
