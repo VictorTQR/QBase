@@ -1,4 +1,4 @@
-import { useAgentStore } from '@/stores/agent'
+import { useParseConfigStore } from '@/stores/parseConfig'
 import { audioApi } from '@/utils/backend'
 
 const POLL_INTERVAL = 3000
@@ -6,18 +6,12 @@ const MAX_POLL_ATTEMPTS = 600
 
 export class AudioTranscriber {
   static async transcribe(filePath) {
-    const agentStore = useAgentStore()
-    const siliconflowConfig = agentStore.llmConfig.siliconflow || {}
+    const parseConfigStore = useParseConfigStore()
+    const { asrModel } = parseConfigStore.audioConfig
     
     try {
-      const result = await audioApi.transcribeAudio(filePath, {
-        apiKey: siliconflowConfig.apiKey,
-        baseUrl: siliconflowConfig.baseUrl,
-        model: siliconflowConfig.asrModel
-      })
-      
+      const result = await audioApi.transcribeAudio(filePath, { model: asrModel })
       return await this._pollTask(result.task_id)
-      
     } catch (error) {
       console.error('音频转录失败:', error)
       throw error
