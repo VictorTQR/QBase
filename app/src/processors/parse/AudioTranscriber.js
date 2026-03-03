@@ -1,10 +1,50 @@
-// 音频转录器占位文件
-// 待实现：将音频转换为文本
+import { useAgentStore } from '@/stores/agent'
+import { audioApi } from '@/utils/backend'
+
+const POLL_INTERVAL = 3000
+const MAX_POLL_ATTEMPTS = 600
 
 export class AudioTranscriber {
-  static async transcribe(_filePath) {
-    // TODO: 实现音频转录逻辑
-    console.log('AudioTranscriber.transcribe 待实现')
-    return { segments: [], text: '' }
+  static async transcribe(filePath) {
+    const agentStore = useAgentStore()
+    const siliconflowConfig = agentStore.llmConfig.siliconflow || {}
+    
+    try {
+      const result = await audioApi.transcribeAudio(filePath, {
+        apiKey: siliconflowConfig.apiKey,
+        baseUrl: siliconflowConfig.baseUrl,
+        model: siliconflowConfig.asrModel
+      })
+      
+      return await this._pollTask(result.task_id)
+      
+    } catch (error) {
+      console.error('音频转录失败:', error)
+      throw error
+    }
+  }
+  
+  static async _pollTask(taskId) {
+    let attempts = 0
+    
+    while (attempts < MAX_POLL_ATTEMPTS) {
+      const task = await audioApi.getTaskStatus(taskId)
+      
+      if (task.status === 'completed') {
+        return {
+          text: task.transcription || '',
+          segments: []
+        }
+      }
+      
+      if (task.status === 'failed') {
+        throw new Error(task.error || '转录失败')
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
+      attempts++
+    }
+    
+    throw new Error('转录超时')
   }
 }
