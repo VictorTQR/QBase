@@ -82,6 +82,7 @@ export const useParseStore = defineStore(
       await repository.update(filePath, {
         status: 'parsing',
         startedAt: Date.now(),
+        error: null,
       })
       activeTask.value = filePath
       await loadIndex()
@@ -93,6 +94,7 @@ export const useParseStore = defineStore(
         completedAt: Date.now(),
         duration: result.duration || 0,
         size: result.size || 0,
+        error: null,
       })
       activeTask.value = null
       const queueIndex = queue.value.indexOf(filePath)
@@ -163,6 +165,7 @@ export const useParseStore = defineStore(
           status: 'parsing',
           fileType,
           startedAt: Date.now(),
+          error: null,
         })
         await loadIndex()
 
@@ -181,6 +184,7 @@ export const useParseStore = defineStore(
           extractedBy: result.extractedBy,
           wordCount: result.wordCount,
           pageCount: result.pageCount,
+          error: null,
         })
 
         await loadIndex()
