@@ -35,6 +35,19 @@
 正在索引: document.md (3/10)  [████████░░░░] 30%
 ```
 
+### WebSocket 实时更新
+
+解析管理页面通过 WebSocket 实时接收任务状态更新：
+
+- **自动连接**: 页面加载时自动连接到后端 WebSocket
+- **实时同步**: MinerU 和音频任务状态变更立即反映
+- **无需刷新**: 任务列表和统计数据自动更新
+- **多标签同步**: 多个标签页打开时自动保持同步
+
+**WebSocket 端点**:
+- `ws://localhost:8000/ws/tasks/mineru` - MinerU 任务更新
+- `ws://localhost:8000/ws/tasks/audio` - 音频任务更新
+
 ### 三大功能模块
 
 #### 1. 队列管理
@@ -197,7 +210,8 @@ app/src/
 - [实施报告](../implementation/2026-03-02-parse-management-refactor.md)
 - [实施计划](../plans/2026-03-02-parse-management-refactor.md)
 - [导出和预览功能实施计划](../plans/2026-03-02-export-preview-features.md)
-- [向量索引集成实施报告](../implementation/2026-03-03-vector-index-integration.md)
+    - [向量索引集成实施报告](../implementation/2026-03-03-vector-index-integration.md)
 - [向量搜索前端实施报告](../implementation/2026-03-03-vector-search-frontend.md)
 - [向量搜索功能设计](../plans/2026-03-03-vector-search-lancedb-backend.md)
+- [WebSocket实时更新实施报告](../implementation/2026-03-03-websocket-realtime-updates.md)
 - [旧版设计文档](../plans/2026-02-27-parse-manager-design.md)

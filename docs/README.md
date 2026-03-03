@@ -48,6 +48,7 @@
 - [SQLite 解析存储报告](./implementation/2026-03-03-sqlite-parse-storage.md) - SQLite 解析结果存储与文件去重
 - [向量搜索前端报告](./implementation/2026-03-03-vector-search-frontend.md) - 向量搜索前端实现（API 客户端、Store、搜索面板增强）
 - [解析功能修复报告](./implementation/2026-03-03-parse-features-bugfixes.md) - 解析功能 Bug 修复与增强（计数错误、错误处理、音频基础设施、右键菜单等）
+- [WebSocket实时更新报告](./implementation/2026-03-03-websocket-realtime-updates.md) - WebSocket 实时更新功能实现（后端管理器、前端客户端、任务状态广播）
 
 ### 问题记录
 Bug 修复记录和问题追踪。

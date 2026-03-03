@@ -515,6 +515,7 @@
 | 解析管理向量索引 | ✅ | 单个/批量索引功能 |
 | 向量统计面板 | ✅ | 向量分块数、已索引文档数 |
 | 索引进度展示 | ✅ | 实时进度条和状态提示 |
+| WebSocket实时更新 | ✅ | 任务状态实时推送，无需轮询 |
 
 ### 已完成部分
 
@@ -543,6 +544,13 @@
 - `ParseManagement` 索引进度展示
 - 批量索引和状态管理
 
+**WebSocket 实时更新 (2026-03-03)**:
+- 后端 `WebSocketManager` 连接管理
+- 后端 WebSocket API 端点 `/ws/tasks/{task_type}`
+- MinerU 和音频任务管理器集成广播
+- 前端 `WebSocketClient` 客户端
+- ParseManagement 自动连接和状态更新
+
 ### 技术亮点
 
 - **混合搜索**: 全文搜索 + 向量搜索 + 混合搜索
@@ -556,6 +564,7 @@
 - [向量搜索功能设计](./plans/2026-03-03-vector-search-lancedb-backend.md)
 - [向量搜索前端实施报告](./implementation/2026-03-03-vector-search-frontend.md)
 - [向量索引集成实施报告](./implementation/2026-03-03-vector-index-integration.md)
+- [WebSocket实时更新实施报告](./implementation/2026-03-03-websocket-realtime-updates.md)
 - [解析管理功能文档](./features/parse-management.md)
 
 ---
