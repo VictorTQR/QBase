@@ -14,7 +14,7 @@
 </template>
 
 <script setup>
-import { Document, List, TrendCharts } from '@element-plus/icons-vue'
+import { Document, List, TrendCharts, Microphone } from '@element-plus/icons-vue'
 
 defineProps({
   modelValue: {
@@ -28,6 +28,7 @@ defineEmits(['update:modelValue'])
 const navItems = [
   { key: 'queue', label: '队列管理', icon: Document },
   { key: 'documents', label: '已解析文档', icon: List },
+  { key: 'audio', label: '音频解析', icon: Microphone },
   { key: 'stats', label: '解析统计', icon: TrendCharts },
 ]
 </script>
