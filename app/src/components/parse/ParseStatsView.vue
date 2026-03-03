@@ -19,7 +19,7 @@
           <el-icon><CircleCheck /></el-icon>
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ stats.completed }}</div>
+          <div class="stat-value">{{ stats.done }}</div>
           <div class="stat-label">已完成</div>
         </div>
       </div>
@@ -51,10 +51,20 @@
           </div>
         </template>
         <div class="quick-actions">
-          <el-button type="primary" :loading="isParsing" @click="handleParseAll">
+          <el-button
+            type="primary"
+            :disabled="stats.pending === 0 || isBatchParsing"
+            :loading="isBatchParsing"
+            @click="handleBatchParse"
+          >
             批量解析待处理文件
           </el-button>
-          <el-button type="warning" :disabled="stats.failed === 0 || isParsing" @click="handleRetryFailed">
+          <el-button
+            type="warning"
+            :disabled="stats.failed === 0 || isRetrying"
+            :loading="isRetrying"
+            @click="handleRetryFailed"
+          >
             重试失败文件
           </el-button>
         </div>
@@ -94,21 +104,22 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { ElMessage } from 'element-plus'
 import { Document, CircleCheck, Clock, CircleClose } from '@element-plus/icons-vue'
 import { useParseStore } from '@/stores/parse'
+import { ElMessage } from 'element-plus'
 
 const parseStore = useParseStore()
-const isParsing = ref(false)
+const isBatchParsing = ref(false)
+const isRetrying = ref(false)
 
 const stats = computed(() => parseStore.stats)
 
 const distributionData = computed(() => {
   const total = stats.value.total || 0
   const items = [
-    { status: 'completed', label: '已完成', count: stats.value.completed },
+    { status: 'done', label: '已完成', count: stats.value.done },
     { status: 'pending', label: '待解析', count: stats.value.pending },
-    { status: 'parsing', label: '解析中', count: stats.value.parsing },
+    { status: 'running', label: '解析中', count: stats.value.running },
     { status: 'failed', label: '失败', count: stats.value.failed },
   ]
   return items.map(item => ({
@@ -117,31 +128,38 @@ const distributionData = computed(() => {
   }))
 })
 
-async function handleParseAll() {
-  const pending = Object.entries(parseStore.parseIndex)
-    .filter(([, data]) => data.status === 'pending')
-    .map(([filePath, data]) => ({ filePath, fileType: data.type || data.fileType }))
-
-  if (pending.length === 0) {
-    ElMessage.info('没有待解析的文件')
+const handleBatchParse = async () => {
+  if (stats.value.pending === 0) {
+    ElMessage.warning('没有待解析的文件')
     return
   }
 
-  isParsing.value = true
   try {
-    ElMessage.info(`开始解析 ${pending.length} 个文件...`)
-    await parseStore.startParseBatch(pending)
-    ElMessage.success('批量解析完成')
-  } catch (error) {
-    ElMessage.error(`批量解析失败: ${error.message}`)
+    isBatchParsing.value = true
+    const response = await parseStore.batchParsePending()
+    ElMessage.success(response.message)
+  } catch (err) {
+    ElMessage.error(err.message || '批量解析失败')
   } finally {
-    isParsing.value = false
+    isBatchParsing.value = false
   }
 }
 
-function handleRetryFailed() {
-  parseStore.retryFailed()
-  ElMessage.info('已开始重试失败任务')
+const handleRetryFailed = async () => {
+  if (stats.value.failed === 0) {
+    ElMessage.warning('没有失败的文件')
+    return
+  }
+
+  try {
+    isRetrying.value = true
+    const response = await parseStore.retryFailedTasks()
+    ElMessage.success(response.message)
+  } catch (err) {
+    ElMessage.error(err.message || '重试失败')
+  } finally {
+    isRetrying.value = false
+  }
 }
 </script>
 
@@ -268,7 +286,7 @@ function handleRetryFailed() {
   transition: width 0.3s;
 }
 
-.distribution-segment.completed {
+.distribution-segment.done {
   background: var(--el-color-success);
 }
 
@@ -276,7 +294,7 @@ function handleRetryFailed() {
   background: var(--el-color-warning);
 }
 
-.distribution-segment.parsing {
+.distribution-segment.running {
   background: var(--el-color-primary);
 }
 
@@ -302,7 +320,7 @@ function handleRetryFailed() {
   border-radius: 50%;
 }
 
-.legend-dot.completed {
+.legend-dot.done {
   background: var(--el-color-success);
 }
 
@@ -310,7 +328,7 @@ function handleRetryFailed() {
   background: var(--el-color-warning);
 }
 
-.legend-dot.parsing {
+.legend-dot.running {
   background: var(--el-color-primary);
 }
 

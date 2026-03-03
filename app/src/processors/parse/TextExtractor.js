@@ -1,134 +1,76 @@
-import { RemoteBackendStrategy } from './RemoteBackendStrategy'
-import { AudioTranscriber } from './AudioTranscriber'
+import { ParseBackendApi } from '@/api/parseBackend'
 
 export class TextExtractor {
-  static strategy = new RemoteBackendStrategy()
-  
-  static setStrategy(strategy) {
-    this.strategy = strategy
-  }
-
-  static async extract(filePath, fileType, config = {}) {
-    switch (fileType) {
-      case 'markdown':
-        return await this.extractMarkdown(filePath)
-      case 'pdf':
-        return await this.extractPdf(filePath, config)
-      case 'audio':
-        return await this.extractAudio(filePath)
-      default:
-        throw new Error(`不支持的文件类型: ${fileType}`)
-    }
-  }
-
-  static async extractMarkdown(filePath) {
+  static async extract(filePath) {
     try {
-      const result = await window.electronAPI.readMarkdown(filePath)
+      const duplicateCheck = await ParseBackendApi.checkDuplicate({ file_path: filePath })
+
+      if (duplicateCheck.is_duplicate && duplicateCheck.existing_task) {
+        const task = duplicateCheck.existing_task
+        if (task.markdown_content) {
+          return {
+            success: true,
+            markdown: task.markdown_content,
+            taskId: task.id,
+            isCached: true
+          }
+        } else {
+          const result = await ParseBackendApi.getTaskResult(task.id)
+          return {
+            success: true,
+            markdown: result.markdown_content,
+            taskId: task.id,
+            isCached: true
+          }
+        }
+      }
+
+      const task = await ParseBackendApi.parseLocalFile(filePath)
+
+      if (task.is_duplicate) {
+        if (task.markdown_content) {
+          return {
+            success: true,
+            markdown: task.markdown_content,
+            taskId: task.id,
+            isCached: true
+          }
+        }
+      }
+
+      const pollResult = await TextExtractor.pollTaskUntilDone(task.id)
+      if (pollResult.success) {
+        const result = await ParseBackendApi.getTaskResult(task.id)
+        return {
+          success: true,
+          markdown: result.markdown_content,
+          taskId: task.id
+        }
+      } else {
+        return {
+          success: false,
+          error: pollResult.error
+        }
+      }
+    } catch (error) {
+      console.error('文本提取失败:', error)
       return {
-        text: result.content || '',
-        fileType: 'markdown',
-        extractedBy: 'local',
-        extractedAt: new Date(),
-        wordCount: (result.content || '').split(/\s+/).filter(Boolean).length,
+        success: false,
+        error: error.message
       }
-    } catch (error) {
-      console.error('Markdown 提取失败:', error)
-      throw new Error(`Markdown 提取失败: ${error.message}`)
     }
   }
 
-  static async extractPdf(filePath, config = {}) {
-    try {
-      return await this.strategy.extractPdf(filePath, config)
-    } catch (error) {
-      console.error('PDF 提取失败:', error)
-      throw this.enhanceError(error, 'pdf')
-    }
-  }
-
-  static async extractAudio(filePath) {
-    try {
-      const startTime = Date.now()
-      const result = await AudioTranscriber.transcribe(filePath)
-      const duration = Date.now() - startTime
-      
-      return {
-        text: result.text,
-        fileType: 'audio',
-        extractedBy: 'siliconflow-asr',
-        extractedAt: new Date(),
-        wordCount: result.text.split(/\s+/).filter(Boolean).length,
-        duration,
+  static async pollTaskUntilDone(taskId, interval = 3000, maxAttempts = 600) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const task = await ParseBackendApi.getTask(taskId)
+      if (task.state === 'done') {
+        return { success: true, task }
+      } else if (task.state === 'failed') {
+        return { success: false, error: task.error_msg, task }
       }
-    } catch (error) {
-      console.error('音频转录失败:', error)
-      throw this.enhanceError(error, 'audio')
+      await new Promise(resolve => setTimeout(resolve, interval))
     }
-  }
-
-  static enhanceError(error, fileType = 'pdf') {
-    let errorMessage = error.message
-    let suggestion = ''
-
-    if (fileType === 'pdf') {
-      if (
-        errorMessage.includes('A0202') ||
-        errorMessage.includes('A0211') ||
-        errorMessage.includes('API Key') ||
-        errorMessage.includes('API key')
-      ) {
-        errorMessage = 'MinerU API Key 无效或已过期'
-        suggestion = '请检查后端 .env 配置中的 MINERU_API_KEY'
-      } else if (
-        errorMessage.includes('ECONNREFUSED') ||
-        errorMessage.includes('network') ||
-        errorMessage.includes('ENOTFOUND') ||
-        errorMessage.includes('连接')
-      ) {
-        errorMessage = '无法连接到后端服务'
-        suggestion = '请确保后端服务已启动 (cd backend && uv run python -m uvicorn main:app --reload)'
-      } else if (errorMessage.includes('Timeout') || errorMessage.includes('超时')) {
-        errorMessage = '解析超时'
-        suggestion = '请稍后重试，或尝试拆分较大的 PDF 文件'
-      } else if (
-        errorMessage.includes('format') ||
-        errorMessage.includes('损坏') ||
-        errorMessage.includes('corrupted')
-      ) {
-        errorMessage = 'PDF 文件格式不支持或已损坏'
-        suggestion = '请尝试使用其他 PDF 文件，或修复当前文件'
-      }
-    } else if (fileType === 'audio') {
-      if (
-        errorMessage.includes('A0202') ||
-        errorMessage.includes('A0211') ||
-        errorMessage.includes('API Key') ||
-        errorMessage.includes('API key')
-      ) {
-        errorMessage = '硅基流动 API Key 无效或已过期'
-        suggestion = '请检查配置中的硅基流动 API Key'
-      } else if (
-        errorMessage.includes('ECONNREFUSED') ||
-        errorMessage.includes('network') ||
-        errorMessage.includes('ENOTFOUND') ||
-        errorMessage.includes('连接')
-      ) {
-        errorMessage = '无法连接到后端服务'
-        suggestion = '请确保后端服务已启动 (cd backend && uv run python -m uvicorn main:app --reload)'
-      } else if (errorMessage.includes('Timeout') || errorMessage.includes('超时')) {
-        errorMessage = '转录超时'
-        suggestion = '请稍后重试，或尝试拆分较大的音频文件'
-      } else if (
-        errorMessage.includes('format') ||
-        errorMessage.includes('损坏') ||
-        errorMessage.includes('corrupted')
-      ) {
-        errorMessage = '音频文件格式不支持或已损坏'
-        suggestion = '请尝试使用其他音频文件'
-      }
-    }
-
-    const fullMessage = suggestion ? `${errorMessage}。${suggestion}` : errorMessage
-    return new Error(fullMessage)
+    return { success: false, error: '超时' }
   }
 }

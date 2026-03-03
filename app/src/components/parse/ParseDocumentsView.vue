@@ -12,54 +12,47 @@
         />
         <el-select v-model="statusFilter" placeholder="状态筛选" clearable style="width: 120px">
           <el-option label="全部" value="" />
-          <el-option label="已完成" value="completed" />
-          <el-option label="解析中" value="parsing" />
+          <el-option label="已完成" value="done" />
+          <el-option label="解析中" value="running" />
           <el-option label="待解析" value="pending" />
           <el-option label="失败" value="failed" />
         </el-select>
       </div>
     </div>
 
-    <div v-if="Object.keys(filteredDocuments).length === 0" class="empty-state">
+    <div v-if="filteredTasks.length === 0" class="empty-state">
       <el-empty description="暂无解析文档" />
     </div>
     <div v-else class="document-grid">
       <div
-        v-for="(data, filePath) in filteredDocuments"
-        :key="filePath"
+        v-for="task in filteredTasks"
+        :key="task.id"
         class="document-card"
-        @click="handleSelectDocument(filePath)"
+        @click="handleSelectTask(task)"
       >
         <div class="card-header">
-          <el-icon class="status-icon" :class="data.status">
-            <CircleCheck v-if="data.status === 'completed'" />
-            <Loading v-else-if="data.status === 'parsing'" class="spinning" />
-            <Clock v-else-if="data.status === 'pending'" />
+          <el-icon class="status-icon" :class="task.state">
+            <CircleCheck v-if="task.state === 'done'" />
+            <Loading v-else-if="task.state === 'running'" class="spinning" />
+            <Clock v-else-if="task.state === 'pending'" />
             <CircleClose v-else />
           </el-icon>
-          <el-tag :type="parseStore.getStatusType(data.status)" size="small">
-            {{ parseStore.getStatusLabel(data.status) }}
+          <el-tag :type="parseStore.getStateType(task.state)" size="small">
+            {{ parseStore.getStateLabel(task.state) }}
           </el-tag>
         </div>
         <div class="card-body">
-          <div class="document-title">{{ getFileName(filePath) }}</div>
-          <div class="document-path" :title="filePath">{{ filePath }}</div>
+          <div class="document-title">{{ task.file_name }}</div>
+          <div class="document-path" :title="task.file_path">{{ task.file_path || '未知路径' }}</div>
         </div>
         <div class="card-footer">
-          <span class="file-type">{{ getFileTypeLabel(data.fileType || data.type) }}</span>
-          <span v-if="data.duration" class="file-duration">
-            {{ (data.duration / 1000).toFixed(1) }}s
-          </span>
-          <span v-if="data.size" class="file-size">{{ formatSize(data.size) }}</span>
+          <span class="file-hash" v-if="task.file_hash">{{ task.file_hash.substring(0, 16) }}...</span>
+          <span class="parser-type">{{ task.parser_type || 'mineru' }}</span>
         </div>
       </div>
     </div>
 
-    <ParseDetailsDrawer
-      v-model:visible="detailsVisible"
-      :file-path="selectedFilePath"
-      @close="detailsVisible = false"
-    />
+    <ParseDetailsDrawer v-model:visible="drawerVisible" :task="selectedTask" />
   </div>
 </template>
 
@@ -72,54 +65,30 @@ import ParseDetailsDrawer from './ParseDetailsDrawer.vue'
 const parseStore = useParseStore()
 const searchText = ref('')
 const statusFilter = ref('')
-const detailsVisible = ref(false)
-const selectedFilePath = ref(null)
+const drawerVisible = ref(false)
+const selectedTask = ref(null)
 
-const filteredDocuments = computed(() => {
-  const index = parseStore.parseIndex
-  let result = { ...index }
+const filteredTasks = computed(() => {
+  let result = [...parseStore.tasks]
 
   if (statusFilter.value) {
-    result = Object.fromEntries(
-      Object.entries(result).filter(([, data]) => data.status === statusFilter.value)
-    )
+    result = result.filter(task => task.state === statusFilter.value)
   }
 
   if (searchText.value) {
     const search = searchText.value.toLowerCase()
-    result = Object.fromEntries(
-      Object.entries(result).filter(([filePath]) =>
-        filePath.toLowerCase().includes(search)
-      )
+    result = result.filter(task =>
+      (task.file_name && task.file_name.toLowerCase().includes(search)) ||
+      (task.file_path && task.file_path.toLowerCase().includes(search))
     )
   }
 
   return result
 })
 
-function getFileName(filePath) {
-  return filePath.split(/[\\/]/).pop() || filePath
-}
-
-function getFileTypeLabel(fileType) {
-  const labels = {
-    markdown: 'Markdown',
-    pdf: 'PDF',
-    audio: '音频',
-    video: '视频'
-  }
-  return labels[fileType] || fileType || '未知'
-}
-
-function formatSize(bytes) {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-}
-
-function handleSelectDocument(filePath) {
-  selectedFilePath.value = filePath
-  detailsVisible.value = true
+function handleSelectTask(task) {
+  selectedTask.value = task
+  drawerVisible.value = true
 }
 </script>
 
@@ -186,11 +155,11 @@ function handleSelectDocument(filePath) {
   font-size: 20px;
 }
 
-.status-icon.completed {
+.status-icon.done {
   color: var(--el-color-success);
 }
 
-.status-icon.parsing {
+.status-icon.running {
   color: var(--el-color-primary);
 }
 

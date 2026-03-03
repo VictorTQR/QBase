@@ -6,14 +6,19 @@
       </el-button>
       <div class="header-title">解析管理</div>
       <div class="header-actions">
-        <el-button size="small" :loading="isParsing" @click="handleParseAll">
-          开始全部解析
-        </el-button>
-        <el-button size="small" @click="handleExportAll" :disabled="stats.completed === 0" :loading="exportingAll">
-          导出全部
+        <el-button size="small" :loading="parseStore.isLoading" @click="handleRefresh">
+          <el-icon><Refresh /></el-icon>
+          刷新
         </el-button>
       </div>
     </header>
+
+    <div v-if="parseStore.error" class="error-banner">
+      <el-alert type="error" :closable="true" @close="parseStore.clearError">
+        {{ parseStore.error }}
+      </el-alert>
+    </div>
+
     <div class="page-content">
       <ParseSidebar v-model="activeTab" />
       <div class="content-panel">
@@ -24,12 +29,10 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { ArrowLeft, Download } from '@element-plus/icons-vue'
+import { ArrowLeft, Refresh } from '@element-plus/icons-vue'
 import { useParseStore } from '@/stores/parse'
-import { exportAllTexts } from '@/utils/export'
 import ParseSidebar from '@/components/Layout/ParseSidebar.vue'
 import ParseQueueView from '@/components/parse/ParseQueueView.vue'
 import ParseDocumentsView from '@/components/parse/ParseDocumentsView.vue'
@@ -38,10 +41,6 @@ import ParseStatsView from '@/components/parse/ParseStatsView.vue'
 const router = useRouter()
 const parseStore = useParseStore()
 const activeTab = ref('queue')
-const isParsing = ref(false)
-const exportingAll = ref(false)
-
-const stats = computed(() => parseStore.stats)
 
 const componentMap = {
   queue: ParseQueueView,
@@ -51,50 +50,18 @@ const componentMap = {
 
 const currentComponent = computed(() => componentMap[activeTab.value] || ParseQueueView)
 
+onMounted(async () => {
+  await parseStore.fetchTasks()
+  await parseStore.fetchStats()
+})
+
 function handleBack() {
   router.push('/')
 }
 
-async function handleParseAll() {
-  const pending = Object.entries(parseStore.parseIndex)
-    .filter(([, data]) => data.status === 'pending')
-    .map(([filePath, data]) => ({ filePath, fileType: data.fileType || data.type }))
-
-  if (pending.length === 0) {
-    ElMessage.info('没有待解析的文件')
-    return
-  }
-
-  isParsing.value = true
-  try {
-    ElMessage.info(`开始解析 ${pending.length} 个文件...`)
-    await parseStore.startParseBatch(pending)
-    ElMessage.success('批量解析完成')
-  } catch (error) {
-    ElMessage.error(`批量解析失败: ${error.message}`)
-  } finally {
-    isParsing.value = false
-  }
-}
-
-async function handleExportAll() {
-  const completed = parseStore.getCompletedFiles()
-  if (completed.length === 0) {
-    ElMessage.info('没有已完成解析的文件')
-    return
-  }
-
-  exportingAll.value = true
-  try {
-    ElMessage.info('正在准备导出文件...')
-    const allTexts = await parseStore.getAllCompletedTexts()
-    await exportAllTexts(allTexts)
-  } catch (error) {
-    console.error('导出全部失败:', error)
-    ElMessage.error('导出失败: ' + (error.message || '未知错误'))
-  } finally {
-    exportingAll.value = false
-  }
+async function handleRefresh() {
+  await parseStore.fetchTasks()
+  await parseStore.fetchStats()
 }
 </script>
 
@@ -124,6 +91,10 @@ async function handleExportAll() {
 .header-actions {
   display: flex;
   gap: 8px;
+}
+
+.error-banner {
+  padding: 8px 16px;
 }
 
 .page-content {
