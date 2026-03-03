@@ -15,6 +15,7 @@
 | v0.7 | ✅ 已完成 | 文档解析管理与文本提取 | 2026-02-27 |
 | v0.8 | ✅ 已完成 | 应用设置页面与 PDF 解析策略 | 2026-03-02 |
 | v0.9 | ✅ 已完成 | 解析管理 UI 重构与增强 | 2026-03-02 |
+| v1.0 | ✅ 已完成 | 音频转录功能 | 2026-03-02 |
 
 ---
 
@@ -283,7 +284,7 @@
 | 混合存储方案 | ✅ | LocalStorage + IndexedDB (Dexie.js) |
 | Repository 抽象 | ✅ | 数据访问层封装 |
 | 文本提取 | ✅ | Markdown + PDF 本地提取，混合策略 |
-| 音频转录 | 📋 | 待实现（占位文件已创建） |
+| 音频转录 | ✅ | 基于硅基流动 API 的音频转录 |
 | 向量化表示 | 📋 | 待实现（占位文件已创建） |
 
 ### 已完成部分
@@ -440,6 +441,57 @@
 - [功能文档](./features/parse-management.md) (已更新)
 - [实施报告](./implementation/2026-03-02-parse-management-refactor.md)
 - [实施计划](./plans/2026-03-02-parse-management-refactor.md)
+
+---
+
+## v1.0 - 音频转录功能 ✅
+
+**状态**: 已完成
+**发布日期**: 2026-03-02
+
+### 功能列表
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| 后端音频 API | ✅ | FastAPI `/api/audio/*` 路由 |
+| ASR 提供商抽象 | ✅ | 插件化架构，支持更换 ASR 提供商 |
+| 硅基流动 ASR | ✅ | FunAudioLLM/SenseVoiceSmall 模型 |
+| 音频分块处理 | ✅ | ffmpeg 分块，支持大文件 |
+| 任务状态管理 | ✅ | 实时任务状态追踪 |
+| 前端 AudioApi | ✅ | 基于 hook-fetch 的 API 封装 |
+| AudioTranscriber | ✅ | 完整的音频转录实现 |
+| 解析流程集成 | ✅ | TextExtractor 支持 audio 类型 |
+| 错误处理增强 | ✅ | 区分 PDF 和音频的错误提示 |
+
+### 已完成部分
+
+**后端架构 (2026-03-02)**:
+- `ASRProvider` 抽象基类设计
+- `SiliconFlowASRProvider` 实现
+- `AudioChunker` 使用 ffmpeg 分块
+- `FileProcessor` 抽象层
+- `AudioProcessor` 后台任务处理
+- `AudioTaskManager` 单例任务管理
+- FastAPI 路由 `/api/audio/*`
+
+**前端集成 (2026-03-02)**:
+- `AudioApi` 类封装后端 API
+- `AudioTranscriber` 实现轮询机制
+- `TextExtractor` 添加 `extractAudio()` 方法
+- `enhanceError()` 支持 `fileType` 参数
+- 复用现有解析管理 UI
+
+### 技术亮点
+
+- **插件化架构**: 易于添加新的 ASR 提供商
+- **大文件支持**: 默认 50 分钟分块，可配置
+- **后台处理**: 不阻塞主线程，实时状态更新
+- **架构一致**: 与 PDF 解析采用相同的 hook-fetch 调用方式
+
+### 相关文档
+
+- [实施计划](./plans/2026-03-02-audio-transcription.md)
+- [实施报告](./implementation/2026-03-02-audio-transcription.md)
 
 ---
 
