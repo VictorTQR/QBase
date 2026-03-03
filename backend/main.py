@@ -36,6 +36,12 @@ async def startup_event():
     os.makedirs(settings.STORAGE_DIR, exist_ok=True)
     logger.info(f"Storage directory created at: {settings.STORAGE_DIR}")
 
+    # 初始化数据库
+    from database import init_db
+
+    await init_db()
+    logger.info("Database initialized")
+
     import subprocess
 
     logger.info("=" * 50)
