@@ -21,6 +21,7 @@ from models.schemas import (
     DuplicateCheckResponse,
     TaskListResponse,
     StatsResponse,
+    OperationResponse,
 )
 from utils.zip_handler import extract_markdown_from_zip
 from database import get_db
@@ -257,3 +258,55 @@ async def download_zip(task_id: str):
             "Content-Disposition": f"attachment; filename={task['file_name']}.{file_format}"
         },
     )
+
+
+@router.delete("/tasks/clear-completed", response_model=OperationResponse)
+async def clear_completed_tasks():
+    """清除已完成的任务"""
+    try:
+        count = await task_manager.clear_completed()
+        return OperationResponse(
+            success=True, count=count, message=f"已清除 {count} 个已完成任务"
+        )
+    except Exception as e:
+        logger.error(f"清除已完成任务失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/tasks/clear-all", response_model=OperationResponse)
+async def clear_all_tasks():
+    """清空所有任务"""
+    try:
+        count = await task_manager.clear_all()
+        return OperationResponse(
+            success=True, count=count, message=f"已清空 {count} 个任务"
+        )
+    except Exception as e:
+        logger.error(f"清空任务失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tasks/batch-parse-pending", response_model=OperationResponse)
+async def batch_parse_pending(background_tasks: BackgroundTasks):
+    """批量解析待处理文件"""
+    try:
+        count = await task_manager.batch_parse_pending(background_tasks)
+        return OperationResponse(
+            success=True, count=count, message=f"已启动 {count} 个待解析任务"
+        )
+    except Exception as e:
+        logger.error(f"批量解析失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tasks/retry-failed", response_model=OperationResponse)
+async def retry_failed_tasks(background_tasks: BackgroundTasks):
+    """重试失败的任务"""
+    try:
+        count = await task_manager.retry_failed(background_tasks)
+        return OperationResponse(
+            success=True, count=count, message=f"已重试 {count} 个失败任务"
+        )
+    except Exception as e:
+        logger.error(f"重试失败任务失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

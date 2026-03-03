@@ -121,6 +121,61 @@ class TaskManager:
         finally:
             await session.close()
 
+    async def clear_completed(self) -> int:
+        """清除已完成的任务"""
+        repo, session = await self._get_repo()
+        try:
+            return await repo.delete_by_states(["done"])
+        finally:
+            await session.close()
+
+    async def clear_all(self) -> int:
+        """清空所有任务"""
+        repo, session = await self._get_repo()
+        try:
+            return await repo.delete_all()
+        finally:
+            await session.close()
+
+    async def batch_parse_pending(self, background_tasks) -> int:
+        """批量解析待处理文件"""
+        repo, session = await self._get_repo()
+        try:
+            pending_tasks = await repo.list_by_state("pending", limit=100)
+            count = 0
+            for task in pending_tasks:
+                task_dict = self._task_to_dict(task)
+                background_tasks.add_task(self.poll_task_status, task_dict["id"])
+                count += 1
+            logger.info(f"批量启动了 {count} 个待解析任务")
+            return count
+        finally:
+            await session.close()
+
+    async def retry_failed(self, background_tasks) -> int:
+        """重试失败的任务"""
+        repo, session = await self._get_repo()
+        try:
+            failed_tasks = await repo.list_by_state("failed", limit=100)
+            count = 0
+            for task in failed_tasks:
+                # 重置任务状态为 pending
+                await repo.update(
+                    task.id,
+                    {
+                        "state": "pending",
+                        "error_msg": None,
+                        "updated_at": datetime.now().isoformat(),
+                    },
+                )
+                task_dict = self._task_to_dict(task)
+                background_tasks.add_task(self.poll_task_status, task_dict["id"])
+                count += 1
+            logger.info(f"重试了 {count} 个失败任务")
+            return count
+        finally:
+            await session.close()
+
     def _task_to_dict(self, task) -> Dict[str, Any]:
         """将数据库模型转换为字典"""
         return {
