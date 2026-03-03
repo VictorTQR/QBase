@@ -46,6 +46,7 @@
 - [解析配置统一报告](./implementation/2026-03-03-parse-config-unification.md) - 解析配置统一重构（后端环境变量管理）
 - [音频 API 统一报告](./implementation/2026-03-03-audio-api-unification.md) - 音频 API 统一重构（文件上传/本地路径/结果端点）
 - [SQLite 解析存储报告](./implementation/2026-03-03-sqlite-parse-storage.md) - SQLite 解析结果存储与文件去重
+- [向量搜索前端报告](./implementation/2026-03-03-vector-search-frontend.md) - 向量搜索前端实现（API 客户端、Store、搜索面板增强）
 
 ### 问题记录
 Bug 修复记录和问题追踪。
