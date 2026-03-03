@@ -30,6 +30,14 @@
           </el-select>
         </div>
 
+        <div class="search-mode">
+          <el-radio-group v-model="searchMode" size="small" @change="handleModeChange">
+            <el-radio-button value="fulltext">全文</el-radio-button>
+            <el-radio-button value="vector">向量</el-radio-button>
+            <el-radio-button value="hybrid">混合</el-radio-button>
+          </el-radio-group>
+        </div>
+
         <div class="search-results">
           <div v-if="searchStore.isSearching" class="search-loading">
             <el-icon class="is-loading"><Loading /></el-icon>
@@ -66,7 +74,11 @@
                   <el-tag v-if="result.matchType === 'name'" size="small" type="info"
                     >文件名</el-tag
                   >
-                  <el-tag v-else size="small" type="success">内容</el-tag>
+                  <el-tag v-else-if="result.matchType === 'content'" size="small" type="success">内容</el-tag>
+                  <el-tag v-else-if="result.matchType === 'vector'" size="small" type="warning">向量</el-tag>
+                  <el-tag v-if="result.score !== undefined" size="small" type="warning">
+                    {{ (result.score * 100).toFixed(0) }}%
+                  </el-tag>
                 </div>
                 <div v-if="result.snippet" class="result-snippet">
                   <span v-html="highlightText(result.snippet, searchStore.query)"></span>
@@ -112,6 +124,7 @@ const inputRef = ref(null)
 const panelRef = ref(null)
 const searchQuery = ref('')
 const searchScope = ref(searchStore.searchScope)
+const searchMode = ref(searchStore.searchMode || 'fulltext')
 
 const debouncedSearch = debounce(() => {
   searchStore.performSearch()
@@ -124,6 +137,13 @@ function handleInput() {
 
 function handleScopeChange(value) {
   searchStore.setSearchScope(value)
+  if (searchStore.query) {
+    searchStore.performSearch()
+  }
+}
+
+function handleModeChange() {
+  searchStore.setSearchMode(searchMode.value)
   if (searchStore.query) {
     searchStore.performSearch()
   }
@@ -167,6 +187,7 @@ watch(
       inputRef.value?.focus()
       searchQuery.value = searchStore.query
       searchScope.value = searchStore.searchScope
+      searchMode.value = searchStore.searchMode || 'fulltext'
     }
   },
 )
@@ -217,6 +238,13 @@ onUnmounted(() => {
   padding: 8px 16px;
   border-bottom: 1px solid var(--el-border-color-lighter);
   background: var(--el-fill-color-lighter);
+}
+
+.search-mode {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  display: flex;
+  justify-content: center;
 }
 
 .search-results {
