@@ -5,6 +5,24 @@
       <div class="header-actions">
         <el-button
           size="small"
+          :disabled="pendingTasks.length === 0 || isBatchParsing"
+          :loading="isBatchParsing"
+          @click="handleBatchParse"
+        >
+          批量解析
+        </el-button>
+        <el-button
+          size="small"
+          type="warning"
+          :disabled="failedTasks.length === 0 || isRetrying"
+          :loading="isRetrying"
+          @click="handleRetryFailed"
+        >
+          重试失败
+        </el-button>
+        <el-divider direction="vertical" />
+        <el-button
+          size="small"
           :disabled="doneTasks.length === 0 || isClearingCompleted"
           :loading="isClearingCompleted"
           @click="handleClearCompleted"
@@ -80,11 +98,47 @@ const parseStore = useParseStore()
 const activeQueueTab = ref('running')
 const isClearingCompleted = ref(false)
 const isClearingAll = ref(false)
+const isBatchParsing = ref(false)
+const isRetrying = ref(false)
 
 const pendingTasks = computed(() => parseStore.pendingTasks)
 const runningTasks = computed(() => parseStore.runningTasks)
 const failedTasks = computed(() => parseStore.failedTasks)
 const doneTasks = computed(() => parseStore.doneTasks)
+
+const handleBatchParse = async () => {
+  if (pendingTasks.value.length === 0) {
+    ElMessage.warning('没有待解析的文件')
+    return
+  }
+
+  try {
+    isBatchParsing.value = true
+    const response = await parseStore.batchParsePending()
+    ElMessage.success(response.message)
+  } catch (err) {
+    ElMessage.error(err.message || '批量解析失败')
+  } finally {
+    isBatchParsing.value = false
+  }
+}
+
+const handleRetryFailed = async () => {
+  if (failedTasks.value.length === 0) {
+    ElMessage.warning('没有失败的文件')
+    return
+  }
+
+  try {
+    isRetrying.value = true
+    const response = await parseStore.retryFailedTasks()
+    ElMessage.success(response.message)
+  } catch (err) {
+    ElMessage.error(err.message || '重试失败')
+  } finally {
+    isRetrying.value = false
+  }
+}
 
 const handleClearCompleted = async () => {
   if (doneTasks.value.length === 0) {
