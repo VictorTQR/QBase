@@ -15,9 +15,7 @@ class AudioTaskStatus(str, Enum):
 
 class AudioTranscriptionRequest(BaseModel):
     file_path: str = Field(..., description="音频文件路径")
-    model: Optional[str] = Field(None, description="ASR 模型名称")
-    api_key: Optional[str] = Field(None, description="硅基流动 API Key")
-    base_url: Optional[str] = Field(None, description="硅基流动 API Base URL")
+    model: Optional[str] = Field(None, description="ASR 模型名称（可选，覆盖默认模型）")
 
 
 class AudioChunkInfo(BaseModel):

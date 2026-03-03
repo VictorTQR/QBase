@@ -31,11 +31,7 @@ async def transcribe_audio(request: AudioTranscriptionRequest):
 
         result = await audio_processor.process(
             request.file_path,
-            config={
-                "api_key": request.api_key,
-                "base_url": request.base_url,
-                "model": request.model,
-            },
+            config={"model": request.model} if request.model else None,
         )
 
         return AudioTranscriptionResponse(**result)

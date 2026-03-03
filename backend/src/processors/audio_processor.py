@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from config import settings
 from processors.base import FileProcessor
 from audio.providers import ASRProvider, SiliconFlowASRProvider
 from audio.chunker import AudioChunker
@@ -96,9 +97,9 @@ class AudioProcessor(FileProcessor):
 
             # 2. 创建 ASR 提供商
             provider = SiliconFlowASRProvider(
-                api_key=config.get("api_key"),
-                base_url=config.get("base_url"),
-                model=config.get("model"),
+                api_key=settings.SILICONFLOW_API_KEY,
+                base_url=settings.SILICONFLOW_API_BASE_URL,
+                model=config.get("model") if config else None,
             )
 
             # 3. 逐块转录
