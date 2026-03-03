@@ -10,6 +10,7 @@ from mineru.client import mineru_client
 from database import AsyncSessionLocal
 from repositories.parse_task_repository import ParseTaskRepository
 from utils.file_hash import compute_bytes_hash, compute_file_hash
+from utils.websocket_manager import websocket_manager
 
 
 class TaskManager:
@@ -98,6 +99,18 @@ class TaskManager:
         repo, session = await self._get_repo()
         try:
             task = await repo.update(task_id, kwargs)
+            if "state" in kwargs:
+                if task:
+                    await websocket_manager.broadcast_task_update(
+                        "mineru",
+                        {
+                            "type": "task_update",
+                            "task_id": task_id,
+                            "task_type": "mineru",
+                            "state": kwargs["state"],
+                            "data": self._task_to_dict(task),
+                        },
+                    )
             return self._task_to_dict(task) if task else None
         finally:
             await session.close()

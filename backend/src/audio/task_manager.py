@@ -4,10 +4,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import threading
+import asyncio
 from typing import Dict, Optional
 from loguru import logger
 
 from models.audio_schemas import AudioTaskInfo
+from utils.websocket_manager import websocket_manager
 
 
 class AudioTaskManager:
@@ -41,6 +43,25 @@ class AudioTaskManager:
         """更新任务"""
         with self._lock:
             self._tasks[task.task_id] = task
+            try:
+                asyncio.create_task(
+                    websocket_manager.broadcast_task_update(
+                        "audio",
+                        {
+                            "type": "task_update",
+                            "task_id": task.task_id,
+                            "task_type": "audio",
+                            "state": task.status,
+                            "data": {
+                                "task_id": task.task_id,
+                                "status": task.status,
+                                "file_name": task.file_name,
+                            },
+                        },
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Failed to broadcast audio task update: {e}")
 
     def remove_task(self, task_id: str):
         """移除任务"""
