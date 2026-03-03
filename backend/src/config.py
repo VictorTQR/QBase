@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     # 数据库配置
     DATABASE_URL: str = "sqlite+aiosqlite:///./qbase_parse.db"
 
+    # 向量配置
+    EMBEDDING_PROVIDER: str = "siliconflow"
+    SILICONFLOW_EMBEDDING_MODEL: str = "BAAI/bge-large-zh-v1.5"
+    VECTOR_CHUNK_SIZE: int = 512
+    VECTOR_CHUNK_OVERLAP: int = 128
+    VECTOR_AUTO_INDEX: bool = False
+
     class Config:
         env_file = ".env"
 

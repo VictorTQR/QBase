@@ -11,6 +11,7 @@ from loguru import logger
 from config import settings
 from api.mineru import router as mineru_router
 from api.audio import router as audio_router
+from api.vector import router as vector_router
 
 app = FastAPI(title="QBase Backend", version="0.1.0")
 
@@ -24,6 +25,7 @@ app.add_middleware(
 
 app.include_router(mineru_router)
 app.include_router(audio_router)
+app.include_router(vector_router)
 
 
 @app.get("/health")
@@ -70,6 +72,12 @@ async def startup_event():
         logger.info("✓ MINERU_API_KEY 已配置")
     else:
         logger.warning("⚠ MINERU_API_KEY 未配置，文档解析功能可能不可用")
+
+    # 初始化 LanceDB
+    from vector.lancedb_service import lancedb_service
+
+    lancedb_service.initialize()
+    logger.info("✓ LanceDB initialized")
 
     logger.info("=" * 50)
 
