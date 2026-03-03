@@ -55,6 +55,7 @@ import ParseSidebar from '@/components/Layout/ParseSidebar.vue'
 import ParseQueueView from '@/components/parse/ParseQueueView.vue'
 import ParseDocumentsView from '@/components/parse/ParseDocumentsView.vue'
 import ParseStatsView from '@/components/parse/ParseStatsView.vue'
+import AudioParseView from '@/components/parse/AudioParseView.vue'
 
 const router = useRouter()
 const parseStore = useParseStore()
@@ -64,6 +65,7 @@ const activeTab = ref('queue')
 const componentMap = {
   queue: ParseQueueView,
   documents: ParseDocumentsView,
+  audio: AudioParseView,
   stats: ParseStatsView,
 }
 
