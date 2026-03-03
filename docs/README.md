@@ -47,6 +47,7 @@
 - [音频 API 统一报告](./implementation/2026-03-03-audio-api-unification.md) - 音频 API 统一重构（文件上传/本地路径/结果端点）
 - [SQLite 解析存储报告](./implementation/2026-03-03-sqlite-parse-storage.md) - SQLite 解析结果存储与文件去重
 - [向量搜索前端报告](./implementation/2026-03-03-vector-search-frontend.md) - 向量搜索前端实现（API 客户端、Store、搜索面板增强）
+- [解析功能修复报告](./implementation/2026-03-03-parse-features-bugfixes.md) - 解析功能 Bug 修复与增强（计数错误、错误处理、音频基础设施、右键菜单等）
 
 ### 问题记录
 Bug 修复记录和问题追踪。
