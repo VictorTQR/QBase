@@ -22,6 +22,8 @@ class AudioChunker:
 
     async def get_audio_duration(self, file_path: str) -> float:
         """获取音频文件时长（秒）"""
+        import asyncio
+
         cmd = [
             "ffprobe",
             "-v",
@@ -33,20 +35,24 @@ class AudioChunker:
             file_path,
         ]
 
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
-            stdout, stderr = await proc.communicate()
+        def _run_ffprobe():
+            try:
+                result = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=True,
+                )
+                duration = float(result.stdout.strip())
+                return duration
+            except subprocess.CalledProcessError as e:
+                logger.error(f"ffprobe 错误: {e.stderr}")
+                raise Exception(f"无法获取音频时长: {e.stderr}")
+            except FileNotFoundError:
+                raise Exception("未找到 ffprobe，请安装 ffmpeg")
 
-            if proc.returncode != 0:
-                logger.error(f"ffprobe 错误: {stderr.decode()}")
-                raise Exception(f"无法获取音频时长: {stderr.decode()}")
-
-            duration = float(stdout.decode().strip())
-            return duration
-        except FileNotFoundError:
-            raise Exception("未找到 ffprobe，请安装 ffmpeg")
+        return await asyncio.to_thread(_run_ffprobe)
 
     async def get_audio_size(self, file_path: str) -> int:
         """获取音频文件大小（字节）"""
@@ -95,6 +101,8 @@ class AudioChunker:
         self, input_file: str, output_file: str, start_time: float, duration: float
     ):
         """使用 ffmpeg 分割音频"""
+        import asyncio
+
         cmd = [
             "ffmpeg",
             "-i",
@@ -103,20 +111,29 @@ class AudioChunker:
             str(start_time),
             "-t",
             str(duration),
-            "-c",
-            "copy",
+            "-c:a",
+            "libmp3lame",
+            "-ar",
+            "16000",
             "-y",
             output_file,
         ]
 
-        proc = await asyncio.create_subprocess_exec(
-            *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        _, stderr = await proc.communicate()
+        def _run_ffmpeg():
+            try:
+                result = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=True,
+                )
+                return result
+            except subprocess.CalledProcessError as e:
+                logger.error(f"ffmpeg 错误: {e.stderr}")
+                raise Exception(f"音频分块失败: {e.stderr}")
 
-        if proc.returncode != 0:
-            logger.error(f"ffmpeg 错误: {stderr.decode()}")
-            raise Exception(f"音频分块失败: {stderr.decode()}")
+        await asyncio.to_thread(_run_ffmpeg)
 
     def cleanup_chunks(self, task_id: str):
         """清理任务的分块文件"""
