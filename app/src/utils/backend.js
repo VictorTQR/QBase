@@ -70,6 +70,32 @@ class AudioApi {
     return await request.json()
   }
 
+  async transcribeAudioUpload(file, config = {}) {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (config.model) {
+      formData.append('model', config.model)
+    }
+    
+    const request = this.backend.client.post('/api/audio/transcribe-upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return await request.json()
+  }
+
+  async transcribeAudioLocal(filePath, config = {}) {
+    const request = this.backend.client.post('/api/audio/transcribe-local', {
+      file_path: filePath,
+      model: config.model,
+    })
+    return await request.json()
+  }
+
+  async getTaskResult(taskId) {
+    const request = this.backend.client.get(`/api/audio/tasks/${taskId}/result`)
+    return await request.json()
+  }
+
   async getTaskStatus(taskId) {
     const request = this.backend.client.get(`/api/audio/tasks/${taskId}`)
     return await request.json()
