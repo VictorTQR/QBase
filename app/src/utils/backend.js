@@ -66,8 +66,6 @@ class AudioApi {
     const request = this.backend.client.post('/api/audio/transcribe', {
       file_path: filePath,
       model: config.model,
-      api_key: config.apiKey,
-      base_url: config.baseUrl
     })
     return await request.json()
   }
