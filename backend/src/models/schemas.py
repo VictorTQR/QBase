@@ -56,3 +56,9 @@ class StatsResponse(BaseModel):
     running: int
     done: int
     failed: int
+
+
+class OperationResponse(BaseModel):
+    success: bool
+    count: int
+    message: str

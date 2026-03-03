@@ -86,3 +86,25 @@ class ParseTaskRepository:
             stats[state] = result.scalar() or 0
 
         return stats
+
+    async def delete_by_states(self, states: List[str]) -> int:
+        """按状态删除任务"""
+        from sqlalchemy import delete
+
+        result = await self.db.execute(
+            delete(ParseTask).where(ParseTask.state.in_(states))
+        )
+        await self.db.commit()
+        count = result.rowcount
+        logger.info(f"删除了 {count} 个任务 (states: {states})")
+        return count
+
+    async def delete_all(self) -> int:
+        """删除所有任务"""
+        from sqlalchemy import delete
+
+        result = await self.db.execute(delete(ParseTask))
+        await self.db.commit()
+        count = result.rowcount
+        logger.info(f"删除了所有 {count} 个任务")
+        return count
