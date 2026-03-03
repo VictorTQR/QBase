@@ -14,7 +14,7 @@
 </template>
 
 <script setup>
-import { ChatDotRound, Files, Connection } from '@element-plus/icons-vue'
+import { ChatDotRound, Files, Connection, Microphone } from '@element-plus/icons-vue'
 
 const props = defineProps({
   modelValue: {
@@ -28,6 +28,7 @@ const emit = defineEmits(['update:modelValue'])
 const menuItems = [
   { key: 'llm', label: 'LLM', icon: ChatDotRound },
   { key: 'pdf-parse', label: 'PDF 解析', icon: Files },
+  { key: 'audio-parse', label: '音频解析', icon: Microphone },
   { key: 'vector', label: '向量存储', icon: Connection },
 ]
 

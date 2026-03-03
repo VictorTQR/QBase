@@ -23,6 +23,7 @@ import { ArrowLeft } from '@element-plus/icons-vue'
 import SettingsSidebar from '@/components/Layout/SettingsSidebar.vue'
 import LlmSettings from '@/components/settings/LlmSettings.vue'
 import PdfParseSettings from '@/components/settings/PdfParseSettings.vue'
+import AudioParseSettings from '@/components/settings/AudioParseSettings.vue'
 import VectorSettings from '@/components/settings/VectorSettings.vue'
 
 const router = useRouter()
@@ -31,6 +32,7 @@ const activeTab = ref('llm')
 const componentMap = {
   llm: LlmSettings,
   'pdf-parse': PdfParseSettings,
+  'audio-parse': AudioParseSettings,
   vector: VectorSettings,
 }
 
