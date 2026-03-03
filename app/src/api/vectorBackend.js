@@ -29,8 +29,21 @@ export class VectorBackendApi {
 
   static async searchVectors(params) {
     console.log('[VectorBackendApi] searchVectors 调用，参数:', params)
-    const request = backend.client.post('/api/vector/search', params)
-    return await request.json()
+    try {
+      const request = backend.client.post('/api/vector/search', params)
+      return await request.json()
+    } catch (error) {
+      console.error('[VectorBackendApi] searchVectors 失败:', error)
+      if (error.response) {
+        try {
+          const errorData = await error.response.json()
+          throw new Error(errorData.detail || errorData.message || '向量搜索失败')
+        } catch (e) {
+          throw new Error(`向量搜索失败 (${error.response.status})`)
+        }
+      }
+      throw error
+    }
   }
 
   static async deleteDocumentChunks(filePath) {
