@@ -50,6 +50,7 @@
 Bug 修复记录和问题追踪。
 
 - [消息 ID 重复 Bug](./bugs/2026-02-25-message-id-duplicate.md) - UUID 生成修复
+- [音频转录接口 Windows 兼容修复](./bugs/2026-03-03-audio-transcription-windows-bugfix.md) - asyncio subprocess、编码转换等多问题修复
 
 ## 快速链接
 
