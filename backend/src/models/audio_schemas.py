@@ -18,6 +18,11 @@ class AudioTranscriptionRequest(BaseModel):
     model: Optional[str] = Field(None, description="ASR 模型名称（可选，覆盖默认模型）")
 
 
+class LocalAudioTranscriptionRequest(BaseModel):
+    file_path: str = Field(..., description="音频文件路径")
+    model: Optional[str] = Field(None, description="ASR 模型名称（可选）")
+
+
 class AudioChunkInfo(BaseModel):
     chunk_id: str
     file_path: str
