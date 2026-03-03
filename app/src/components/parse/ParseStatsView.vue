@@ -152,7 +152,7 @@ const isRetrying = ref(false)
 const stats = computed(() => parseStore.stats)
 const vectorStats = computed(() => vectorStore.stats)
 
-const indexedFilesCount = computed(() => vectorStore.indexedFiles.size)
+const indexedFilesCount = computed(() => Object.keys(vectorStore.indexedFiles).length)
 
 const doneTasksWithoutIndex = computed(() => {
   return parseStore.doneTasks.filter((task) => !vectorStore.isFileIndexed(task.file_path))
