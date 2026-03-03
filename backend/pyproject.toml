@@ -15,4 +15,5 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "sqlalchemy>=2.0.0",
     "aiosqlite>=0.20.0",
+    "lancedb>=0.29.2",
 ]
