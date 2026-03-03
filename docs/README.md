@@ -43,6 +43,8 @@
 - [v1.0 实施报告](./implementation/v1.0-backend-integration.md) - 后端服务集成（策略模式）
 - [解析管理重构报告](./implementation/2026-03-02-parse-management-refactor.md) - 解析管理 UI 重构与增强
 - [音频转录功能报告](./implementation/2026-03-02-audio-transcription.md) - 基于硅基流动 API 的音频转录功能
+- [解析配置统一报告](./implementation/2026-03-03-parse-config-unification.md) - 解析配置统一重构（后端环境变量管理）
+- [音频 API 统一报告](./implementation/2026-03-03-audio-api-unification.md) - 音频 API 统一重构（文件上传/本地路径/结果端点）
 
 ### 问题记录
 Bug 修复记录和问题追踪。
