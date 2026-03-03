@@ -36,23 +36,39 @@ async def transcribe_audio_upload(
         import tempfile
         import os
 
+        logger.debug(
+            f"开始处理音频上传: {file.filename}, 内容类型: {file.content_type}"
+        )
+
         suffix = Path(file.filename).suffix if file.filename else ".wav"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            content = await file.read()
-            tmp.write(content)
-            temp_file_path = tmp.name
+        logger.debug(f"使用文件后缀: {suffix}")
+
+        temp_file_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                content = await file.read()
+                tmp.write(content)
+                temp_file_path = tmp.name
+                logger.debug(
+                    f"临时文件已创建: {temp_file_path}, 大小: {len(content)} 字节"
+                )
+        except Exception as e:
+            logger.error(f"创建临时文件失败: {e}")
+            raise
 
         logger.info(f"收到音频上传: {file.filename}, 临时路径: {temp_file_path}")
 
+        logger.debug("调用 audio_processor.process...")
         result = await audio_processor.process(
             temp_file_path,
             config={"model": model} if model else None,
         )
+        logger.debug(f"audio_processor.process 返回结果: {result}")
 
         return AudioTranscriptionResponse(**result)
 
     except Exception as e:
-        logger.error(f"音频上传转录失败: {e}")
+        logger.exception(f"音频上传转录失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

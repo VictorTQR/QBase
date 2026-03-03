@@ -45,9 +45,18 @@ class AudioProcessor(FileProcessor):
         }
 
     async def _create_task(self, task_id: str, file_path: str) -> AudioTaskInfo:
+        logger.debug(f"创建任务: task_id={task_id}, file_path={file_path}")
         file_path_obj = Path(file_path)
+
+        if not file_path_obj.exists():
+            logger.error(f"文件不存在: {file_path}")
+            raise FileNotFoundError(f"音频文件不存在: {file_path}")
+
         total_size = file_path_obj.stat().st_size
+        logger.debug(f"文件大小: {total_size} 字节")
+
         total_duration = await self.chunker.get_audio_duration(file_path)
+        logger.debug(f"音频时长: {total_duration} 秒")
 
         task = AudioTaskInfo(
             task_id=task_id,
@@ -137,7 +146,7 @@ class AudioProcessor(FileProcessor):
             task.updated_at = time.time()
             self.task_manager.update_task(task)
 
-            from ..audio.utils import merge_transcriptions
+            from audio.utils import merge_transcriptions
 
             final_transcription = merge_transcriptions(all_transcriptions)
             task.transcription = final_transcription
