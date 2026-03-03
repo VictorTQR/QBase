@@ -46,11 +46,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, Refresh } from '@element-plus/icons-vue'
 import { useParseStore } from '@/stores/parse'
 import { useVectorStore } from '@/stores/vector'
+import { mineruWebSocket, audioWebSocket } from '@/utils/websocket'
 import ParseSidebar from '@/components/Layout/ParseSidebar.vue'
 import ParseQueueView from '@/components/parse/ParseQueueView.vue'
 import ParseDocumentsView from '@/components/parse/ParseDocumentsView.vue'
@@ -76,6 +77,13 @@ const indexingPercentage = computed(() => {
   return Math.round((vectorStore.indexingProgress / vectorStore.indexingTotal) * 100)
 })
 
+function handleWebSocketMessage(message) {
+  if (message.type === 'task_update') {
+    parseStore.fetchTasks()
+    parseStore.fetchStats()
+  }
+}
+
 onMounted(async () => {
   await parseStore.fetchTasks()
   await parseStore.fetchStats()
@@ -84,6 +92,18 @@ onMounted(async () => {
   } catch (err) {
     console.error('加载向量统计失败:', err)
   }
+
+  mineruWebSocket.on('message', handleWebSocketMessage)
+  audioWebSocket.on('message', handleWebSocketMessage)
+  mineruWebSocket.connect('mineru')
+  audioWebSocket.connect('audio')
+})
+
+onUnmounted(() => {
+  mineruWebSocket.off('message', handleWebSocketMessage)
+  audioWebSocket.off('message', handleWebSocketMessage)
+  mineruWebSocket.disconnect()
+  audioWebSocket.disconnect()
 })
 
 function handleBack() {
