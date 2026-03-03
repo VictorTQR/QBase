@@ -1,0 +1,29 @@
+---
+title: "Keeping Indexes Up-to-Date with Reindexing"
+source: "https://docs.lancedb.com/indexing/reindexing"
+author:
+  - "[[LanceDB]]"
+published:
+created: 2026-03-03
+description: "Learn how to keep your indexes up-to-date in LanceDB using incremental indexing, including best practices for adding new records without full reindexing."
+tags:
+  - "clippings"
+---
+As you add new data to your LanceDB tables, your indexes may become outdated. Reindexing is the process of updating the index to account for new data — this applies to either a full-text search (FTS) index or a vector index. Reindexing is an important operation to run periodically as your data grows, as it has performance implications.As data is being added and a reindex operation is running, LanceDB will combine results from the existing index with exhaustive/flat search on the new data. This is done to ensure that you’re still retrieving results over all your data, but it does come at a performance cost. The more data that you add without reindexing, the impact on latency (due to exhaustive search) can be noticeable.Rather than dropping an existing index entirely and reindexing from scratch, LanceDB supports **incremental indexing**.
+
+## Incremental Reindexing
+
+You can manually trigger an incremental indexing operation on updated data using the `optimize()` method on a table.Table optimization performs three maintenance operations:
+1. **Compaction**: merges small fragments into larger ones to improve read performance
+2. **Pruning/Cleanup**: removes files from versions older than a retention window (7 days by default)
+3. **Index update**: adds newly-ingested data to existing indexes
+Cloud Enterprise LanceDB Cloud/Enterprise support incremental reindexing through an automated background process. When new data is added to a table, the system automatically triggers a new index build. As the dataset grows, indexes are asynchronously updated in the background.
+- While indexes are being rebuilt, queries use brute force methods on unindexed rows, which may temporarily increase latency. To avoid this, set `fast_search=True` to search only indexed data.
+- Use `index_stats()` to view the number of unindexed rows. This will be zero when indexes are fully up-to-date.
+The benefit of using LanceDB Cloud & Enterprise is that they automate the reindexing process and operate continuously in the background, minimizing the impact on latency under high loads. In OSS, you must manually manage the reindexing cadence based on your data growth and performance needs.
+
+## Disk utilization
+
+Compaction by itself does not immediately free disk space, and can temporarily increase it because new compacted files are written before old-version files are deleted. Disk space is reclaimed when old versions are pruned during cleanup. Set retention only as low as your rollback and time-travel requirements allow.If you need to reclaim space more aggressively in OSS, use a shorter retention window:
+
+[Quantization](https://docs.lancedb.com/indexing/quantization) [Overview](https://docs.lancedb.com/search)

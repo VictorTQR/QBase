@@ -1,0 +1,58 @@
+---
+title: "Embeddings: Quickstart"
+source: "https://docs.lancedb.com/embedding/quickstart"
+author:
+  - "[[LanceDB]]"
+published:
+created: 2026-03-03
+description: "Quickstart guide for generating and working with embeddings."
+tags:
+  - "clippings"
+---
+LanceDB will automatically vectorize the data both at ingestion and query time. All you need to do is specify which model to use.We support popular embedding models like OpenAI, Hugging Face, Sentence Transformers, CLIP, and more.
+
+## Step 1: Import Required Libraries
+
+First, import the necessary LanceDB components:
+- `lancedb`: The main database connection and operations
+- `LanceModel`: Pydantic model for defining table schemas
+- `Vector`: Field type for storing vector embeddings
+- `get_registry()`: Access to the embedding function registry. It has all the supported as well custom embedding functions registered by the user
+
+## Step 2: Connect to LanceDB Cloud
+
+Establish a connection to your LanceDB instance:
+
+## Step 3: Initialize the Embedding Function
+
+Choose and configure your embedding model:This creates a Sentence Transformers embedding function using the BGE model. You can:
+- Change `"sentence-transformers"` to other providers like `"openai"`, `"cohere"`, etc.
+- Modify the model name for different embedding models
+- Set `device="cuda"` for GPU acceleration if available
+
+## Step 4: Define Your Schema
+
+Create a Pydantic model that defines your table structure:
+- `SourceField()`: This field will be embedded
+- `VectorField()`: This stores the embeddings
+- `model.ndims()`: Sets vector dimensions for your model
+
+## Step 5: Create Table and Ingest Data
+
+Create a table with your schema and add data:The `table.add()` call automatically:
+- Takes the text from each document
+- Generates embeddings using your chosen model
+- Stores both the original text and the vector embeddings
+
+## Step 6: Query with Automatic Embedding
+
+Note: On LanceDB cloud, automatic query embedding is not supported. You need to pass the embedding vector directly.Search your data using natural language queries:The search process:
+1. Automatically converts your query text to embeddings
+2. Finds the most similar vectors in your table
+3. Returns the matching documents
+
+## Examples
+
+LanceDB currently supports the via SDKs in [Python, Typescript and Rust](https://docs.lancedb.com/api-reference).Below are some examples of generating and querying embeddings when using the embedding registry.
+
+[Overview](https://docs.lancedb.com/embedding) [Storage options](https://docs.lancedb.com/storage)

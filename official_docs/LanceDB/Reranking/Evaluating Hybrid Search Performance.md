@@ -1,0 +1,37 @@
+---
+title: "Evaluating Hybrid Search Performance"
+source: "https://docs.lancedb.com/reranking/eval"
+author:
+  - "[[LanceDB]]"
+published:
+created: 2026-03-03
+description: "Learn about evaluating hybrid search performance in LanceDB."
+tags:
+  - "clippings"
+---
+Hybrid search is an often misused and/or misunderstood term. In this section, we’re using the definition of “hybrid search” to mean using a combination of keyword-based and vector search. Because the vector search operates in a dense embedding space and keyword-based search operate in a sparse embedding space, their relevance scores cannot be directly compared. Combining results from multiple searches thus requires a reranking step.
+
+## Reranking strategies
+
+There are two common approaches for reranking search results from multiple sources.
+- **Score-based**: Calculate final relevance scores based on a weighted linear combination of individual search algorithm scores. Example: Weighted linear combination of semantic search & keyword-based search results.
+- **Relevance-based**: Discards the existing scores and calculates the relevance of each search result-query pair. Example: Cross Encoder models
+Even though there may many more strategies for reranking, there are no “universally best” ones that work well for all cases, because they be dataset or application specific. Evaluating whether a reranking strategy is a good one, is also a challenge. In the next section, we discuss an example evaluation of different reranking strategies on a sample dataset.
+
+## Example evaluation
+
+The table below shows our evaluation results from an experiment comparing multiple rerankers on ~800 hybrid search queries. This is a modified version of an evaluation script by [LlamaIndex](https://github.com/run-llama/finetune-embedding/blob/main/evaluate.ipynb) that measures hit-rate @ top-k.
+
+### Using OpenAI text-embedding-ada-002
+
+Vector Search baseline: **0.64** ![](https://github.com/AyushExel/assets/assets/15766192/d57b1780-ef27-414c-a5c3-73bee7808a45)
+
+### Using OpenAI text-embedding-3-small
+
+Vector Search baseline: **0.59** ![](https://github.com/AyushExel/assets/assets/15766192/259adfd2-6ec6-4df6-a77d-1456598970dd)
+
+## Conclusion
+
+The results show that the reranking methods can significantly improve the search relevance. However, the improvement we saw was not consistent across all rerankers. In reality, the choice of reranker likely depends on the dataset and the application.It’s also important to note that the reranking methods are not a replacement for the search methods they supplement. They are complementary and it’s likely that you’d have to tune them together to get the best results. The latency vs. recall tradeoff is also an important factor to consider when choosing the reranker. Hopefully this evaluation gives you a starting point for your own experiments with hybrid search in LanceDB!
+
+[Custom rerankers](https://docs.lancedb.com/reranking/custom-reranker) [Overview](https://docs.lancedb.com/embedding)
