@@ -155,7 +155,12 @@ function handleAddToParse() {
   }
 
   parseStore.addFile(data.path, fileType)
-  ElMessage.success('已添加到解析队列')
+    .then(() => {
+      ElMessage.success('已添加到解析队列')
+    })
+    .catch((err) => {
+      ElMessage.error(`添加失败: ${err.message}`)
+    })
 }
 
 function handleClickOutside() {

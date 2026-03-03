@@ -1,6 +1,9 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
+import { ElMessage } from 'element-plus'
 import { ParseBackendApi } from '@/api/parseBackend'
+import { useAudioStore } from '@/stores/audio'
+import { useParseConfigStore } from '@/stores/parseConfig'
 
 export const useParseStore = defineStore('parse', () => {
   const tasks = ref([])
@@ -211,6 +214,31 @@ export const useParseStore = defineStore('parse', () => {
     }
   }
 
+  async function addFile(filePath, fileType) {
+    isLoading.value = true
+    error.value = null
+    try {
+      if (fileType === 'pdf') {
+        return await parseLocalFile(filePath)
+      } else if (fileType === 'audio') {
+        const audioStore = useAudioStore()
+        const parseConfigStore = useParseConfigStore()
+        const { asrModel } = parseConfigStore.audioConfig
+        return await audioStore.transcribeLocalFile(filePath, asrModel)
+      } else if (fileType === 'markdown') {
+        ElMessage.info('Markdown 文件无需解析，可直接索引向量')
+        return { success: true, message: 'Markdown 文件无需解析' }
+      } else {
+        throw new Error(`不支持的文件类型: ${fileType}`)
+      }
+    } catch (err) {
+      error.value = err.message
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   function clearError() {
     error.value = null
   }
@@ -239,6 +267,7 @@ export const useParseStore = defineStore('parse', () => {
     clearAllTasks,
     batchParsePending,
     retryFailedTasks,
+    addFile,
     clearError,
   }
 })
