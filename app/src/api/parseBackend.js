@@ -43,4 +43,24 @@ export class ParseBackendApi {
   static async downloadResult(taskId) {
     return backend.client.get(`/api/mineru/tasks/${taskId}/download`)
   }
+
+  static async clearCompleted() {
+    const request = backend.client.delete('/api/mineru/tasks/clear-completed')
+    return await request.json()
+  }
+
+  static async clearAll() {
+    const request = backend.client.delete('/api/mineru/tasks/clear-all')
+    return await request.json()
+  }
+
+  static async batchParsePending() {
+    const request = backend.client.post('/api/mineru/tasks/batch-parse-pending')
+    return await request.json()
+  }
+
+  static async retryFailed() {
+    const request = backend.client.post('/api/mineru/tasks/retry-failed')
+    return await request.json()
+  }
 }
