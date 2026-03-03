@@ -43,6 +43,27 @@
       </div>
     </div>
 
+    <div class="stats-cards vector-stats">
+      <div class="stat-card vector-chunks">
+        <div class="stat-icon">
+          <el-icon><DataLine /></el-icon>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ vectorStats?.total_chunks || 0 }}</div>
+          <div class="stat-label">向量分块</div>
+        </div>
+      </div>
+      <div class="stat-card vector-indexed">
+        <div class="stat-icon">
+          <el-icon><Box /></el-icon>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ indexedFilesCount }}</div>
+          <div class="stat-label">已索引文档</div>
+        </div>
+      </div>
+    </div>
+
     <div class="stats-details">
       <el-card class="detail-card">
         <template #header>
@@ -67,6 +88,22 @@
           >
             重试失败文件
           </el-button>
+          <el-divider />
+          <el-button
+            type="success"
+            :disabled="doneTasksWithoutIndex.length === 0 || vectorStore.isIndexing"
+            :loading="vectorStore.isIndexing"
+            @click="handleBatchIndex"
+          >
+            批量索引向量
+          </el-button>
+          <el-button
+            type="danger"
+            :disabled="vectorStats?.total_chunks === 0"
+            @click="handleClearVectors"
+          >
+            清空所有向量
+          </el-button>
         </div>
       </el-card>
 
@@ -77,9 +114,7 @@
           </div>
         </template>
         <div class="status-distribution">
-          <div v-if="stats.total === 0" class="empty-distribution">
-            暂无数据
-          </div>
+          <div v-if="stats.total === 0" class="empty-distribution">暂无数据</div>
           <div v-else class="distribution-bar">
             <div
               v-for="item in distributionData"
@@ -103,16 +138,25 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { Document, CircleCheck, Clock, CircleClose } from '@element-plus/icons-vue'
+import { ref, computed, onMounted } from 'vue'
+import { Document, CircleCheck, Clock, CircleClose, DataLine, Box } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useParseStore } from '@/stores/parse'
-import { ElMessage } from 'element-plus'
+import { useVectorStore } from '@/stores/vector'
 
 const parseStore = useParseStore()
+const vectorStore = useVectorStore()
 const isBatchParsing = ref(false)
 const isRetrying = ref(false)
 
 const stats = computed(() => parseStore.stats)
+const vectorStats = computed(() => vectorStore.stats)
+
+const indexedFilesCount = computed(() => vectorStore.indexedFiles.size)
+
+const doneTasksWithoutIndex = computed(() => {
+  return parseStore.doneTasks.filter((task) => !vectorStore.isFileIndexed(task.file_path))
+})
 
 const distributionData = computed(() => {
   const total = stats.value.total || 0
@@ -122,7 +166,7 @@ const distributionData = computed(() => {
     { status: 'running', label: '解析中', count: stats.value.running },
     { status: 'failed', label: '失败', count: stats.value.failed },
   ]
-  return items.map(item => ({
+  return items.map((item) => ({
     ...item,
     percentage: total > 0 ? (item.count / total) * 100 : 0,
   }))
@@ -161,6 +205,57 @@ const handleRetryFailed = async () => {
     isRetrying.value = false
   }
 }
+
+const handleBatchIndex = async () => {
+  if (doneTasksWithoutIndex.value.length === 0) {
+    ElMessage.warning('没有需要索引的文档')
+    return
+  }
+
+  try {
+    const result = await vectorStore.indexBatch(
+      doneTasksWithoutIndex.value,
+      async (taskId) => {
+        const content = await parseStore.getTaskResult(taskId)
+        return content?.markdown_content || null
+      },
+      null,
+    )
+
+    if (result.failed.length > 0) {
+      ElMessage.warning(`成功索引 ${result.results.length} 个文档，失败 ${result.failed.length} 个`)
+    } else {
+      ElMessage.success(`成功索引 ${result.results.length} 个文档`)
+    }
+  } catch (err) {
+    ElMessage.error(`批量索引失败: ${err.message}`)
+  }
+}
+
+const handleClearVectors = async () => {
+  try {
+    await ElMessageBox.confirm('确定要清空所有向量数据吗？此操作不可恢复！', '警告', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+
+    await vectorStore.clearAll()
+    ElMessage.success('已清空所有向量数据')
+  } catch (err) {
+    if (err !== 'cancel') {
+      ElMessage.error(`清空失败: ${err.message}`)
+    }
+  }
+}
+
+onMounted(async () => {
+  try {
+    await vectorStore.loadStats()
+  } catch (err) {
+    console.error('加载向量统计失败:', err)
+  }
+})
 </script>
 
 <style scoped>
@@ -185,6 +280,10 @@ const handleRetryFailed = async () => {
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 24px;
+}
+
+.stats-cards.vector-stats {
+  grid-template-columns: repeat(2, 1fr);
 }
 
 .stat-card {
@@ -225,6 +324,16 @@ const handleRetryFailed = async () => {
 .stat-card.failed .stat-icon {
   background: rgba(245, 108, 108, 0.1);
   color: var(--el-color-danger);
+}
+
+.stat-card.vector-chunks .stat-icon {
+  background: rgba(64, 158, 255, 0.1);
+  color: var(--el-color-primary);
+}
+
+.stat-card.vector-indexed .stat-icon {
+  background: rgba(103, 194, 58, 0.1);
+  color: var(--el-color-success);
 }
 
 .stat-content {

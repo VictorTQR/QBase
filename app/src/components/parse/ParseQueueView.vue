@@ -99,8 +99,8 @@ const handleClearCompleted = async () => {
       {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
-        type: 'warning'
-      }
+        type: 'warning',
+      },
     )
 
     isClearingCompleted.value = true
@@ -122,15 +122,11 @@ const handleClearAll = async () => {
   }
 
   try {
-    await ElMessageBox.confirm(
-      '确定要清空所有任务吗？此操作不可恢复！',
-      '确认清空',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'error'
-      }
-    )
+    await ElMessageBox.confirm('确定要清空所有任务吗？此操作不可恢复！', '确认清空', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'error',
+    })
 
     isClearingAll.value = true
     const response = await parseStore.clearAllTasks()

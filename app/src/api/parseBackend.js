@@ -15,7 +15,7 @@ export class ParseBackendApi {
 
   static async parseLocalFile(filePath) {
     const request = backend.client.post('/api/mineru/parse-local', {
-      file_path: filePath
+      file_path: filePath,
     })
     return await request.json()
   }

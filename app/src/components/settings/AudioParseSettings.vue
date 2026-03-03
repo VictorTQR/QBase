@@ -3,12 +3,7 @@
     <el-form label-width="140px">
       <el-divider content-position="left">音频解析配置</el-divider>
 
-      <el-alert
-        type="info"
-        :closable="false"
-        show-icon
-        style="margin-bottom: 16px"
-      >
+      <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px">
         API Key 和 Base URL 等敏感配置需在后端
         <code>.env</code> 文件中设置
       </el-alert>

@@ -1,181 +1,246 @@
-# AGENTS.md - QBase AI 代理开发指南
+# AGENTS.md - QBase AI Agent Development Guide
 
-本文档为在 QBase 仓库工作的 AI 编码代理提供指导。
+This document provides guidelines for AI coding agents working in the QBase repository.
 
-## 项目概述
+## Project Overview
 
-QBase 是一个本地知识库管理系统，基于 Vue 3 + Electron 构建。
+QBase is a local knowledge base management system built with Vue 3 + Electron + FastAPI.
 
-### 当前版本 (v0.9 / v1.0)
+**Current Version**: v1.0
 
-- 工作区管理（添加/移除文件夹）
-- 文件树导航（支持手动刷新）
-- Markdown 预览（使用 XMarkdown，支持代码高亮、LaTeX、Mermaid）
-- PDF 查看器（支持翻页、缩放）
-- 音视频播放器（MP3, MP4, WebM 等）
-- 三栏布局
-- Electron 文件系统 API
-- AI 助手对话面板 (BubbleList + Sender)
-- LLM 配置管理 (本地/云端模型)
-- 流式 AI 响应 (SSE)
-- 多轮对话上下文管理
-- 多会话管理（对话历史持久化）
-- 全文搜索（UI + 内容片段）
-- 智能闪卡生成（基于文档内容）
-- 智能生成面板（闪卡、思维导图、摘要）
-- 文档解析管理（队列管理、已解析文档、解析统计）
-- 解析管理独立全屏页面（卡片网格布局、搜索筛选、详情抽屉）
-- FastAPI 后端集成（HTTP API 调用、策略模式支持独立/一体化后端）
-- MinerU 文档解析集成
-- Pinia 状态持久化 + Repository 抽象层
+**Key Features**:
+- Workspace management (add/remove folders)
+- File tree navigation (manual refresh support)
+- Markdown preview (XMarkdown with syntax highlighting, LaTeX, Mermaid)
+- PDF viewer (page navigation, zoom)
+- Media player (MP3, MP4, WebM)
+- Three-column layout
+- Electron file system API
+- AI assistant chat panel
+- LLM configuration management
+- Streaming AI responses (SSE)
+- Multi-turn conversation context
+- Multi-session management with persistence
+- Full-text search with content snippets
+- Vector search (LanceDB backend)
+- Hybrid search (full-text + vector)
+- Smart flashcard generation
+- AI generation panel (flashcards, mind maps, summaries)
+- Document parse management
+- FastAPI backend integration
+- MinerU document parsing
+- Pinia state persistence with Repository pattern
 
-## 开发原则
+## Development Principles
 
-### 代码质量原则
+### Code Quality Principles
+- **Occam's Razor**: Prefer simple solutions
+- **KISS**: Keep it simple, stupid
+- **YAGNI**: You aren't gonna need it - avoid over-engineering
 
-- **奥卡姆剃刀**: 优先选择简单方案
-- **KISS**: 保持简单
-- **YAGNI**: 避免过度工程化
+### Language Preference
+- Write documentation in Chinese
+- Use Chinese comments
+- Commit messages in Chinese
 
-### 语言偏好
+### Testing & QA
+- Provide test steps only - DO NOT run tests automatically
+- Provide installation commands only - DO NOT execute them automatically
 
-- 使用中文编写文档
-- 注释使用中文
-- commit 消息使用中文
+## Package Manager & Commands
 
-### 测试和质量保证
-
-- 你只需要给出测试步骤，而不自动进行测试，测试由开发人员手动进行
-- 安装依赖时，你只需要给出命令，而不自动执行
-
-## 包管理器与命令
-
-使用 **npm** 作为包管理器。主要命令：
+Use **npm** as package manager. Work from the `app/` directory.
 
 ```bash
-npm install          # 安装依赖
-npm run dev          # 启动 Vite 开发服务器
-npm run build        # 生产构建
-npm run test:unit    # 运行所有 Vitest 测试
-npm run lint         # 运行 ESLint + Oxlint 并自动修复
-npm run format       # Prettier 格式化代码
-npm run ele          # 启动 Electron
-npm run start        # 同时启动 Vite + Electron
+cd app                    # Always work from app directory
+npm install               # Install dependencies
+npm run dev               # Start Vite dev server
+npm run build             # Production build
+npm run test:unit         # Run all Vitest tests
+npm run lint              # Run ESLint + Oxlint with auto-fix
+npm run lint:oxlint       # Run Oxlint only
+npm run lint:eslint       # Run ESLint only
+npm run format            # Prettier format code
+npm run ele               # Start Electron
+npm run start             # Start Vite + Electron together
+npm run pack              # Build + electron-builder --dir
+npm run dist              # Build + electron-builder
 ```
 
-### 运行单个测试
+### Running Individual Tests
 
 ```bash
 npm run test:unit -- src/__tests__/your-test.spec.js
-npm run test:unit -- --watch  # 监听模式
+npm run test:unit -- --watch          # Watch mode
+npm run test:unit -- --run            # Run once without watch
+npm run test:unit -- --reporter dot   # Minimal output
 ```
 
-## 代码风格指南
+## Code Style Guidelines
 
-### 格式化规则
+### Formatting Rules (from .prettierrc.json)
+- **No semicolons** (`semi: false`)
+- **Single quotes** (`singleQuote: true`)
+- **100 character line length** (`printWidth: 100`)
+- **2-space indentation**
+- **Trailing commas** in multi-line structures
 
-- 不使用分号
-- 字符串使用单引号
-- 行长度 100 字符
-- 2 空格缩进
-- 多行结构使用尾随逗号
+### Import Guidelines
+- Use ES module syntax (`import`/`export`)
+- Path alias `@` maps to `./src`
+- Import grouping: External libraries → Internal modules → Components/styles
+- Remove unused imports automatically
 
-### 导入规范
+### Vue Components
+- Use `<script setup>` Composition API syntax
+- Use `<style scoped>` for component-scoped styles
+- Component filenames in PascalCase (e.g., `MyComponent.vue`)
+- Define props and emits with TypeScript or JSDoc
 
-- 使用 ES 模块语法 (`import`/`export`)
-- 路径别名 `@` 映射到 `./src`
-- 导入分组：外部库 → 内部模块 → 组件/样式
-- 不保留未使用的导入
+### Naming Conventions
 
-### Vue 组件
+| Type | Convention | Example |
+|------|-----------|---------|
+| Variables/Functions | camelCase | `loadFile`, `searchResults` |
+| Components | PascalCase | `MarkdownViewer.vue` |
+| Constants | UPPER_SNAKE_CASE | `API_BASE_URL`, `MAX_RESULTS` |
+| Pinia stores | useXxxStore | `useWorkspaceStore`, `useSearchStore` |
+| Test files | *.spec.js | `App.spec.js`, `SearchPanel.spec.js` |
 
-- 使用 `<script setup>` 语法
-- 使用 `<style scoped>` 作用域样式
-- 组件文件名使用 PascalCase（如 `MyComponent.vue`）
-- Props 和 emits 使用 TypeScript 或 JSDoc 定义
+### Error Handling
+- Use try/catch for async operations
+- Provide meaningful Chinese error messages
+- Validate inputs and boundary conditions
+- Store errors in reactive state for UI display
 
-### 命名约定
+## Linting & Testing Tools
 
-| 类型 | 约定 | 示例 |
-|------|------|------|
-| 变量/函数 | camelCase | `loadFile` |
-| 组件 | PascalCase | `MarkdownViewer.vue` |
-| 常量 | UPPER_SNAKE_CASE | `API_BASE_URL` |
-| Pinia store | useXxxStore | `useWorkspaceStore` |
-| 测试文件 | *.spec.js | `App.spec.js` |
+**ESLint** (`eslint.config.js`):
+- Flat config format
+- Vue plugin enabled
+- Vitest plugin for test files
+- Integrates with Oxlint
+- Prettier compatibility (skip formatting rules)
 
-### 错误处理
+**Oxlint** (`.oxlintrc.json`):
+- Fast correctness checks
+- Runs before ESLint
+- Auto-fix enabled
 
-- 异步操作使用 try/catch
-- 提供有意义的中文错误信息
-- 验证输入和边界情况
+**Prettier** (`.prettierrc.json`):
+- Code formatting
+- Runs after linting
 
-## 代码检查与测试工具
+**Vitest**:
+- Testing framework
+- jsdom environment
+- `@vue/test-utils` for component testing
+- Tests in `src/__tests__/` directory
 
-- **ESLint**: 扁平配置，含 Vue 和 Vitest 插件 (`eslint.config.js`)
-- **Oxlint**: 快速正确性检查 (`.oxlintrc.json`)
-- **Prettier**: 代码格式化 (`.prettierrc.json`)
-- **Vitest**: 测试框架，配合 jsdom 和 `@vue/test-utils`
+## Key Configuration Files
 
-## 关键配置文件
+All application files live in the `app/` directory:
 
-所有应用文件在 `app/` 目录下：
+- `app/package.json` - Dependencies and scripts
+- `app/eslint.config.js` - ESLint flat config
+- `app/vitest.config.js` - Vitest configuration
+- `app/.prettierrc.json` - Prettier rules
+- `app/.oxlintrc.json` - Oxlint configuration
+- `app/vite.config.js` - Vite configuration
 
-- `app/package.json` - 依赖和脚本
-- `app/eslint.config.js` - ESLint 配置
-- `app/vitest.config.js` - Vitest 配置
-- `app/.prettierrc.json` - Prettier 规则
-- `app/.oxlintrc.json` - Oxlint 配置
+## Project Structure
 
-## 文档维护
+```
+QBase/
+├── app/                          # Frontend/Electron app
+│   ├── src/
+│   │   ├── api/                 # API clients
+│   │   ├── components/          # Vue components
+│   │   ├── stores/              # Pinia stores
+│   │   ├── utils/               # Utilities
+│   │   ├── views/               # Page components
+│   │   └── __tests__/           # Vitest tests
+│   ├── electron/                # Electron main process
+│   └── package.json
+├── backend/                      # FastAPI backend (Python)
+├── docs/                         # Project documentation
+│   ├── architecture/             # Architecture docs
+│   ├── features/                 # Feature docs
+│   ├── implementation/           # Implementation reports
+│   └── bugs/                     # Bug records
+├── AGENTS.md                     # This file
+└── CLAUDE.md                     # Development principles
+```
 
-### 文档目录
+## Documentation Maintenance
 
-项目根目录下的 `docs/` 文件夹：
+### Documentation Directory
 
 ```
 docs/
-├── README.md               # 文档入口
-├── architecture/           # 架构设计（稳定层）
-├── features/               # 功能实现（动态层）
-├── implementation/         # 实施报告（项目层）
-├── bugs/                   # 问题记录（项目层）
-└── roadmap.md              # 项目路线图（项目层）
+├── README.md               # Documentation entry point
+├── architecture/           # Architecture design (stable)
+├── features/               # Feature implementation (dynamic)
+├── implementation/         # Implementation reports (project)
+├── bugs/                   # Bug records (project)
+└── roadmap.md              # Project roadmap
 ```
 
-### 更新文档的时机
+### When to Update Docs
 
-1. **完成新功能时**：更新对应功能文档的状态
-2. **完成阶段时**：更新 roadmap.md 和 README.md
-3. **实施重大变更时**：创建实施报告
-4. **修复 Bug 时**：创建 bugs 记录
+1. **Feature complete**: Update corresponding feature doc status
+2. **Milestone complete**: Update roadmap.md and README.md
+3. **Major changes**: Create implementation report
+4. **Bug fixed**: Create bug record
 
-### 文档命名规范
+### Documentation Naming
 
 ```
-features/<feature-name>.md           # 功能文档
-implementation/<version>-complete.md # 实施报告
-bugs/<date>-<bug-name>.md            # Bug 记录
+features/<feature-name>.md           # Feature docs
+implementation/<version>-complete.md # Implementation reports
+bugs/<date>-<bug-name>.md            # Bug records
 ```
 
-### 状态标记
+### Status Tags
 
-- ✅ 已完成
-- 🔄 进行中
-- 📋 已规划
-- ⏳ 暂缓
+- ✅ Completed
+- 🔄 In Progress
+- 📋 Planned
+- ⏳ On Hold
 
-## 开发工作流
+## Development Workflow
 
-1. `cd app` - 进入应用目录
-2. 运行 `npm install` 安装依赖
-3. `npm run dev` 启动 Vite 开发服务器
-4. `npm run start` 启动完整 Electron 应用
-5. 提交前运行 `npm run lint` 和 `npm run format`
-6. 运行 `npm run test:unit` 验证测试通过
+1. `cd app` - Always work from app directory
+2. `npm install` - Install dependencies if needed
+3. `npm run dev` - Start Vite dev server
+4. `npm run start` - Start full Electron app
+5. Before commit: `npm run lint` and `npm run format`
+6. Verify tests: `npm run test:unit`
 
-## 相关文档
+## Git Guidelines
 
-- [CLAUDE.md](./CLAUDE.md) - 开发原则
-- [docs/README.md](./docs/README.md) - 文档入口
-- [docs/architecture/tech-stack.md](./docs/architecture/tech-stack.md) - 技术栈详情
+- **Atomic commits**: One feature/fix per commit
+- **Commit messages in Chinese**: Use conventional commits
+- **Branch from main**: Create feature branches
+- **No direct commits to main**: Use PRs when possible
+
+**Commit message format**:
+```
+<type>: <description in Chinese>
+
+<body if needed>
+```
+
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
+
+## Related Documents
+
+- [CLAUDE.md](./CLAUDE.md) - Development principles
+- [docs/README.md](./docs/README.md) - Documentation entry
+- [docs/architecture/tech-stack.md](./docs/architecture/tech-stack.md) - Tech stack details
+- [app/package.json](./app/package.json) - Scripts and dependencies
+
+## Cursor/Copilot Rules
+
+No `.cursorrules` or `.github/copilot-instructions.md` found. Follow this AGENTS.md as the primary guide.
+

@@ -88,30 +88,30 @@ export const useSearchStore = defineStore(
       const workspaceId = searchScope.value === 'all' ? null : searchScope.value
       const response = await vectorStore.searchVectors(query.value, 10, workspaceId)
 
-      return response.results.map(r => ({
+      return response.results.map((r) => ({
         id: r.file_path,
         name: r.file_name,
         path: r.file_path,
         snippet: r.content,
         matchType: 'vector',
         score: r.score,
-        chunkIndex: r.chunk_index
+        chunkIndex: r.chunk_index,
       }))
     }
 
     async function performHybridSearch() {
       const [fulltextResults, vectorResults] = await Promise.all([
         performFulltextSearch(),
-        performVectorSearch()
+        performVectorSearch(),
       ])
 
       const merged = new Map()
 
-      fulltextResults.forEach(r => {
+      fulltextResults.forEach((r) => {
         merged.set(r.id, { ...r, ftScore: 1 })
       })
 
-      vectorResults.forEach(r => {
+      vectorResults.forEach((r) => {
         const existing = merged.get(r.id)
         if (existing) {
           existing.score = (existing.score || 0) + r.score * 0.7
@@ -121,7 +121,9 @@ export const useSearchStore = defineStore(
         }
       })
 
-      return Array.from(merged.values()).sort((a, b) => (b.score || b.ftScore) - (a.score || a.ftScore))
+      return Array.from(merged.values()).sort(
+        (a, b) => (b.score || b.ftScore) - (a.score || a.ftScore),
+      )
     }
 
     async function performSearch() {

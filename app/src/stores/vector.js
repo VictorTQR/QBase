@@ -11,22 +11,37 @@ export const useVectorStore = defineStore(
     const currentIndexingFile = ref('')
     const error = ref(null)
     const stats = ref(null)
+    const indexedFiles = ref({})
 
     async function indexDocument(filePath, fileName, content, workspaceId) {
       isIndexing.value = true
       currentIndexingFile.value = fileName
       error.value = null
 
+      const requestParams = {
+        file_path: filePath,
+        file_name: fileName,
+        content,
+        workspace_id: workspaceId || '',
+      }
+
+      console.log('[VectorStore] 准备索引文档，请求参数:', requestParams)
+      console.log('[VectorStore] content 长度:', content?.length || 0)
+      console.log('[VectorStore] workspace_id (处理后):', requestParams.workspace_id)
+
       try {
-        const result = await VectorBackendApi.indexDocument({
-          file_path: filePath,
-          file_name: fileName,
-          content,
-          workspace_id: workspaceId
-        })
+        const result = await VectorBackendApi.indexDocument(requestParams)
+        console.log('[VectorStore] 索引成功:', result)
+        indexedFiles.value[filePath] = true
         await loadStats()
         return result
       } catch (err) {
+        console.error('[VectorStore] 索引失败:', err)
+        console.error('[VectorStore] 错误详情:', {
+          message: err.message,
+          response: err.response,
+          status: err.status,
+        })
         error.value = err.message
         throw err
       } finally {
@@ -35,16 +50,76 @@ export const useVectorStore = defineStore(
       }
     }
 
+    async function indexBatch(tasks, getExtractedTextFn, workspaceId = null) {
+      isIndexing.value = true
+      indexingProgress.value = 0
+      indexingTotal.value = tasks.length
+      error.value = null
+      const results = []
+      const failed = []
+
+      try {
+        for (let i = 0; i < tasks.length; i++) {
+          const task = tasks[i]
+          currentIndexingFile.value = task.file_name
+          indexingProgress.value = i + 1
+
+          try {
+            const content = await getExtractedTextFn(task.id)
+            if (content) {
+              const result = await indexDocument(
+                task.file_path,
+                task.file_name,
+                content,
+                workspaceId,
+              )
+              results.push({ task, result })
+            } else {
+              failed.push({ task, error: '无法获取提取的文本' })
+            }
+          } catch (err) {
+            failed.push({ task, error: err.message })
+          }
+        }
+
+        await loadStats()
+        return { success: true, results, failed }
+      } catch (err) {
+        error.value = err.message
+        throw err
+      } finally {
+        isIndexing.value = false
+        indexingProgress.value = 0
+        indexingTotal.value = 0
+        currentIndexingFile.value = ''
+      }
+    }
+
+    function isFileIndexed(filePath) {
+      return !!indexedFiles.value[filePath]
+    }
+
+    function markFileIndexed(filePath) {
+      indexedFiles.value[filePath] = true
+    }
+
+    function unmarkFileIndexed(filePath) {
+      delete indexedFiles.value[filePath]
+    }
+
     async function searchVectors(query, topK = 10, workspaceId = null) {
       return await VectorBackendApi.searchVectors({
         query,
         top_k: topK,
-        workspace_id: workspaceId
+        workspace_id: workspaceId,
       })
     }
 
     async function deleteDocumentChunks(filePath) {
-      return await VectorBackendApi.deleteDocumentChunks(filePath)
+      const result = await VectorBackendApi.deleteDocumentChunks(filePath)
+      unmarkFileIndexed(filePath)
+      await loadStats()
+      return result
     }
 
     async function loadStats() {
@@ -55,6 +130,7 @@ export const useVectorStore = defineStore(
     async function clearAll() {
       const result = await VectorBackendApi.clearAllVectors()
       stats.value = null
+      indexedFiles.value = {}
       return result
     }
 
@@ -65,17 +141,22 @@ export const useVectorStore = defineStore(
       currentIndexingFile,
       error,
       stats,
+      indexedFiles,
       indexDocument,
+      indexBatch,
+      isFileIndexed,
+      markFileIndexed,
+      unmarkFileIndexed,
       searchVectors,
       deleteDocumentChunks,
       loadStats,
-      clearAll
+      clearAll,
     }
   },
   {
     persist: {
       key: 'qbase-vector',
-      paths: []
-    }
-  }
+      paths: ['indexedFiles'],
+    },
+  },
 )

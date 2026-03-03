@@ -3,6 +3,15 @@
     <div class="view-header">
       <h2>已解析文档</h2>
       <div class="header-tools">
+        <el-button
+          type="primary"
+          size="small"
+          :disabled="doneTasksWithoutIndex.length === 0 || vectorStore.isIndexing"
+          :loading="vectorStore.isIndexing"
+          @click="handleBatchIndex"
+        >
+          批量索引向量
+        </el-button>
         <el-input
           v-model="searchText"
           placeholder="搜索文档..."
@@ -37,17 +46,40 @@
             <Clock v-else-if="task.state === 'pending'" />
             <CircleClose v-else />
           </el-icon>
-          <el-tag :type="parseStore.getStateType(task.state)" size="small">
-            {{ parseStore.getStateLabel(task.state) }}
-          </el-tag>
+          <div class="header-tags">
+            <el-tag :type="parseStore.getStateType(task.state)" size="small">
+              {{ parseStore.getStateLabel(task.state) }}
+            </el-tag>
+            <el-tag
+              v-if="task.state === 'done'"
+              :type="vectorStore.isFileIndexed(task.file_path) ? 'success' : 'info'"
+              size="small"
+            >
+              {{ vectorStore.isFileIndexed(task.file_path) ? '已索引' : '未索引' }}
+            </el-tag>
+          </div>
         </div>
         <div class="card-body">
           <div class="document-title">{{ task.file_name }}</div>
-          <div class="document-path" :title="task.file_path">{{ task.file_path || '未知路径' }}</div>
+          <div class="document-path" :title="task.file_path">
+            {{ task.file_path || '未知路径' }}
+          </div>
         </div>
         <div class="card-footer">
-          <span class="file-hash" v-if="task.file_hash">{{ task.file_hash.substring(0, 16) }}...</span>
+          <span class="file-hash" v-if="task.file_hash"
+            >{{ task.file_hash.substring(0, 16) }}...</span
+          >
           <span class="parser-type">{{ task.parser_type || 'mineru' }}</span>
+          <el-button
+            v-if="task.state === 'done'"
+            type="primary"
+            size="small"
+            link
+            :loading="vectorStore.isIndexing && vectorStore.currentIndexingFile === task.file_name"
+            @click.stop="handleIndexDocument(task)"
+          >
+            索引向量
+          </el-button>
         </div>
       </div>
     </div>
@@ -57,12 +89,15 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { CircleCheck, Loading, Clock, CircleClose } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { useParseStore } from '@/stores/parse'
+import { useVectorStore } from '@/stores/vector'
 import ParseDetailsDrawer from './ParseDetailsDrawer.vue'
 
 const parseStore = useParseStore()
+const vectorStore = useVectorStore()
 const searchText = ref('')
 const statusFilter = ref('')
 const drawerVisible = ref(false)
@@ -72,24 +107,78 @@ const filteredTasks = computed(() => {
   let result = [...parseStore.tasks]
 
   if (statusFilter.value) {
-    result = result.filter(task => task.state === statusFilter.value)
+    result = result.filter((task) => task.state === statusFilter.value)
   }
 
   if (searchText.value) {
     const search = searchText.value.toLowerCase()
-    result = result.filter(task =>
-      (task.file_name && task.file_name.toLowerCase().includes(search)) ||
-      (task.file_path && task.file_path.toLowerCase().includes(search))
+    result = result.filter(
+      (task) =>
+        (task.file_name && task.file_name.toLowerCase().includes(search)) ||
+        (task.file_path && task.file_path.toLowerCase().includes(search)),
     )
   }
 
   return result
 })
 
+const doneTasksWithoutIndex = computed(() => {
+  return parseStore.doneTasks.filter((task) => !vectorStore.isFileIndexed(task.file_path))
+})
+
 function handleSelectTask(task) {
   selectedTask.value = task
   drawerVisible.value = true
 }
+
+async function handleIndexDocument(task) {
+  try {
+    const content = await parseStore.getTaskResult(task.id)
+    if (!content || !content.markdown_content) {
+      ElMessage.warning('无法获取文档内容')
+      return
+    }
+
+    await vectorStore.indexDocument(task.file_path, task.file_name, content.markdown_content, null)
+    ElMessage.success(`已成功索引 ${task.file_name}`)
+  } catch (err) {
+    ElMessage.error(`索引失败: ${err.message}`)
+  }
+}
+
+async function handleBatchIndex() {
+  if (doneTasksWithoutIndex.value.length === 0) {
+    ElMessage.warning('没有需要索引的文档')
+    return
+  }
+
+  try {
+    const result = await vectorStore.indexBatch(
+      doneTasksWithoutIndex.value,
+      async (taskId) => {
+        const content = await parseStore.getTaskResult(taskId)
+        return content?.markdown_content || null
+      },
+      null,
+    )
+
+    if (result.failed.length > 0) {
+      ElMessage.warning(`成功索引 ${result.results.length} 个文档，失败 ${result.failed.length} 个`)
+    } else {
+      ElMessage.success(`成功索引 ${result.results.length} 个文档`)
+    }
+  } catch (err) {
+    ElMessage.error(`批量索引失败: ${err.message}`)
+  }
+}
+
+onMounted(async () => {
+  try {
+    await vectorStore.loadStats()
+  } catch (err) {
+    console.error('加载向量统计失败:', err)
+  }
+})
 </script>
 
 <style scoped>
@@ -117,6 +206,7 @@ function handleSelectTask(task) {
 .header-tools {
   display: flex;
   gap: 12px;
+  align-items: center;
 }
 
 .empty-state {
@@ -149,6 +239,11 @@ function handleSelectTask(task) {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.header-tags {
+  display: flex;
+  gap: 8px;
 }
 
 .status-icon {
@@ -199,9 +294,15 @@ function handleSelectTask(task) {
 
 .card-footer {
   display: flex;
-  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
   padding-top: 12px;
   border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.card-footer .footer-left {
+  display: flex;
+  gap: 12px;
 }
 
 .card-footer span {

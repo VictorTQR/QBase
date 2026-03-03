@@ -32,7 +32,7 @@ class MinerUApi {
   async uploadAndParseFile(file) {
     const formData = new FormData()
     formData.append('file', file)
-    
+
     const request = this.backend.client.post('/api/mineru/parse', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
@@ -76,7 +76,7 @@ class AudioApi {
     if (config.model) {
       formData.append('model', config.model)
     }
-    
+
     const request = this.backend.client.post('/api/audio/transcribe-upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })

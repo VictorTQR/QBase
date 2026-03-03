@@ -19,6 +19,23 @@
       </el-alert>
     </div>
 
+    <div v-if="vectorStore.isIndexing" class="indexing-progress-banner">
+      <el-alert type="info" :closable="false">
+        <div class="indexing-content">
+          <span class="indexing-text">
+            正在索引: {{ vectorStore.currentIndexingFile }} ({{ vectorStore.indexingProgress }}/{{
+              vectorStore.indexingTotal
+            }})
+          </span>
+          <el-progress
+            :percentage="indexingPercentage"
+            :stroke-width="8"
+            style="width: 200px; margin-left: 16px"
+          />
+        </div>
+      </el-alert>
+    </div>
+
     <div class="page-content">
       <ParseSidebar v-model="activeTab" />
       <div class="content-panel">
@@ -33,6 +50,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, Refresh } from '@element-plus/icons-vue'
 import { useParseStore } from '@/stores/parse'
+import { useVectorStore } from '@/stores/vector'
 import ParseSidebar from '@/components/Layout/ParseSidebar.vue'
 import ParseQueueView from '@/components/parse/ParseQueueView.vue'
 import ParseDocumentsView from '@/components/parse/ParseDocumentsView.vue'
@@ -40,6 +58,7 @@ import ParseStatsView from '@/components/parse/ParseStatsView.vue'
 
 const router = useRouter()
 const parseStore = useParseStore()
+const vectorStore = useVectorStore()
 const activeTab = ref('queue')
 
 const componentMap = {
@@ -50,9 +69,19 @@ const componentMap = {
 
 const currentComponent = computed(() => componentMap[activeTab.value] || ParseQueueView)
 
+const indexingPercentage = computed(() => {
+  if (vectorStore.indexingTotal === 0) return 0
+  return Math.round((vectorStore.indexingProgress / vectorStore.indexingTotal) * 100)
+})
+
 onMounted(async () => {
   await parseStore.fetchTasks()
   await parseStore.fetchStats()
+  try {
+    await vectorStore.loadStats()
+  } catch (err) {
+    console.error('加载向量统计失败:', err)
+  }
 })
 
 function handleBack() {
@@ -62,6 +91,11 @@ function handleBack() {
 async function handleRefresh() {
   await parseStore.fetchTasks()
   await parseStore.fetchStats()
+  try {
+    await vectorStore.loadStats()
+  } catch (err) {
+    console.error('加载向量统计失败:', err)
+  }
 }
 </script>
 
@@ -95,6 +129,21 @@ async function handleRefresh() {
 
 .error-banner {
   padding: 8px 16px;
+}
+
+.indexing-progress-banner {
+  padding: 8px 16px;
+}
+
+.indexing-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.indexing-text {
+  font-size: 14px;
+  color: var(--el-text-color-primary);
 }
 
 .page-content {

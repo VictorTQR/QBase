@@ -10,7 +10,7 @@ export const useParseStore = defineStore('parse', () => {
     pending: 0,
     running: 0,
     done: 0,
-    failed: 0
+    failed: 0,
   })
   const isLoading = ref(false)
   const error = ref(null)
@@ -20,9 +20,9 @@ export const useParseStore = defineStore('parse', () => {
       pending: [],
       running: [],
       done: [],
-      failed: []
+      failed: [],
     }
-    tasks.value.forEach(task => {
+    tasks.value.forEach((task) => {
       if (groups[task.state]) {
         groups[task.state].push(task)
       }
@@ -53,7 +53,7 @@ export const useParseStore = defineStore('parse', () => {
   async function fetchTask(taskId) {
     try {
       const task = await ParseBackendApi.getTask(taskId)
-      const index = tasks.value.findIndex(t => t.id === taskId)
+      const index = tasks.value.findIndex((t) => t.id === taskId)
       if (index !== -1) {
         tasks.value[index] = task
       }
@@ -122,7 +122,7 @@ export const useParseStore = defineStore('parse', () => {
       } else if (task.state === 'failed') {
         return { success: false, error: task.error_msg, task }
       }
-      await new Promise(resolve => setTimeout(resolve, interval))
+      await new Promise((resolve) => setTimeout(resolve, interval))
     }
     return { success: false, error: '超时' }
   }
@@ -132,7 +132,7 @@ export const useParseStore = defineStore('parse', () => {
       done: 'success',
       running: 'primary',
       pending: 'warning',
-      failed: 'danger'
+      failed: 'danger',
     }
     return map[state] || 'info'
   }
@@ -142,7 +142,7 @@ export const useParseStore = defineStore('parse', () => {
       done: '已完成',
       running: '解析中',
       pending: '待解析',
-      failed: '失败'
+      failed: '失败',
     }
     return map[state] || state
   }

@@ -59,12 +59,12 @@ import { computed } from 'vue'
 const props = defineProps({
   visible: {
     type: Boolean,
-    default: false
+    default: false,
   },
   task: {
     type: Object,
-    default: null
-  }
+    default: null,
+  },
 })
 
 const emit = defineEmits(['update:visible', 'close'])
@@ -79,7 +79,7 @@ function getStateType(state) {
     done: 'success',
     running: 'primary',
     pending: 'warning',
-    failed: 'danger'
+    failed: 'danger',
   }
   return map[state] || 'info'
 }
@@ -89,7 +89,7 @@ function getStateLabel(state) {
     done: '已完成',
     running: '解析中',
     pending: '待解析',
-    failed: '失败'
+    failed: '失败',
   }
   return map[state] || state
 }

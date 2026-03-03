@@ -26,7 +26,13 @@
           </div>
         </div>
         <div v-if="showActions" class="file-actions">
-          <el-button v-if="!file.error" link type="primary" size="small" @click="$emit('parse', file)">
+          <el-button
+            v-if="!file.error"
+            link
+            type="primary"
+            size="small"
+            @click="$emit('parse', file)"
+          >
             解析
           </el-button>
           <el-button v-else link type="warning" size="small" @click="$emit('retry', file)">

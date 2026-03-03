@@ -12,7 +12,7 @@ export class TextExtractor {
             success: true,
             markdown: task.markdown_content,
             taskId: task.id,
-            isCached: true
+            isCached: true,
           }
         } else {
           const result = await ParseBackendApi.getTaskResult(task.id)
@@ -20,7 +20,7 @@ export class TextExtractor {
             success: true,
             markdown: result.markdown_content,
             taskId: task.id,
-            isCached: true
+            isCached: true,
           }
         }
       }
@@ -33,7 +33,7 @@ export class TextExtractor {
             success: true,
             markdown: task.markdown_content,
             taskId: task.id,
-            isCached: true
+            isCached: true,
           }
         }
       }
@@ -44,19 +44,19 @@ export class TextExtractor {
         return {
           success: true,
           markdown: result.markdown_content,
-          taskId: task.id
+          taskId: task.id,
         }
       } else {
         return {
           success: false,
-          error: pollResult.error
+          error: pollResult.error,
         }
       }
     } catch (error) {
       console.error('文本提取失败:', error)
       return {
         success: false,
-        error: error.message
+        error: error.message,
       }
     }
   }
@@ -69,7 +69,7 @@ export class TextExtractor {
       } else if (task.state === 'failed') {
         return { success: false, error: task.error_msg, task }
       }
-      await new Promise(resolve => setTimeout(resolve, interval))
+      await new Promise((resolve) => setTimeout(resolve, interval))
     }
     return { success: false, error: '超时' }
   }

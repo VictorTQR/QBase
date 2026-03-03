@@ -74,8 +74,12 @@
                   <el-tag v-if="result.matchType === 'name'" size="small" type="info"
                     >文件名</el-tag
                   >
-                  <el-tag v-else-if="result.matchType === 'content'" size="small" type="success">内容</el-tag>
-                  <el-tag v-else-if="result.matchType === 'vector'" size="small" type="warning">向量</el-tag>
+                  <el-tag v-else-if="result.matchType === 'content'" size="small" type="success"
+                    >内容</el-tag
+                  >
+                  <el-tag v-else-if="result.matchType === 'vector'" size="small" type="warning"
+                    >向量</el-tag
+                  >
                   <el-tag v-if="result.score !== undefined" size="small" type="warning">
                     {{ (result.score * 100).toFixed(0) }}%
                   </el-tag>

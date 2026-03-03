@@ -5,7 +5,7 @@
 
 ## 概述
 
-文档解析管理功能提供了一个独立的全屏界面来管理文档的文本提取任务，支持 PDF 和 Markdown 文件的解析，提供队列管理、文档搜索、统计分析等功能。
+文档解析管理功能提供了一个独立的全屏界面来管理文档的文本提取任务，支持 PDF 和 Markdown 文件的解析，提供队列管理、文档搜索、统计分析、向量索引等功能。
 
 ## 功能特性
 
@@ -27,6 +27,14 @@
 └──────────┴──────────────────────────────────────────────────┘
 ```
 
+### 向量索引进度展示
+
+当正在进行向量索引时，页面顶部会显示进度横幅：
+
+```
+正在索引: document.md (3/10)  [████████░░░░] 30%
+```
+
 ### 三大功能模块
 
 #### 1. 队列管理
@@ -44,14 +52,21 @@
 - **搜索过滤**: 按文件名关键词搜索
 - **状态筛选**: 按解析状态筛选（全部/已完成/解析中/待解析/失败）
 - **详情抽屉**: 点击文档卡片打开右侧抽屉查看详情
+- **向量索引功能**:
+  - 「批量索引向量」按钮：一键索引所有未索引文档
+  - 每个文档卡片的「索引向量」按钮
+  - 向量状态标签（已索引/未索引）
 
 #### 3. 解析统计
 
-- **统计卡片**: 总计、已完成、待解析、失败（4个卡片）
+- **解析统计卡片**: 总计、已完成、待解析、失败（4个卡片）
+- **向量统计卡片**: 向量分块数、已索引文档数（2个卡片）
 - **状态分布**: 可视化彩色进度条
 - **快速操作**: 
   - 批量解析待处理文件：启动所有待解析任务
   - 重试失败文件：重置失败任务状态并重新解析
+  - 批量索引向量：一键索引所有未索引文档
+  - 清空所有向量：清空 LanceDB 中的所有向量数据
 - **图例说明**: 各状态颜色和数量说明
 
 ### 解析详情抽屉
@@ -82,18 +97,19 @@
 ```
 app/src/
 ├── views/
-│   └── ParseManagement.vue          # 解析管理主页面
+│   └── ParseManagement.vue          # 解析管理主页面（含索引进度展示）
 ├── components/
 │   ├── Layout/
 │   │   └── ParseSidebar.vue         # 左侧功能导航
 │   └── parse/                       # 解析管理组件目录
 │       ├── ParseQueueView.vue        # 队列管理视图
-│       ├── ParseDocumentsView.vue    # 已解析文档视图
-│       ├── ParseStatsView.vue        # 解析统计视图
+│       ├── ParseDocumentsView.vue    # 已解析文档视图（含向量索引）
+│       ├── ParseStatsView.vue        # 解析统计视图（含向量统计）
 │       ├── FileList.vue              # 通用文件列表
 │       └── ParseDetailsDrawer.vue    # 详情抽屉（含文本预览和导出）
 ├── stores/
-│   └── parse.js                      # useParseStore (已更新)
+│   ├── parse.js                      # useParseStore (已更新)
+│   └── vector.js                     # useVectorStore (已增强)
 └── utils/
     └── export.js                     # 导出工具模块（新增）
 ```
@@ -106,6 +122,14 @@ app/src/
 
 - **IndexedDB（Dexie.js）**：存储提取的大文本内容
   - `extractedTexts` - 提取的文本内容
+
+- **LocalStorage（Pinia 持久化）**：存储向量索引状态
+  - `indexedFiles` Set - 已索引文件列表
+  - 使用 `useVectorStore` 管理
+
+- **后端 LanceDB**：存储向量数据
+  - `document_chunks` 表 - 文档分块和向量
+  - 通过 FastAPI `/api/vector/*` 访问
 
 ### 字段统一
 
@@ -173,4 +197,7 @@ app/src/
 - [实施报告](../implementation/2026-03-02-parse-management-refactor.md)
 - [实施计划](../plans/2026-03-02-parse-management-refactor.md)
 - [导出和预览功能实施计划](../plans/2026-03-02-export-preview-features.md)
+- [向量索引集成实施报告](../implementation/2026-03-03-vector-index-integration.md)
+- [向量搜索前端实施报告](../implementation/2026-03-03-vector-search-frontend.md)
+- [向量搜索功能设计](../plans/2026-03-03-vector-search-lancedb-backend.md)
 - [旧版设计文档](../plans/2026-02-27-parse-manager-design.md)
