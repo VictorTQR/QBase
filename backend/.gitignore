@@ -35,6 +35,9 @@ ENV/
 # Storage
 storage/
 *.zip
+*.db
+*.sqlite
+*.sqlite3
 
 # Environment
 .env

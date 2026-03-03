@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     AUDIO_CHUNK_DURATION_MINUTES: int = 50
     AUDIO_MAX_FILE_SIZE_MB: int = 50
 
+    # 数据库配置
+    DATABASE_URL: str = "sqlite+aiosqlite:///./qbase_parse.db"
+
     class Config:
         env_file = ".env"
 
