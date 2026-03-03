@@ -57,8 +57,40 @@ class MinerUApi {
   }
 }
 
+class AudioApi {
+  constructor(backendService) {
+    this.backend = backendService
+  }
+
+  async transcribeAudio(filePath, config = {}) {
+    const request = this.backend.client.post('/api/audio/transcribe', {
+      file_path: filePath,
+      model: config.model,
+      api_key: config.apiKey,
+      base_url: config.baseUrl
+    })
+    return await request.json()
+  }
+
+  async getTaskStatus(taskId) {
+    const request = this.backend.client.get(`/api/audio/tasks/${taskId}`)
+    return await request.json()
+  }
+
+  async listTasks() {
+    const request = this.backend.client.get('/api/audio/tasks')
+    return await request.json()
+  }
+
+  async deleteTask(taskId) {
+    const request = this.backend.client.delete(`/api/audio/tasks/${taskId}`)
+    return await request.json()
+  }
+}
+
 const backendService = new BackendService()
 const mineruApi = new MinerUApi(backendService)
+const audioApi = new AudioApi(backendService)
 
-export { backendService, mineruApi, BackendService, MinerUApi }
+export { backendService, mineruApi, audioApi, BackendService, MinerUApi, AudioApi }
 export default backendService
