@@ -47,6 +47,16 @@ class AudioProcessor(FileProcessor):
         # 创建任务记录
         task = await self._create_task(task_id, file_path, file_hash)
 
+        # 检查是否是去重返回（task_id 不同）
+        if task.task_id != task_id:
+            logger.info(f"文件已存在，返回已有任务: {task.task_id}")
+            # 直接返回已有任务信息，不启动后台处理
+            return {
+                "task_id": task.task_id,
+                "status": task.status,
+                "message": "音频转录任务已存在",
+            }
+
         # 启动后台处理（不阻塞请求）
         import asyncio
 
