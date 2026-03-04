@@ -15,6 +15,7 @@ from audio.chunker import AudioChunker
 from audio.task_manager import AudioTaskManager
 from audio.utils import is_audio_file
 from models.audio_schemas import AudioTaskStatus, AudioChunkInfo, AudioTaskInfo
+from utils.file_hash import compute_bytes_hash, compute_file_hash
 
 
 class AudioProcessor(FileProcessor):
@@ -26,12 +27,25 @@ class AudioProcessor(FileProcessor):
         self.task_manager = task_manager
         self.chunker = chunker or AudioChunker()
 
-    async def process(self, file_path: str, config: Optional[dict] = None) -> dict:
+    async def process(
+        self,
+        file_path: str,
+        config: Optional[dict] = None,
+        file_content: Optional[bytes] = None,
+    ) -> dict:
         config = config or {}
         task_id = str(uuid.uuid4())
 
+        # 计算文件 hash
+        if file_content:
+            file_hash = compute_bytes_hash(file_content)
+        else:
+            file_hash = await compute_file_hash(file_path)
+
+        logger.debug(f"文件 hash 计算完成: {file_hash}")
+
         # 创建任务记录
-        task = await self._create_task(task_id, file_path)
+        task = await self._create_task(task_id, file_path, file_hash)
 
         # 启动后台处理（不阻塞请求）
         import asyncio
@@ -44,7 +58,9 @@ class AudioProcessor(FileProcessor):
             "message": "音频转录任务已创建",
         }
 
-    async def _create_task(self, task_id: str, file_path: str) -> AudioTaskInfo:
+    async def _create_task(
+        self, task_id: str, file_path: str, file_hash: Optional[str] = None
+    ) -> AudioTaskInfo:
         logger.debug(f"创建任务: task_id={task_id}, file_path={file_path}")
         file_path_obj = Path(file_path)
 
@@ -58,6 +74,11 @@ class AudioProcessor(FileProcessor):
         total_duration = await self.chunker.get_audio_duration(file_path)
         logger.debug(f"音频时长: {total_duration} 秒")
 
+        # 如果没有提供 hash，计算它
+        if not file_hash:
+            file_hash = await compute_file_hash(file_path)
+            logger.debug(f"文件 hash 计算完成（备用）: {file_hash}")
+
         task = AudioTaskInfo(
             task_id=task_id,
             file_path=file_path,
@@ -69,7 +90,7 @@ class AudioProcessor(FileProcessor):
             updated_at=time.time(),
         )
 
-        await self.task_manager.add_task(task)
+        await self.task_manager.add_task(task, file_hash=file_hash)
         return task
 
     async def _process_task(self, task_id: str, file_path: str, config: dict):
