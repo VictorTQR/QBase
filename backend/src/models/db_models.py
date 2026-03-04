@@ -16,7 +16,7 @@ class ParseTask(Base):
     state = Column(String, nullable=False, index=True)
     error_msg = Column(Text, nullable=True)
     markdown_content = Column(Text, nullable=True)
-    metadata = Column(Text, nullable=True)
+    task_metadata = Column(Text, nullable=True)
     result_file_path = Column(String, nullable=True)
     result_file_format = Column(String, nullable=True, default="zip")
     created_at = Column(String, nullable=False)

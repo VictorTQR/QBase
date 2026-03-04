@@ -66,9 +66,9 @@ class AudioTaskManager:
         import json
 
         metadata = {}
-        if task.metadata:
+        if task.task_metadata:
             try:
-                metadata = json.loads(task.metadata)
+                metadata = json.loads(task.task_metadata)
             except:
                 pass
 
@@ -146,7 +146,7 @@ class AudioTaskManager:
                 "state": self._map_status_to_state(task_info.status),
                 "error_msg": task_info.error,
                 "markdown_content": task_info.transcription,
-                "metadata": json.dumps(metadata, ensure_ascii=False),
+                "task_metadata": json.dumps(metadata, ensure_ascii=False),
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat(),
             }
@@ -236,7 +236,7 @@ class AudioTaskManager:
                 "state": self._map_status_to_state(task_info.status),
                 "error_msg": task_info.error,
                 "markdown_content": task_info.transcription,
-                "metadata": json.dumps(metadata, ensure_ascii=False),
+                "task_metadata": json.dumps(metadata, ensure_ascii=False),
             }
 
             task = await repo.update(task_info.task_id, updates)
@@ -289,9 +289,10 @@ class AudioTaskManager:
         repo, session = await self._get_repo()
         try:
             from sqlalchemy import delete
+            from models.db_models import ParseTask
 
-            await self.db.execute(delete(ParseTask).where(ParseTask.id == task_id))
-            await self.db.commit()
+            await session.execute(delete(ParseTask).where(ParseTask.id == task_id))
+            await session.commit()
             logger.info(f"删除音频任务: {task_id}")
         finally:
             await session.close()

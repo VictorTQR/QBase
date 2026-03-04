@@ -206,7 +206,7 @@ class TaskManager:
             "created_at": task.created_at,
             "updated_at": task.updated_at,
             "file_type": getattr(task, "file_type", "document"),
-            "metadata": getattr(task, "metadata", None),
+            "metadata": getattr(task, "task_metadata", None),
         }
 
     async def poll_task_status(self, task_id: str) -> None:
