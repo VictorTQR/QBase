@@ -73,6 +73,7 @@ class TaskManager:
             "file_hash": file_hash,
             "file_size": file_size,
             "parser_type": "mineru",
+            "file_type": "document",
             "state": "pending",
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
@@ -204,6 +205,8 @@ class TaskManager:
             "result_file_format": task.result_file_format,
             "created_at": task.created_at,
             "updated_at": task.updated_at,
+            "file_type": getattr(task, "file_type", "document"),
+            "metadata": getattr(task, "metadata", None),
         }
 
     async def poll_task_status(self, task_id: str) -> None:
