@@ -69,12 +69,12 @@ class AudioProcessor(FileProcessor):
             updated_at=time.time(),
         )
 
-        self.task_manager.add_task(task)
+        await self.task_manager.add_task(task)
         return task
 
     async def _process_task(self, task_id: str, file_path: str, config: dict):
         try:
-            task = self.task_manager.get_task(task_id)
+            task = await self.task_manager.get_task(task_id)
             if not task:
                 logger.error(f"任务不存在: {task_id}")
                 return
@@ -82,7 +82,7 @@ class AudioProcessor(FileProcessor):
             # 更新状态为分块中
             task.status = AudioTaskStatus.CHUNKING
             task.updated_at = time.time()
-            self.task_manager.update_task(task)
+            await self.task_manager.update_task(task)
 
             # 1. 音频分块
             chunks = await self.chunker.chunk_audio(file_path, task_id)
@@ -102,7 +102,7 @@ class AudioProcessor(FileProcessor):
             task.chunks = chunk_infos
             task.status = AudioTaskStatus.TRANSCRIBING
             task.updated_at = time.time()
-            self.task_manager.update_task(task)
+            await self.task_manager.update_task(task)
 
             # 2. 创建 ASR 提供商
             provider = SiliconFlowASRProvider(
@@ -117,7 +117,7 @@ class AudioProcessor(FileProcessor):
                 try:
                     chunk_info.status = AudioTaskStatus.TRANSCRIBING
                     task.updated_at = time.time()
-                    self.task_manager.update_task(task)
+                    await self.task_manager.update_task(task)
 
                     transcription = await provider.transcribe(
                         chunk_info.file_path, model=config.get("model")
@@ -137,14 +137,14 @@ class AudioProcessor(FileProcessor):
                     logger.error(f"分块 {i + 1} 转录失败: {e}")
 
                 task.updated_at = time.time()
-                self.task_manager.update_task(task)
+                await self.task_manager.update_task(task)
 
             await provider.close()
 
             # 4. 合并转录结果
             task.status = AudioTaskStatus.MERGING
             task.updated_at = time.time()
-            self.task_manager.update_task(task)
+            await self.task_manager.update_task(task)
 
             from audio.utils import merge_transcriptions
 
@@ -152,7 +152,7 @@ class AudioProcessor(FileProcessor):
             task.transcription = final_transcription
             task.status = AudioTaskStatus.COMPLETED
             task.updated_at = time.time()
-            self.task_manager.update_task(task)
+            await self.task_manager.update_task(task)
 
             # 5. 清理分块文件
             self.chunker.cleanup_chunks(task_id)
@@ -163,12 +163,12 @@ class AudioProcessor(FileProcessor):
 
         except Exception as e:
             logger.error(f"任务 {task_id} 处理失败: {e}")
-            task = self.task_manager.get_task(task_id)
+            task = await self.task_manager.get_task(task_id)
             if task:
                 task.status = AudioTaskStatus.FAILED
                 task.error = str(e)
                 task.updated_at = time.time()
-                self.task_manager.update_task(task)
+                await self.task_manager.update_task(task)
 
     def supports(self, file_path: str) -> bool:
         return is_audio_file(file_path)
