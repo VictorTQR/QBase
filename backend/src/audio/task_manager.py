@@ -15,7 +15,7 @@ from models.audio_schemas import AudioTaskInfo, AudioTaskStatus, AudioChunkInfo
 
 
 class AudioTaskManager:
-    """音频任务管理器（数据库存储）"""
+    """音频任务管理器（数据库存储，纯异步）"""
 
     _instance: Optional["AudioTaskManager"] = None
     _lock = None
@@ -157,26 +157,8 @@ class AudioTaskManager:
         finally:
             await session.close()
 
-    def get_task(self, task_id: str) -> Optional[AudioTaskInfo]:
-        """获取音频任务（同步包装）"""
-        import asyncio
-
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # 如果在事件循环中，创建任务
-                task = asyncio.create_task(self._get_task_async(task_id))
-                return loop.run_until_complete(task)
-            else:
-                return loop.run_until_complete(self._get_task_async(task_id))
-        except RuntimeError:
-            # 如果没有事件循环，创建新的
-            import asyncio
-
-            return asyncio.run(self._get_task_async(task_id))
-
-    async def _get_task_async(self, task_id: str) -> Optional[AudioTaskInfo]:
-        """获取音频任务（异步实现）"""
+    async def get_task(self, task_id: str) -> Optional[AudioTaskInfo]:
+        """获取音频任务"""
         repo, session = await self._get_repo()
         try:
             task = await repo.get_by_id(task_id)
@@ -186,24 +168,8 @@ class AudioTaskManager:
         finally:
             await session.close()
 
-    def update_task(self, task_info: AudioTaskInfo):
-        """更新音频任务（同步包装）"""
-        import asyncio
-
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                task = asyncio.create_task(self._update_task_async(task_info))
-                return loop.run_until_complete(task)
-            else:
-                return loop.run_until_complete(self._update_task_async(task_info))
-        except RuntimeError:
-            import asyncio
-
-            return asyncio.run(self._update_task_async(task_info))
-
-    async def _update_task_async(self, task_info: AudioTaskInfo):
-        """更新音频任务（异步实现）"""
+    async def update_task(self, task_info: AudioTaskInfo):
+        """更新音频任务"""
         import json
 
         repo, session = await self._get_repo()
@@ -268,24 +234,8 @@ class AudioTaskManager:
         finally:
             await session.close()
 
-    def remove_task(self, task_id: str):
-        """删除音频任务（同步包装）"""
-        import asyncio
-
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                task = asyncio.create_task(self._remove_task_async(task_id))
-                loop.run_until_complete(task)
-            else:
-                loop.run_until_complete(self._remove_task_async(task_id))
-        except RuntimeError:
-            import asyncio
-
-            asyncio.run(self._remove_task_async(task_id))
-
-    async def _remove_task_async(self, task_id: str):
-        """删除音频任务（异步实现）"""
+    async def remove_task(self, task_id: str):
+        """删除音频任务"""
         repo, session = await self._get_repo()
         try:
             from sqlalchemy import delete
@@ -297,24 +247,8 @@ class AudioTaskManager:
         finally:
             await session.close()
 
-    def get_all_tasks(self) -> Dict[str, AudioTaskInfo]:
-        """获取所有音频任务（同步包装）"""
-        import asyncio
-
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                task = asyncio.create_task(self._get_all_tasks_async())
-                return loop.run_until_complete(task)
-            else:
-                return loop.run_until_complete(self._get_all_tasks_async())
-        except RuntimeError:
-            import asyncio
-
-            return asyncio.run(self._get_all_tasks_async())
-
-    async def _get_all_tasks_async(self) -> Dict[str, AudioTaskInfo]:
-        """获取所有音频任务（异步实现）"""
+    async def get_all_tasks(self) -> Dict[str, AudioTaskInfo]:
+        """获取所有音频任务"""
         repo, session = await self._get_repo()
         try:
             tasks = await repo.list_by_type("audio", limit=1000)
