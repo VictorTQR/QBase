@@ -113,13 +113,20 @@ class AudioTaskManager:
             updated_at=metadata.get("updated_at_timestamp", 0),
         )
 
-    async def add_task(self, task_info: AudioTaskInfo):
+    async def add_task(self, task_info: AudioTaskInfo, file_hash: Optional[str] = None):
         """添加音频任务到数据库"""
         import json
         import time
 
         repo, session = await self._get_repo()
         try:
+            # 去重检查
+            if file_hash:
+                existing = await repo.get_by_hash(file_hash)
+                if existing and existing.state == "done":
+                    logger.info(f"文件已解析，返回已有结果: {existing.id}")
+                    return existing
+
             metadata = {
                 "total_duration": task_info.total_duration,
                 "chunk_count": len(task_info.chunks),
@@ -147,7 +154,7 @@ class AudioTaskManager:
                 "batch_id": f"audio_{int(time.time())}",
                 "file_name": task_info.file_name,
                 "file_path": task_info.file_path,
-                "file_hash": f"audio_{task_info.task_id}",
+                "file_hash": file_hash or f"audio_{task_info.task_id}",
                 "file_size": task_info.total_size,
                 "parser_type": "siliconflow_asr",
                 "file_type": "audio",
