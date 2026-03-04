@@ -13,7 +13,7 @@ export const useVectorStore = defineStore(
     const stats = ref(null)
     const indexedFiles = ref({})
 
-    async function indexDocument(filePath, fileName, content, workspaceId) {
+    async function indexDocument(filePath, fileName, content, workspaceId, taskId) {
       isIndexing.value = true
       currentIndexingFile.value = fileName
       error.value = null
@@ -21,12 +21,18 @@ export const useVectorStore = defineStore(
       const requestParams = {
         file_path: filePath,
         file_name: fileName,
-        content,
         workspace_id: workspaceId || '',
       }
 
+      if (taskId) {
+        requestParams.task_id = taskId
+        console.log('[VectorStore] 使用 task_id 索引:', taskId)
+      } else {
+        requestParams.content = content
+        console.log('[VectorStore] 使用 content 索引，长度:', content?.length || 0)
+      }
+
       console.log('[VectorStore] 准备索引文档，请求参数:', requestParams)
-      console.log('[VectorStore] content 长度:', content?.length || 0)
       console.log('[VectorStore] workspace_id (处理后):', requestParams.workspace_id)
 
       try {
@@ -65,18 +71,14 @@ export const useVectorStore = defineStore(
           indexingProgress.value = i + 1
 
           try {
-            const content = await getExtractedTextFn(task.id)
-            if (content) {
-              const result = await indexDocument(
-                task.file_path,
-                task.file_name,
-                content,
-                workspaceId,
-              )
-              results.push({ task, result })
-            } else {
-              failed.push({ task, error: '无法获取提取的文本' })
-            }
+            const result = await indexDocument(
+              task.file_path,
+              task.file_name,
+              null,
+              workspaceId,
+              task.id,
+            )
+            results.push({ task, result })
           } catch (err) {
             failed.push({ task, error: err.message })
           }
