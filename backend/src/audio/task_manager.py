@@ -76,6 +76,16 @@ class AudioTaskManager:
         chunks = metadata.get("chunks", [])
         chunk_infos = []
         for chunk_data in chunks:
+            chunk_status_str = chunk_data.get("status", "pending")
+            # 将字符串状态转换为 AudioTaskStatus 枚举
+            from models.audio_schemas import AudioTaskStatus
+
+            chunk_status = AudioTaskStatus.PENDING
+            for status in AudioTaskStatus:
+                if status.value == chunk_status_str:
+                    chunk_status = status
+                    break
+
             chunk_infos.append(
                 AudioChunkInfo(
                     chunk_id=chunk_data.get("chunk_id", ""),
@@ -83,9 +93,7 @@ class AudioTaskManager:
                     start_time=chunk_data.get("start_time", 0),
                     end_time=chunk_data.get("end_time", 0),
                     duration=chunk_data.get("duration", 0),
-                    status=self._map_state_to_status(
-                        chunk_data.get("status", "pending")
-                    ),
+                    status=chunk_status,
                     transcription=chunk_data.get("transcription"),
                     error=chunk_data.get("error"),
                 )
