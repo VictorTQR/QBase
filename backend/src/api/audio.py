@@ -62,6 +62,7 @@ async def transcribe_audio_upload(
         result = await audio_processor.process(
             temp_file_path,
             config={"model": model} if model else None,
+            file_content=content,
         )
         logger.debug(f"audio_processor.process 返回结果: {result}")
 
