@@ -6,7 +6,7 @@ This document provides guidelines for AI coding agents working in the QBase repo
 
 QBase is a local knowledge base management system built with Vue 3 + Electron + FastAPI.
 
-**Current Version**: v1.0
+**Current Version**: v1.1
 
 **Key Features**:
 - Workspace management (add/remove folders)
@@ -22,13 +22,15 @@ QBase is a local knowledge base management system built with Vue 3 + Electron + 
 - Multi-turn conversation context
 - Multi-session management with persistence
 - Full-text search with content snippets
-- Vector search (LanceDB backend)
-- Hybrid search (full-text + vector)
+- Vector search (LanceDB backend) 🔄
+- Hybrid search (full-text + vector) 🔄
 - Smart flashcard generation
 - AI generation panel (flashcards, mind maps, summaries)
 - Document parse management
 - FastAPI backend integration
 - MinerU document parsing
+- Audio transcription (SiliconFlow ASR)
+- WebSocket real-time task updates
 - Pinia state persistence with Repository pattern
 
 ## Development Principles
