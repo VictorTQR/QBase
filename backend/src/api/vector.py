@@ -16,6 +16,8 @@ from vector import (
     VectorStatsResponse,
 )
 from config import settings
+from database import AsyncSessionLocal
+from repositories.parse_task_repository import ParseTaskRepository
 
 router = APIRouter(prefix="/api/vector", tags=["Vector"])
 
@@ -28,13 +30,10 @@ async def index_document(request: Request):
         logger.info(f"[Vector API] 收到索引请求，原始请求体: {body}")
         logger.info(f"[Vector API] file_path: {body.get('file_path')}")
         logger.info(f"[Vector API] file_name: {body.get('file_name')}")
-        logger.info(f"[Vector API] content 长度: {len(body.get('content', ''))}")
+        logger.info(f"[Vector API] task_id: {body.get('task_id')}")
         logger.info(
-            f"[Vector API] workspace_id: {body.get('workspace_id')} (类型: {type(body.get('workspace_id'))})"
+            f"[Vector API] content 长度: {len(body.get('content', '')) if body.get('content') else 'N/A'}"
         )
-        logger.info(f"[Vector API] content_type: {body.get('content_type')}")
-        logger.info(f"[Vector API] chunk_size: {body.get('chunk_size')}")
-        logger.info(f"[Vector API] chunk_overlap: {body.get('chunk_overlap')}")
 
         try:
             validated_request = VectorIndexRequest(**body)
@@ -46,6 +45,38 @@ async def index_document(request: Request):
                 detail={"error": "Validation failed", "details": e.errors()},
             )
 
+        # 获取内容：优先从 task_id 获取，其次使用请求中的 content
+        content = validated_request.content
+        if validated_request.task_id:
+            logger.info(
+                f"[Vector API] 从数据库获取内容，task_id: {validated_request.task_id}"
+            )
+            repo, session = AsyncSessionLocal(), None
+            try:
+                session = AsyncSessionLocal()
+                repo = ParseTaskRepository(session)
+                task = await repo.get_by_id(validated_request.task_id)
+                if task and task.markdown_content:
+                    content = task.markdown_content
+                    logger.info(
+                        f"[Vector API] 从数据库获取内容成功，长度: {len(content)}"
+                    )
+                else:
+                    logger.warning(
+                        f"[Vector API] 无法从数据库获取内容，task_id: {validated_request.task_id}"
+                    )
+            except Exception as e:
+                logger.error(f"[Vector API] 从数据库获取内容失败: {e}")
+            finally:
+                if session:
+                    await session.close()
+
+        if not content:
+            raise HTTPException(
+                status_code=400,
+                detail="Either content or task_id with valid content is required",
+            )
+
         chunk_size = validated_request.chunk_size or settings.VECTOR_CHUNK_SIZE
         chunk_overlap = validated_request.chunk_overlap or settings.VECTOR_CHUNK_OVERLAP
 
@@ -54,7 +85,7 @@ async def index_document(request: Request):
         )
 
         chunks = TextChunker.chunk(
-            validated_request.content,
+            content,
             {
                 "chunk_size": chunk_size,
                 "chunk_overlap": chunk_overlap,
