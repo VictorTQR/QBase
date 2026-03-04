@@ -125,7 +125,8 @@ class AudioTaskManager:
                 existing = await repo.get_by_hash(file_hash)
                 if existing and existing.state == "done":
                     logger.info(f"文件已解析，返回已有结果: {existing.id}")
-                    return existing
+                    # 将 ParseTask 转换为 AudioTaskInfo 返回
+                    return self._parse_task_to_audio_info(existing)
 
             metadata = {
                 "total_duration": task_info.total_duration,
@@ -168,7 +169,8 @@ class AudioTaskManager:
 
             task = await repo.create(task_data)
             logger.info(f"添加音频任务到数据库: {task.id}")
-            return task
+            # 将新创建的 ParseTask 转换为 AudioTaskInfo 返回
+            return self._parse_task_to_audio_info(task)
         finally:
             await session.close()
 
