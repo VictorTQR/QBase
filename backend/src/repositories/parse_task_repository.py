@@ -108,3 +108,38 @@ class ParseTaskRepository:
         count = result.rowcount
         logger.info(f"删除了所有 {count} 个任务")
         return count
+
+    async def list_by_type(
+        self, file_type: str, limit: int = 100, offset: int = 0
+    ) -> List[ParseTask]:
+        """按文件类型列出任务"""
+        result = await self.db.execute(
+            select(ParseTask)
+            .where(ParseTask.file_type == file_type)
+            .order_by(desc(ParseTask.created_at))
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(result.scalars().all())
+
+    async def get_stats_by_type(self, file_type: str) -> Dict[str, Any]:
+        """按文件类型获取统计"""
+        from sqlalchemy import func
+
+        total_result = await self.db.execute(
+            select(func.count(ParseTask.id)).where(ParseTask.file_type == file_type)
+        )
+        total = total_result.scalar()
+
+        states = ["pending", "running", "done", "failed"]
+        stats = {"total": total or 0}
+
+        for state in states:
+            result = await self.db.execute(
+                select(func.count(ParseTask.id))
+                .where(ParseTask.file_type == file_type)
+                .where(ParseTask.state == state)
+            )
+            stats[state] = result.scalar() or 0
+
+        return stats
