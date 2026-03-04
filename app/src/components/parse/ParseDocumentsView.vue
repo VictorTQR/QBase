@@ -133,13 +133,13 @@ function handleSelectTask(task) {
 
 async function handleIndexDocument(task) {
   try {
-    const content = await parseStore.getTaskResult(task.id)
-    if (!content || !content.markdown_content) {
-      ElMessage.warning('无法获取文档内容')
-      return
-    }
-
-    await vectorStore.indexDocument(task.file_path, task.file_name, content.markdown_content, null)
+    await vectorStore.indexDocument(
+      task.file_path, 
+      task.file_name, 
+      null, 
+      null,
+      task.id
+    )
     ElMessage.success(`已成功索引 ${task.file_name}`)
   } catch (err) {
     ElMessage.error(`索引失败: ${err.message}`)
@@ -155,10 +155,7 @@ async function handleBatchIndex() {
   try {
     const result = await vectorStore.indexBatch(
       doneTasksWithoutIndex.value,
-      async (taskId) => {
-        const content = await parseStore.getTaskResult(taskId)
-        return content?.markdown_content || null
-      },
+      null,
       null,
     )
 
