@@ -5,7 +5,8 @@ from typing import List, Optional, Dict, Any
 class VectorIndexRequest(BaseModel):
     file_path: str
     file_name: str
-    content: str
+    content: Optional[str] = None
+    task_id: Optional[str] = None
     workspace_id: Optional[str] = None
     content_type: Optional[str] = "text"
     chunk_size: Optional[int] = None
