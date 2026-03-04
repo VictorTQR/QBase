@@ -111,7 +111,7 @@ async def transcribe_audio_legacy(request: AudioTranscriptionRequest):
 @router.get("/tasks/{task_id}", response_model=AudioTaskInfo)
 async def get_task_status(task_id: str):
     """获取任务状态"""
-    task = audio_task_manager.get_task(task_id)
+    task = await audio_task_manager.get_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
     return task
@@ -120,7 +120,7 @@ async def get_task_status(task_id: str):
 @router.get("/tasks/{task_id}/result")
 async def get_transcription_result(task_id: str):
     """获取转录结果"""
-    task = audio_task_manager.get_task(task_id)
+    task = await audio_task_manager.get_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
 
@@ -141,16 +141,16 @@ async def get_transcription_result(task_id: str):
 @router.get("/tasks")
 async def list_tasks():
     """列出所有任务"""
-    tasks = audio_task_manager.get_all_tasks()
+    tasks = await audio_task_manager.get_all_tasks()
     return {"total": len(tasks), "tasks": list(tasks.values())}
 
 
 @router.delete("/tasks/{task_id}")
 async def delete_task(task_id: str):
     """删除任务"""
-    task = audio_task_manager.get_task(task_id)
+    task = await audio_task_manager.get_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
 
-    audio_task_manager.remove_task(task_id)
+    await audio_task_manager.remove_task(task_id)
     return {"message": "任务已删除"}
