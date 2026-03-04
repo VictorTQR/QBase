@@ -100,8 +100,9 @@ class AudioProcessor(FileProcessor):
             updated_at=time.time(),
         )
 
-        await self.task_manager.add_task(task, file_hash=file_hash)
-        return task
+        # 返回 add_task() 的实际返回值，而不是新创建的 task
+        result_task = await self.task_manager.add_task(task, file_hash=file_hash)
+        return result_task
 
     async def _process_task(self, task_id: str, file_path: str, config: dict):
         try:
