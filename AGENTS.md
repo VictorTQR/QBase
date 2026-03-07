@@ -22,8 +22,8 @@ QBase is a local knowledge base management system built with Vue 3 + Electron + 
 - Multi-turn conversation context
 - Multi-session management with persistence
 - Full-text search with content snippets
-- Vector search (LanceDB backend) 🔄
-- Hybrid search (full-text + vector) 🔄
+- Vector search (LanceDB backend) ✅
+- Hybrid search (full-text + vector) ✅
 - Smart flashcard generation
 - AI generation panel (flashcards, mind maps, summaries)
 - Document parse management
@@ -158,18 +158,28 @@ QBase/
 │   ├── src/
 │   │   ├── api/                 # API clients
 │   │   ├── components/          # Vue components
+│   │   ├── processors/          # Document processors
+│   │   ├── repositories/        # Data repositories
+│   │   ├── router/              # Router config
 │   │   ├── stores/              # Pinia stores
+│   │   ├── styles/              # Global styles
 │   │   ├── utils/               # Utilities
+│   │   ├── vector/              # Vector search utilities
 │   │   ├── views/               # Page components
 │   │   └── __tests__/           # Vitest tests
 │   ├── electron/                # Electron main process
 │   └── package.json
 ├── backend/                      # FastAPI backend (Python)
+│   ├── src/
+│   │   ├── api/                 # API routes
+│   │   ├── vector/              # Vector search services
+│   │   └── ...
 ├── docs/                         # Project documentation
 │   ├── architecture/             # Architecture docs
 │   ├── features/                 # Feature docs
 │   ├── implementation/           # Implementation reports
-│   └── bugs/                     # Bug records
+│   ├── bugs/                     # Bug records
+│   └── plans/                    # Planning documents
 ├── AGENTS.md                     # This file
 └── CLAUDE.md                     # Development principles
 ```
