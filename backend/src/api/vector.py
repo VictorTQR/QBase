@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from loguru import logger
 from pydantic import ValidationError
+from typing import List, Tuple, Optional, Dict, Any
 
 from vector import (
     lancedb_service,
@@ -196,4 +197,15 @@ async def clear_all_vectors():
         return VectorOperationResponse(success=True, message="All vector data cleared")
     except Exception as e:
         logger.error(f"Failed to clear vectors: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/indexed-files", response_model=List[Dict[str, Any]])
+async def list_indexed_files():
+    """获取所有已索引的文件列表"""
+    try:
+        files = lancedb_service.list_indexed_files()
+        return files
+    except Exception as e:
+        logger.error(f"Failed to list indexed files: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

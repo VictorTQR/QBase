@@ -32,7 +32,7 @@ class SiliconFlowEmbeddingProvider(EmbeddingProvider):
         if self._client is None:
             self._client = aiohttp.ClientSession(
                 base_url=self.base_url,
-                timeout=60.0,
+                timeout=aiohttp.ClientTimeout(total=60.0),
             )
         return self._client
 

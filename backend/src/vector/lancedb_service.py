@@ -1,4 +1,5 @@
 import os
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import lancedb
@@ -81,7 +82,7 @@ class LanceDBService:
                     "end_char": chunk.get("end_char", len(chunk["content"])),
                     "created_at": chunk.get(
                         "created_at",
-                        int(pa.compute.now().cast(pa.int64()).as_py() / 1000000),
+                        int(time.time()),
                     ),
                     "vector": chunk["vector"],
                 }
@@ -138,6 +139,40 @@ class LanceDBService:
         """获取统计信息"""
         count = cls._table.count_rows()
         return {"total_chunks": count, "table_name": "document_chunks"}
+
+    @classmethod
+    def list_indexed_files(cls) -> List[Dict[str, Any]]:
+        """获取所有已索引的文件列表（按文件分组）"""
+        if cls._table is None:
+            return []
+        
+        # 获取所有数据
+        all_chunks = cls._table.to_pandas()
+        
+        if all_chunks.empty:
+            return []
+        
+        # 按 file_path 分组
+        grouped = all_chunks.groupby('file_path')
+        
+        indexed_files = []
+        for file_path, group in grouped:
+            # 获取该文件的信息
+            first_chunk = group.iloc[0]
+            latest_chunk = group.iloc[-1]
+            
+            indexed_files.append({
+                "file_path": file_path,
+                "file_name": first_chunk['file_name'],
+                "workspace_id": first_chunk['workspace_id'],
+                "created_at": int(latest_chunk['created_at']),
+                "chunk_count": len(group),
+            })
+        
+        # 按 created_at 降序排序
+        indexed_files.sort(key=lambda x: x['created_at'], reverse=True)
+        
+        return indexed_files
 
 
 lancedb_service = LanceDBService()
