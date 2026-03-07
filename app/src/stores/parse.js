@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { ParseBackendApi } from '@/api/parseBackend'
 import { useAudioStore } from '@/stores/audio'
 import { useParseConfigStore } from '@/stores/parseConfig'
+import { useVectorStore } from '@/stores/vector'
 
 export const useParseStore = defineStore('parse', () => {
   const tasks = ref([])
@@ -226,8 +227,17 @@ export const useParseStore = defineStore('parse', () => {
         const { asrModel } = parseConfigStore.audioConfig
         return await audioStore.transcribeLocalFile(filePath, asrModel)
       } else if (fileType === 'markdown') {
-        ElMessage.info('Markdown 文件无需解析，可直接索引向量')
-        return { success: true, message: 'Markdown 文件无需解析' }
+        ElMessage.info('Markdown 文件无需解析，正在直接索引向量...')
+        const vectorStore = useVectorStore()
+        const result = await window.electronAPI.readMarkdown(filePath)
+        if (!result.success) {
+          throw new Error(result.error || '读取 Markdown 文件失败')
+        }
+        const content = result.content
+        const fileName = filePath.split(/[\\/]/).pop()
+        await vectorStore.indexDocument(filePath, fileName, content)
+        ElMessage.success('Markdown 文件已成功索引到向量库')
+        return { success: true, message: 'Markdown 文件已索引' }
       } else {
         throw new Error(`不支持的文件类型: ${fileType}`)
       }
