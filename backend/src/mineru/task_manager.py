@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+import os
 from datetime import datetime
 from typing import Dict, Optional, List, Any
 from pathlib import Path
@@ -11,6 +12,7 @@ from database import AsyncSessionLocal
 from repositories.parse_task_repository import ParseTaskRepository
 from utils.file_hash import compute_bytes_hash, compute_file_hash
 from utils.websocket_manager import websocket_manager
+from utils.zip_handler import extract_markdown_from_zip
 
 
 class TaskManager:
@@ -233,8 +235,31 @@ class TaskManager:
                 logger.info(f"任务 {task_id} 状态: {state}")
 
                 if state == "done":
-                    await self.update_task(task_id, state="done")
-                    logger.info(f"任务 {task_id} 完成")
+                    try:
+                        if "full_zip_url" not in file_result:
+                            raise Exception("MinerU 结果中缺少 full_zip_url")
+                        
+                        zip_url = file_result["full_zip_url"]
+                        zip_content = await mineru_client.download_zip(zip_url)
+                        
+                        markdown_content = extract_markdown_from_zip(zip_content)
+                        
+                        storage_path = os.path.join(settings.STORAGE_DIR, f"{task_id}.zip")
+                        os.makedirs(settings.STORAGE_DIR, exist_ok=True)
+                        with open(storage_path, "wb") as f:
+                            f.write(zip_content)
+                        
+                        await self.update_task(
+                            task_id,
+                            state="done",
+                            markdown_content=markdown_content,
+                            result_file_path=storage_path,
+                            result_file_format="zip",
+                        )
+                        logger.info(f"任务 {task_id} 完成，结果已保存")
+                    except Exception as e:
+                        logger.error(f"任务 {task_id} 结果保存失败: {str(e)}")
+                        await self.update_task(task_id, state="failed", error_msg=f"结果保存失败: {str(e)}")
                     return
                 elif state == "failed":
                     err_msg = file_result.get("err_msg", "任务执行失败")

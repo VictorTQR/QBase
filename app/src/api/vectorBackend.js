@@ -48,7 +48,7 @@ export class VectorBackendApi {
 
   static async deleteDocumentChunks(filePath) {
     console.log('[VectorBackendApi] deleteDocumentChunks 调用，filePath:', filePath)
-    const request = backend.client.delete('/api/vector/delete', {
+    const request = backend.client.post('/api/vector/delete', {
       file_path: filePath,
     })
     return await request.json()

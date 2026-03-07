@@ -165,7 +165,7 @@ async def search_vectors(request: VectorSearchRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/delete", response_model=VectorOperationResponse)
+@router.post("/delete", response_model=VectorOperationResponse)
 async def delete_document_chunks(request: VectorDeleteRequest):
     """删除指定文件的向量索引"""
     try:

@@ -52,14 +52,26 @@ async def startup_event():
     logger.info("执行启动健康检查...")
 
     try:
-        subprocess.run(["ffprobe", "-version"], capture_output=True, check=True)
+        subprocess.run(
+            ["ffprobe", "-version"],
+            capture_output=True,
+            check=True,
+            encoding='utf-8',
+            errors='replace'
+        )
         logger.info("✓ ffprobe 检查通过")
     except Exception as e:
         logger.error(f"✗ ffprobe 未安装或不可用: {e}")
         logger.error("  请安装 ffmpeg: https://ffmpeg.org/download.html")
 
     try:
-        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
+        subprocess.run(
+            ["ffmpeg", "-version"],
+            capture_output=True,
+            check=True,
+            encoding='utf-8',
+            errors='replace'
+        )
         logger.info("✓ ffmpeg 检查通过")
     except Exception as e:
         logger.error(f"✗ ffmpeg 未安装或不可用: {e}")

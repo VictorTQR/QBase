@@ -241,7 +241,7 @@ ipcMain.handle('read-markdown', async (event, filePath) => {
     const parsed = matter(content)
     return { 
       success: true, 
-      content: parsed.content,
+      content: parsed.content && parsed.content.trim() !== '' ? parsed.content : content,
       frontmatter: parsed.data
     }
   } catch (error) {
