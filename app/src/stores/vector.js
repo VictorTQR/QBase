@@ -12,6 +12,8 @@ export const useVectorStore = defineStore(
     const error = ref(null)
     const stats = ref(null)
     const indexedFiles = ref({})
+    const indexedFilesList = ref([])
+    const isLoadingIndexedFiles = ref(false)
 
     async function indexDocument(filePath, fileName, content, workspaceId, taskId) {
       isIndexing.value = true
@@ -136,6 +138,20 @@ export const useVectorStore = defineStore(
       return result
     }
 
+    async function loadIndexedFiles() {
+      isLoadingIndexedFiles.value = true
+      error.value = null
+      try {
+        indexedFilesList.value = await VectorBackendApi.listIndexedFiles()
+        return indexedFilesList.value
+      } catch (err) {
+        error.value = err.message
+        throw err
+      } finally {
+        isLoadingIndexedFiles.value = false
+      }
+    }
+
     return {
       isIndexing,
       indexingProgress,
@@ -144,6 +160,8 @@ export const useVectorStore = defineStore(
       error,
       stats,
       indexedFiles,
+      indexedFilesList,
+      isLoadingIndexedFiles,
       indexDocument,
       indexBatch,
       isFileIndexed,
@@ -153,6 +171,7 @@ export const useVectorStore = defineStore(
       deleteDocumentChunks,
       loadStats,
       clearAll,
+      loadIndexedFiles,
     }
   },
   {

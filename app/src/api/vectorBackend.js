@@ -65,4 +65,15 @@ export class VectorBackendApi {
     const request = backend.client.post('/api/vector/clear')
     return await request.json()
   }
+
+  static async listIndexedFiles() {
+    console.log('[VectorBackendApi] listIndexedFiles 调用')
+    try {
+      const request = backend.client.get('/api/vector/indexed-files')
+      return await request.json()
+    } catch (error) {
+      console.error('[VectorBackendApi] listIndexedFiles 失败:', error)
+      throw new Error('获取已索引文件列表失败')
+    }
+  }
 }
