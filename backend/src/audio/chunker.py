@@ -42,6 +42,8 @@ class AudioChunker:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
+                    encoding='utf-8',
+                    errors='replace',
                     check=True,
                 )
                 duration = float(result.stdout.strip())
@@ -126,6 +128,8 @@ class AudioChunker:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
+                    encoding='utf-8',
+                    errors='replace',
                     check=True,
                 )
                 return result

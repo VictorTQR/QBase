@@ -29,7 +29,7 @@ class SiliconFlowASRProvider(ASRProvider):
         if self._client is None:
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
-                timeout=300.0,  # 5 分钟超时
+                timeout=httpx.Timeout(300.0),  # 5 分钟超时
                 follow_redirects=True,
             )
         return self._client
