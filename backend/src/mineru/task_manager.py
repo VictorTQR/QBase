@@ -206,6 +206,7 @@ class TaskManager:
             "created_at": task.created_at,
             "updated_at": task.updated_at,
             "file_type": getattr(task, "file_type", "document"),
+            "parser_type": task.parser_type,
             "metadata": getattr(task, "task_metadata", None),
         }
 
