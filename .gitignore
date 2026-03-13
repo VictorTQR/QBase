@@ -18,3 +18,7 @@ app/dist/
 # Environment
 .env
 .env.*
+
+# Backup files
+*.backup
+parse.backup/
