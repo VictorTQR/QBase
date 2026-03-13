@@ -89,17 +89,19 @@ function toggleSelectAll() {
   if (selectAll.value) {
     selectedFiles.value = new Set(filteredFiles.value.map(f => f.id))
   } else {
-    selectedFiles.value.clear()
+    selectedFiles.value = new Set()
   }
 }
 
 function toggleFileSelection(fileId) {
-  if (selectedFiles.value.has(fileId)) {
-    selectedFiles.value.delete(fileId)
+  const newSet = new Set(selectedFiles.value)
+  if (newSet.has(fileId)) {
+    newSet.delete(fileId)
   } else {
-    selectedFiles.value.add(fileId)
+    newSet.add(fileId)
   }
-  selectAll.value = selectedFiles.value.size === filteredFiles.value.length
+  selectedFiles.value = newSet // 触发响应式更新
+  selectAll.value = newSet.size === filteredFiles.value.length
 }
 
 onMounted(() => {
@@ -333,8 +335,8 @@ async function handleIndex(file) {
     </div>
 
     <div class="table-container">
-      <el-table :data="filteredFiles" style="width: 100%; min-width: 900px;">
-        <el-table-column width="8%">
+      <el-table :data="filteredFiles" style="width: 100%; min-width: 900px;" table-layout="auto">
+        <el-table-column min-width="8%">
           <template #header>
             <el-checkbox v-model="selectAll" @change="toggleSelectAll" />
           </template>
@@ -346,7 +348,7 @@ async function handleIndex(file) {
           </template>
         </el-table-column>
 
-        <el-table-column label="文件名" width="32%">
+        <el-table-column label="文件名" min-width="32%">
           <template #default="{ row }">
             <div class="file-cell">
               <div class="file-icon" :class="getFileIconClass(row)">
@@ -360,7 +362,7 @@ async function handleIndex(file) {
           </template>
         </el-table-column>
 
-        <el-table-column label="处理阶段 (上传→解析→索引→完成)" width="30%">
+        <el-table-column label="处理阶段 (上传→解析→索引→完成)" min-width="30%">
           <template #default="{ row }">
             <div class="pipeline-stepper">
               <div class="step">
@@ -406,7 +408,7 @@ async function handleIndex(file) {
           </template>
         </el-table-column>
 
-        <el-table-column label="文件信息" width="18%">
+        <el-table-column label="文件信息" min-width="18%">
           <template #default="{ row }">
             <div class="stats-cell">
               <div class="stat-item">
@@ -425,7 +427,7 @@ async function handleIndex(file) {
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="12%">
+        <el-table-column label="操作" min-width="12%">
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button type="primary" size="small" @click="openDrawer(row)">
@@ -518,7 +520,6 @@ async function handleIndex(file) {
 }
 
 .table-container :deep(.el-table) {
-  table-layout: fixed;
   width: 100%;
 }
 
