@@ -214,6 +214,26 @@ app.on('activate', () => {
   }
 })
 
+ipcMain.handle('get-home-path', async () => {
+  return app.getPath('home')
+})
+
+ipcMain.handle('fs-exists', async (event, filePath) => {
+  return fs.existsSync(filePath)
+})
+
+ipcMain.handle('fs-mkdir', async (event, dirPath) => {
+  return fs.mkdirSync(dirPath, { recursive: true })
+})
+
+ipcMain.handle('fs-read-file', async (event, filePath, encoding) => {
+  return fs.readFileSync(filePath, encoding)
+})
+
+ipcMain.handle('fs-write-file', async (event, filePath, data, encoding) => {
+  return fs.writeFileSync(filePath, data, encoding)
+})
+
 ipcMain.handle('select-folder', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory', 'createDirectory']
