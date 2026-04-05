@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import declarative_base
 from loguru import logger
 
-from config import settings
+from src.config import settings
 
 # 创建异步引擎
 engine = create_async_engine(settings.DATABASE_URL, echo=False, future=True)
