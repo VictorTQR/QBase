@@ -16,6 +16,12 @@ const routes = [
     name: 'parse-management',
     component: () => import('@/views/ParseManagement.vue'),
   },
+  {
+    path: '/papers',
+    name: 'Papers',
+    component: () => import('@/views/PapersView.vue'),
+    meta: { title: '论文管理' }
+  },
 ]
 
 const router = createRouter({
