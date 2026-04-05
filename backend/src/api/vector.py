@@ -46,9 +46,50 @@ async def index_document(request: Request):
                 detail={"error": "Validation failed", "details": e.errors()},
             )
 
-        # 获取内容：优先从 task_id 获取，其次使用请求中的 content
+        # 获取内容：优先从 .qbase/generated/ 读取，其次从 task_id 获取，最后使用请求中的 content
         content = validated_request.content
-        if validated_request.task_id:
+
+        # ========== 新增：优先从文件系统读取 raw_text.md ==========
+        if validated_request.file_path:
+            try:
+                from pathlib import Path
+                from src.utils.file_hash import compute_file_hash
+                from src.services.workspace_service import QBaseWorkspaceService
+
+                # 计算文件哈希
+                file_hash = await compute_file_hash(validated_request.file_path)
+                logger.info(f"[Vector API] 尝试从文件系统读取，file_hash: {file_hash}")
+
+                # 推断工作区路径
+                file_path = Path(validated_request.file_path)
+                workspace_path = None
+                for parent in file_path.parents:
+                    if (parent / ".qbase").exists():
+                        workspace_path = str(parent)
+                        break
+
+                if workspace_path:
+                    workspace_service = QBaseWorkspaceService(workspace_path)
+                    derivative_service = workspace_service.get_derivative_service(None)
+
+                    # 直接读取文件（绕过数据库 session）
+                    raw_text_path = (
+                        workspace_service.get_generated_dir()
+                        / file_hash[:16]
+                        / "raw_text.md"
+                    )
+                    if raw_text_path.exists():
+                        with open(raw_text_path, "r", encoding="utf-8") as f:
+                            content = f.read()
+                        logger.info(
+                            f"[Vector API] 从文件系统读取成功，长度: {len(content)}"
+                        )
+            except Exception as e:
+                logger.warning(f"[Vector API] 从文件系统读取失败（降级）: {e}")
+        # =========================================================
+
+        # 降级：从 task_id 获取
+        if not content and validated_request.task_id:
             logger.info(
                 f"[Vector API] 从数据库获取内容，task_id: {validated_request.task_id}"
             )
@@ -103,10 +144,23 @@ async def index_document(request: Request):
                 chunk["content"], settings.SILICONFLOW_EMBEDDING_MODEL
             )
 
+            # 计算 file_hash（如果有文件路径）
+            chunk_file_hash = ""
+            if validated_request.file_path:
+                try:
+                    from src.utils.file_hash import compute_file_hash
+
+                    chunk_file_hash = await compute_file_hash(
+                        validated_request.file_path
+                    )
+                except:
+                    pass
+
             chunk_id = f"{validated_request.file_path}_chunk_{chunk['index']}"
             indexed_chunks.append(
                 {
                     "id": chunk_id,
+                    "file_hash": chunk_file_hash,  # 新增
                     "file_path": validated_request.file_path,
                     "file_name": validated_request.file_name,
                     "workspace_id": validated_request.workspace_id or "",
@@ -169,10 +223,15 @@ async def search_vectors(request: VectorSearchRequest):
 async def delete_document_chunks(request: VectorDeleteRequest):
     """删除指定文件的向量索引"""
     try:
-        lancedb_service.delete_by_file_path(request.file_path)
-        return VectorOperationResponse(
-            success=True, message=f"Deleted chunks for file: {request.file_path}"
-        )
+        # 优先按 file_hash 删除，其次按 file_path
+        if hasattr(request, "file_hash") and request.file_hash:
+            lancedb_service.delete_by_file_hash(request.file_hash)
+            logger.info(f"Deleted vectors by file_hash: {request.file_hash}")
+        else:
+            lancedb_service.delete_by_file_path(request.file_path)
+            logger.info(f"Deleted vectors by file_path: {request.file_path}")
+
+        return VectorOperationResponse(success=True, message=f"Deleted chunks for file")
     except Exception as e:
         logger.error(f"Failed to delete document chunks: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -17,8 +17,11 @@ from api.papers import router as papers_router
 from api.workspace import router as workspace_router
 from api.files import router as files_router
 from api import derivatives
+from src.utils.error_handler import setup_error_handlers
 
 app = FastAPI(title="QBase Backend", version="0.1.0")
+
+setup_error_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,

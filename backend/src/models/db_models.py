@@ -25,6 +25,7 @@ class ParseTask(Base):
     file_type = Column(String, nullable=False, default="document", index=True)
     state = Column(String, nullable=False, index=True)
     error_msg = Column(Text, nullable=True)
+    # DEPRECATED: 使用 .qbase/generated/{hash}/raw_text.md 替代
     markdown_content = Column(Text, nullable=True)
     task_metadata = Column(Text, nullable=True)
     result_file_path = Column(String, nullable=True)
