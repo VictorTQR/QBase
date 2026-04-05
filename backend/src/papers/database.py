@@ -17,7 +17,7 @@ from sqlalchemy.orm import (
     relationship,
     Session,
 )
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from loguru import logger
 import json
@@ -290,6 +290,4 @@ class PaperDatabase:
 
 
 # 导出单例
-from datetime import timedelta
-
 paper_database = PaperDatabase()
