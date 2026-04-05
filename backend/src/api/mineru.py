@@ -219,6 +219,15 @@ async def get_parse_result(task_id: str):
             result_file_format="zip",
         )
 
+        # ========== 新增：派生数据落盘 ==========
+        try:
+            # 尝试从任务中获取工作区路径（简化处理，后续可优化）
+            # 这里暂时跳过，需要结合工作区管理
+            logger.info(f"解析完成，markdown_content 长度: {len(markdown_content)}")
+        except Exception as e:
+            logger.warning(f"派生数据落盘失败（非致命）: {e}")
+        # ==========================================
+
         return {"markdown_content": markdown_content}
     except HTTPException:
         raise

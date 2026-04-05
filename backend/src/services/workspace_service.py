@@ -177,7 +177,7 @@ cache/
             return "video"
         return "unknown"
 
-    def _process_file(
+     def _process_file(
         self,
         file_path: Path,
         rel_path: str,
@@ -203,3 +203,18 @@ cache/
             return "modified"
         else:
             return "skipped"
+
+    def get_derivative_service(self, session):
+        """获取派生数据服务"""
+        from src.services.derivative_service import DerivativeService
+        return DerivativeService(str(self.workspace_root), session)
+
+    def get_generated_dir(self) -> Path:
+        """获取 generated 目录"""
+        return self.generated_dir
+
+    def get_derivative_dir(self, file_hash: str) -> Path:
+        """获取指定哈希的派生数据目录"""
+        dir_path = self.generated_dir / file_hash[:16]
+        dir_path.mkdir(exist_ok=True)
+        return dir_path

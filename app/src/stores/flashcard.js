@@ -1,8 +1,10 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { LocalStorageFlashcardRepository } from '@/repositories/LocalStorageFlashcardRepository'
+// import { FileSystemFlashcardRepository } from '@/repositories/FileSystemFlashcardRepository'
 import { useAgentStore } from './agent'
 import { useDocumentStore } from './document'
+import { useWorkspaceStore } from './workspace'
 
 function generateId() {
   const array = new Uint8Array(16)
@@ -19,7 +21,14 @@ function generateId() {
 }
 
 export const useFlashcardStore = defineStore('flashcard', () => {
+  // 双写期：继续使用 LocalStorage
   const repository = new LocalStorageFlashcardRepository()
+  
+  // TODO: 后续可以根据配置切换到 FileSystemFlashcardRepository
+  // const workspaceStore = useWorkspaceStore()
+  // const repository = workspaceStore.folders.length > 0 
+  //   ? new FileSystemFlashcardRepository(workspaceStore.folders[0].path)
+  //   : new LocalStorageFlashcardRepository()
 
   const flashcardSets = ref([])
   const currentSetId = ref(null)

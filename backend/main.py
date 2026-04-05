@@ -16,6 +16,7 @@ from api.websocket import router as websocket_router
 from api.papers import router as papers_router
 from api.workspace import router as workspace_router
 from api.files import router as files_router
+from api import derivatives
 
 app = FastAPI(title="QBase Backend", version="0.1.0")
 
@@ -34,6 +35,7 @@ app.include_router(websocket_router)
 app.include_router(papers_router)
 app.include_router(workspace_router)
 app.include_router(files_router)
+app.include_router(derivatives.router)
 
 
 @app.get("/health")
