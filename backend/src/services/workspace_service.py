@@ -31,6 +31,11 @@ class QBaseWorkspaceService:
 
             self._create_gitignore()
 
+            # 初始化工作区数据库
+            from src.services.database_service import WorkspaceDatabaseService
+            import asyncio
+            asyncio.create_task(WorkspaceDatabaseService.init_workspace_db(str(self.workspace_root)))
+
             logger.info(f"工作区 {self.workspace_root} 初始化成功")
             return True
         except Exception as e:

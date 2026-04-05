@@ -1,16 +1,39 @@
 <template>
   <div class="sidebar">
     <div class="sidebar-header">
-      <span class="workspace-title">工作区</span>
+      <span class="workspace-title">文件</span>
       <div class="header-actions">
-        <el-button :loading="isRefreshing" link type="primary" @click="handleRefresh">
+        <el-button :loading="fileManagementStore.isScanning" link type="primary" @click="handleScan">
           <el-icon><Refresh /></el-icon>
         </el-button>
       </div>
     </div>
 
+    <!-- 扫描统计 -->
+    <div v-if="fileManagementStore.scanStats" class="scan-stats">
+      <span class="stat-item">新增: {{ fileManagementStore.scanStats.new_files }}</span>
+      <span class="stat-item">修改: {{ fileManagementStore.scanStats.modified_files }}</span>
+    </div>
+
     <div class="file-tree-container">
+      <!-- 新架构：基于 files 表的文件列表 -->
+      <div v-if="fileManagementStore.files.length > 0" class="file-list">
+        <div
+          v-for="file in fileManagementStore.files"
+          :key="file.hash"
+          class="file-item"
+          :class="{ active: fileManagementStore.selectedFile?.hash === file.hash }"
+          @click="handleFileClick(file)"
+        >
+          <span class="file-icon">{{ getFileIcon(file.file_type) }}</span>
+          <span class="file-name">{{ file.rel_path.split('/').pop() }}</span>
+          <span class="file-status" :class="file.status">{{ getStatusText(file.status) }}</span>
+        </div>
+      </div>
+
+      <!-- 旧架构：多文件夹树（暂时保留） -->
       <el-tree
+        v-else
         ref="treeRef"
         :data="treeData"
         :props="treeProps"
@@ -56,15 +79,21 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, onUnmounted } from 'vue'
+import { ref, onMounted, watch, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Refresh, Document } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDocumentStore } from '@/stores/document'
 import { useParseStore } from '@/stores/parse'
+import { useFileManagementStore } from '@/stores/fileManagement'
 
 const router = useRouter()
+
+const workspaceStore = useWorkspaceStore()
+const documentStore = useDocumentStore()
+const parseStore = useParseStore()
+const fileManagementStore = useFileManagementStore()
 
 function getFileType(fileName) {
   const ext = fileName.split('.').pop().toLowerCase()
@@ -75,9 +104,50 @@ function getFileType(fileName) {
   return 'unknown'
 }
 
-const workspaceStore = useWorkspaceStore()
-const documentStore = useDocumentStore()
-const parseStore = useParseStore()
+// 新增：新架构文件列表功能
+function getFileIcon(fileType) {
+  const icons = {
+    'markdown': '📝',
+    'pdf': '📄',
+    'audio': '🎵',
+    'video': '🎬',
+  }
+  return icons[fileType] || '📄'
+}
+
+function getStatusText(status) {
+  const texts = {
+    'pending': '待处理',
+    'processing': '处理中',
+    'ready': '就绪',
+    'error': '错误',
+    'missing': '缺失',
+    'orphan': '孤立',
+  }
+  return texts[status] || status
+}
+
+async function handleFileClick(file) {
+  fileManagementStore.selectFile(file)
+  
+  // 转换为旧格式兼容
+  const workspacePath = fileManagementStore.currentWorkspacePath
+  if (workspacePath) {
+    const fullPath = `${workspacePath}/${file.rel_path}`
+    const fileData = {
+      id: file.hash,
+      name: file.rel_path.split('/').pop(),
+      path: fullPath,
+      type: 'file',
+      fileType: file.file_type,
+    }
+    documentStore.loadFile(fileData)
+  }
+}
+
+async function handleScan() {
+  await fileManagementStore.initializeAndScan()
+}
 
 const treeProps = {
   children: 'children',
@@ -213,9 +283,15 @@ watch(
   { deep: true },
 )
 
+// 初始化时扫描
 onMounted(() => {
   initTreeData()
   document.addEventListener('click', handleClickOutside)
+  
+  // 自动扫描（如果有工作区）
+  if (workspaceStore.folders.length > 0) {
+    fileManagementStore.initializeAndScan()
+  }
 })
 
 onUnmounted(() => {
@@ -253,9 +329,92 @@ onUnmounted(() => {
   gap: 4px;
 }
 
+.scan-stats {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  display: flex;
+  gap: 16px;
+}
+
+.stat-item {
+  display: inline-flex;
+  align-items: center;
+}
+
 .file-tree-container {
   flex: 1;
   overflow-y: auto;
+  padding: 4px 0;
+}
+
+.file-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  gap: 8px;
+  transition: background-color 0.2s;
+}
+
+.file-item:hover {
+  background-color: var(--el-fill-color-light);
+}
+
+.file-item.active {
+  background-color: var(--el-fill-color);
+}
+
+.file-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.file-status {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.file-status.pending {
+  background-color: var(--el-color-warning-light-9);
+  color: var(--el-color-warning);
+}
+
+.file-status.processing {
+  background-color: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+}
+
+.file-status.ready {
+  background-color: var(--el-color-success-light-9);
+  color: var(--el-color-success);
+}
+
+.file-status.error {
+  background-color: var(--el-color-danger-light-9);
+  color: var(--el-color-danger);
+}
+
+.file-status.missing {
+  background-color: var(--el-color-info-light-9);
+  color: var(--el-color-info);
 }
 
 .file-tree-container :deep(.el-tree) {

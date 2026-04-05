@@ -3,14 +3,25 @@ import { defineStore } from 'pinia'
 import { ElMessage } from 'element-plus'
 import { workspaceBackendApi } from '@/api/workspaceBackend'
 import { fileBackendApi } from '@/api/fileBackend'
+import { useWorkspaceStore } from './workspace'
 
 export const useFileManagementStore = defineStore('fileManagement', () => {
+  const workspaceStore = useWorkspaceStore()
+  
   const files = ref([])
   const totalFiles = ref(0)
   const isLoading = ref(false)
   const isScanning = ref(false)
   const scanStats = ref(null)
   const selectedFile = ref(null)
+
+  // 获取当前工作区路径（简化：取第一个文件夹）
+  const currentWorkspacePath = computed(() => {
+    if (workspaceStore.folders.length > 0) {
+      return workspaceStore.folders[0].path
+    }
+    return null
+  })
 
   const pendingFiles = computed(() => 
     files.value.filter(f => f.status === 'pending')
@@ -24,16 +35,27 @@ export const useFileManagementStore = defineStore('fileManagement', () => {
     files.value.filter(f => f.status === 'missing')
   )
 
+  async function initializeAndScan() {
+    const workspacePath = currentWorkspacePath.value
+    if (!workspacePath) {
+      ElMessage.warning('请先添加工作区文件夹')
+      return
+    }
+    await initializeAndScanWorkspace(workspacePath)
+  }
+
   async function initializeAndScanWorkspace(workspacePath) {
     try {
       isLoading.value = true
       
+      // 检查并初始化工作区
       const initCheck = await workspaceBackendApi.checkInitialized(workspacePath)
       if (!initCheck.initialized) {
         await workspaceBackendApi.initializeWorkspace(workspacePath)
         ElMessage.success('工作区初始化成功')
       }
 
+      // 扫描工作区
       await scanWorkspace(workspacePath)
       
     } catch (error) {
@@ -54,6 +76,7 @@ export const useFileManagementStore = defineStore('fileManagement', () => {
       
       ElMessage.success(`扫描完成: 新增 ${result.stats.new_files} 个，修改 ${result.stats.modified_files} 个`)
       
+      // 刷新文件列表
       await loadFiles(workspacePath)
       
     } catch (error) {
@@ -106,9 +129,11 @@ export const useFileManagementStore = defineStore('fileManagement', () => {
     isScanning,
     scanStats,
     selectedFile,
+    currentWorkspacePath,
     pendingFiles,
     readyFiles,
     missingFiles,
+    initializeAndScan,
     initializeAndScanWorkspace,
     scanWorkspace,
     loadFiles,

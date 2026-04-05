@@ -6,7 +6,7 @@ import lancedb
 import pyarrow as pa
 from loguru import logger
 
-from config import settings
+from src.config import settings
 
 
 class LanceDBService:
@@ -20,12 +20,18 @@ class LanceDBService:
         return cls._instance
 
     @classmethod
-    def initialize(cls):
+    def initialize(cls, workspace_path: Optional[str] = None):
         """初始化 LanceDB 连接和表"""
         if cls._db is not None:
             return
 
-        lancedb_dir = Path(settings.STORAGE_DIR) / "lancedb"
+        if workspace_path and settings.LANCEDB_USE_WORKSPACE:
+            # 使用工作区的 .qbase/indexes/ 目录
+            lancedb_dir = Path(workspace_path) / ".qbase" / "indexes"
+        else:
+            # 使用旧的 storage/lancedb 目录
+            lancedb_dir = Path(settings.STORAGE_DIR) / "lancedb"
+
         lancedb_dir.mkdir(parents=True, exist_ok=True)
 
         cls._db = lancedb.connect(str(lancedb_dir))
@@ -45,6 +51,7 @@ class LanceDBService:
             schema = pa.schema(
                 [
                     pa.field("id", pa.string()),
+                    pa.field("file_hash", pa.string()),  # 新增：文件哈希
                     pa.field("file_path", pa.string()),
                     pa.field("file_name", pa.string()),
                     pa.field("workspace_id", pa.string()),
@@ -72,6 +79,7 @@ class LanceDBService:
             formatted_chunks.append(
                 {
                     "id": chunk["id"],
+                    "file_hash": chunk.get("file_hash", ""),  # 新增
                     "file_path": chunk["file_path"],
                     "file_name": chunk["file_name"],
                     "workspace_id": chunk.get("workspace_id", ""),
@@ -127,6 +135,22 @@ class LanceDBService:
         logger.info(f"Deleted chunks for file: {file_path}")
 
     @classmethod
+    def delete_by_file_hash(cls, file_hash: str):
+        """按文件哈希删除向量分块"""
+        if cls._table is None:
+            logger.warning("LanceDB table not initialized")
+            return
+
+        try:
+            # LanceDB 使用 delete() 方法，需要先查询再删除
+            # 或者使用 filter + delete
+            table = cls._table
+            table.delete(table["file_hash"] == file_hash)
+            logger.info(f"Deleted vectors for file_hash: {file_hash}")
+        except Exception as e:
+            logger.error(f"Failed to delete vectors by file_hash: {e}")
+
+    @classmethod
     def clear_all(cls):
         """清空所有数据"""
         if "document_chunks" in cls._db.table_names():
@@ -145,33 +169,35 @@ class LanceDBService:
         """获取所有已索引的文件列表（按文件分组）"""
         if cls._table is None:
             return []
-        
+
         # 获取所有数据
         all_chunks = cls._table.to_pandas()
-        
+
         if all_chunks.empty:
             return []
-        
+
         # 按 file_path 分组
-        grouped = all_chunks.groupby('file_path')
-        
+        grouped = all_chunks.groupby("file_path")
+
         indexed_files = []
         for file_path, group in grouped:
             # 获取该文件的信息
             first_chunk = group.iloc[0]
             latest_chunk = group.iloc[-1]
-            
-            indexed_files.append({
-                "file_path": file_path,
-                "file_name": first_chunk['file_name'],
-                "workspace_id": first_chunk['workspace_id'],
-                "created_at": int(latest_chunk['created_at']),
-                "chunk_count": len(group),
-            })
-        
+
+            indexed_files.append(
+                {
+                    "file_path": file_path,
+                    "file_name": first_chunk["file_name"],
+                    "workspace_id": first_chunk["workspace_id"],
+                    "created_at": int(latest_chunk["created_at"]),
+                    "chunk_count": len(group),
+                }
+            )
+
         # 按 created_at 降序排序
-        indexed_files.sort(key=lambda x: x['created_at'], reverse=True)
-        
+        indexed_files.sort(key=lambda x: x["created_at"], reverse=True)
+
         return indexed_files
 
 

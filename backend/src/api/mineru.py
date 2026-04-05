@@ -11,10 +11,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import settings
-from mineru.task_manager import task_manager
-from mineru.client import mineru_client
-from models.schemas import (
+from src.config import settings
+from src.mineru.task_manager import task_manager
+from src.mineru.client import mineru_client
+from src.models.schemas import (
     TaskResponse,
     ErrorResponse,
     DuplicateCheckRequest,
@@ -23,9 +23,9 @@ from models.schemas import (
     StatsResponse,
     OperationResponse,
 )
-from utils.zip_handler import extract_markdown_from_zip
-from database import get_db
-from utils.file_hash import compute_bytes_hash
+from src.utils.zip_handler import extract_markdown_from_zip
+from src.database import get_db, async_session
+from src.utils.file_hash import compute_bytes_hash
 
 router = APIRouter(prefix="/api/mineru", tags=["MinerU"])
 
@@ -221,9 +221,35 @@ async def get_parse_result(task_id: str):
 
         # ========== 新增：派生数据落盘 ==========
         try:
-            # 尝试从任务中获取工作区路径（简化处理，后续可优化）
-            # 这里暂时跳过，需要结合工作区管理
-            logger.info(f"解析完成，markdown_content 长度: {len(markdown_content)}")
+            if task.get("file_hash") and task.get("file_path"):
+                # 尝试从文件路径推断工作区
+                file_path = Path(task["file_path"])
+                # 简单推断：查找包含 .qbase 的父目录作为工作区
+                workspace_path = None
+                for parent in file_path.parents:
+                    if (parent / ".qbase").exists():
+                        workspace_path = str(parent)
+                        break
+
+                if workspace_path:
+                    from src.services.workspace_service import QBaseWorkspaceService
+                    from src.services.derivative_service import DerivativeService
+
+                    async with async_session() as session:
+                        workspace_service = QBaseWorkspaceService(workspace_path)
+                        derivative_service = workspace_service.get_derivative_service(
+                            session
+                        )
+
+                        # 保存 raw_text.md
+                        await derivative_service.save_derivative(
+                            file_hash=task["file_hash"],
+                            derivative_type="raw_text",
+                            content=markdown_content,
+                            model_used="mineru",
+                            version=1,
+                        )
+                        logger.info(f"MinerU 解析结果已落盘: {task['file_hash']}")
         except Exception as e:
             logger.warning(f"派生数据落盘失败（非致命）: {e}")
         # ==========================================

@@ -22,6 +22,8 @@ class Settings(BaseSettings):
 
     # 数据库配置
     DATABASE_URL: str = "sqlite+aiosqlite:///./qbase_parse.db"
+    # 工作区数据库：每个工作区有自己的 metadata.db
+    WORKSPACE_DATABASE_NAME: str = "metadata.db"
 
     # 向量配置
     EMBEDDING_PROVIDER: str = "siliconflow"
@@ -29,6 +31,8 @@ class Settings(BaseSettings):
     VECTOR_CHUNK_SIZE: int = 512
     VECTOR_CHUNK_OVERLAP: int = 128
     VECTOR_AUTO_INDEX: bool = False
+    # LanceDB 存储到工作区的 .qbase/indexes/
+    LANCEDB_USE_WORKSPACE: bool = True
 
     # .qbase 目录配置
     QBASE_DIR_NAME: str = ".qbase"
