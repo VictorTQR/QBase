@@ -110,8 +110,9 @@ function goToParseManagement() {
 }
 
 onMounted(() => {
+  workspaceStore.fixCorruptedWorkspace()
   const workspacePath = workspaceStore.currentWorkspace
-  if (workspacePath) {
+  if (workspacePath && typeof workspacePath === 'string') {
     fileManagementStore.initializeAndScanWorkspace(workspacePath)
   }
 })

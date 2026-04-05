@@ -46,6 +46,11 @@ export const useFileManagementStore = defineStore('fileManagement', () => {
 
   async function initializeAndScanWorkspace(workspacePath) {
     try {
+      if (!workspacePath || typeof workspacePath !== 'string') {
+        console.warn('无效的工作区路径:', workspacePath)
+        return
+      }
+      
       isLoading.value = true
       
       // 检查并初始化工作区

@@ -13,7 +13,7 @@ export const useWorkspaceStore = defineStore(
 
     const isWorkspaceSelected = computed(() => currentWorkspace.value !== null)
     const workspaceName = computed(() => {
-      if (!currentWorkspace.value) return ''
+      if (!currentWorkspace.value || typeof currentWorkspace.value !== 'string') return ''
       return currentWorkspace.value.split(/[/\\]/).pop()
     })
 
@@ -32,6 +32,13 @@ export const useWorkspaceStore = defineStore(
 
     function clearCurrentWorkspace() {
       currentWorkspace.value = null
+    }
+
+    function fixCorruptedWorkspace() {
+      if (currentWorkspace.value !== null && typeof currentWorkspace.value !== 'string') {
+        console.warn('检测到损坏的工作区数据，已重置:', currentWorkspace.value)
+        currentWorkspace.value = null
+      }
     }
 
     function refreshFileTree() {
@@ -61,6 +68,7 @@ export const useWorkspaceStore = defineStore(
       refreshFileTree,
       selectFile,
       initializeFromLastWorkspace,
+      fixCorruptedWorkspace,
     }
   },
   {

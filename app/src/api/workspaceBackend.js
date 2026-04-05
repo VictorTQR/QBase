@@ -19,7 +19,17 @@ class WorkspaceBackendApi {
       const response = await fetch(url, config)
       const data = await response.json()
       if (!response.ok) {
-        throw new Error(data.detail || '请求失败')
+        let errorMsg = '请求失败'
+        if (data.detail) {
+          if (typeof data.detail === 'string') {
+            errorMsg = data.detail
+          } else if (Array.isArray(data.detail)) {
+            errorMsg = data.detail.map(d => d.msg || JSON.stringify(d)).join(', ')
+          } else {
+            errorMsg = JSON.stringify(data.detail)
+          }
+        }
+        throw new Error(errorMsg)
       }
       return data
     } catch (error) {

@@ -49,10 +49,16 @@ class WorkspaceManager {
   }
 
   async addWorkspace(workspacePath) {
+    if (!workspacePath || typeof workspacePath !== 'string') {
+      throw new Error('无效的工作区路径')
+    }
+    
     const config = await this.loadWorkspaces()
     const normalizedPath = workspacePath.replace(/\\/g, '/')
     
-    const exists = config.workspaces.some(w => w.path.replace(/\\/g, '/') === normalizedPath)
+    const exists = config.workspaces.some(w => 
+      typeof w.path === 'string' && w.path.replace(/\\/g, '/') === normalizedPath
+    )
     if (!exists) {
       const name = normalizedPath.split('/').pop()
       config.workspaces.push({
@@ -69,6 +75,9 @@ class WorkspaceManager {
   }
 
   async setLastWorkspace(workspacePath) {
+    if (!workspacePath || typeof workspacePath !== 'string') {
+      return
+    }
     const config = await this.loadWorkspaces()
     config.lastWorkspace = workspacePath.replace(/\\/g, '/')
     await this.saveWorkspaces(config)
@@ -80,9 +89,15 @@ class WorkspaceManager {
   }
 
   async removeWorkspace(workspacePath) {
+    if (!workspacePath || typeof workspacePath !== 'string') {
+      throw new Error('无效的工作区路径')
+    }
+    
     const config = await this.loadWorkspaces()
     const normalizedPath = workspacePath.replace(/\\/g, '/')
-    config.workspaces = config.workspaces.filter(w => w.path.replace(/\\/g, '/') !== normalizedPath)
+    config.workspaces = config.workspaces.filter(w => 
+      typeof w.path === 'string' && w.path.replace(/\\/g, '/') !== normalizedPath
+    )
     
     if (config.lastWorkspace === normalizedPath) {
       config.lastWorkspace = config.workspaces.length > 0 ? config.workspaces[0].path : null
