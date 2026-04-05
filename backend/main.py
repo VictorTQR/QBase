@@ -13,6 +13,7 @@ from api.mineru import router as mineru_router
 from api.audio import router as audio_router
 from api.vector import router as vector_router
 from api.websocket import router as websocket_router
+from api.papers import router as papers_router
 
 app = FastAPI(title="QBase Backend", version="0.1.0")
 
@@ -28,6 +29,7 @@ app.include_router(mineru_router)
 app.include_router(audio_router)
 app.include_router(vector_router)
 app.include_router(websocket_router)
+app.include_router(papers_router)
 
 
 @app.get("/health")
