@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from database import Base
+from src.database import Base
 
 
 class ParseTask(Base):
