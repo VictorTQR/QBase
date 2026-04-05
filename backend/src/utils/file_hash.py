@@ -1,9 +1,10 @@
 import hashlib
+import asyncio
 from pathlib import Path
 from loguru import logger
 
 
-def compute_file_hash(file_path: str, length: int = 16) -> str:
+def compute_file_hash_sync(file_path: str, length: int = 16) -> str:
     """
     计算文件的 SHA-256 哈希
 
@@ -26,7 +27,7 @@ def compute_file_hash(file_path: str, length: int = 16) -> str:
         raise
 
 
-def compute_short_hash(content: bytes, length: int = 16) -> str:
+def compute_bytes_hash(content: bytes, length: int = 16) -> str:
     """
     计算内容的短哈希
 
@@ -40,3 +41,18 @@ def compute_short_hash(content: bytes, length: int = 16) -> str:
     sha256_hash = hashlib.sha256()
     sha256_hash.update(content)
     return sha256_hash.hexdigest()[:length]
+
+
+async def compute_file_hash(file_path: str, length: int = 16) -> str:
+    """
+    异步计算文件的 SHA-256 哈希
+
+    Args:
+        file_path: 文件路径
+        length: 返回的哈希长度（默认前16位）
+
+    Returns:
+        哈希字符串
+    """
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, compute_file_hash_sync, file_path, length)

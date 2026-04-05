@@ -1,4 +1,5 @@
 """论文数据库模块"""
+
 from sqlalchemy import (
     Column,
     String,
@@ -22,12 +23,13 @@ from typing import List, Optional, Dict, Any
 from loguru import logger
 import json
 
-# 创建独立的数据库 Base
+# 为 papers 模块创建独立的 Base
 Base = declarative_base()
 
 
 class DBPaper(Base):
     """已保存的论文"""
+
     __tablename__ = "papers"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -51,6 +53,7 @@ class DBPaper(Base):
 
 class DBPaperKeyword(Base):
     """论文搜索关键词关联"""
+
     __tablename__ = "paper_keywords"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -153,9 +156,7 @@ class PaperDatabase:
         with self.get_session() as session:
             try:
                 paper = (
-                    session.query(DBPaper)
-                    .filter(DBPaper.entry_id == entry_id)
-                    .first()
+                    session.query(DBPaper).filter(DBPaper.entry_id == entry_id).first()
                 )
                 if not paper:
                     return None
@@ -179,9 +180,7 @@ class PaperDatabase:
                 logger.error(f"获取论文时出错: {e}")
                 raise
 
-    def list_papers(
-        self, limit: int = 100, offset: int = 0
-    ) -> List[Dict[str, Any]]:
+    def list_papers(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """
         列出所有论文（分页）
 
@@ -272,9 +271,7 @@ class PaperDatabase:
         with self.get_session() as session:
             try:
                 paper = (
-                    session.query(DBPaper)
-                    .filter(DBPaper.entry_id == entry_id)
-                    .first()
+                    session.query(DBPaper).filter(DBPaper.entry_id == entry_id).first()
                 )
                 if not paper:
                     return False

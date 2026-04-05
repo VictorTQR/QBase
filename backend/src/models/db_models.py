@@ -3,17 +3,14 @@ from sqlalchemy import (
     String,
     Integer,
     Text,
-    DateTime,
     ForeignKey,
-    UniqueConstraint,
 )
-from sqlalchemy.orm import relationship
-from datetime import datetime
 from src.database import Base
 
 
 class ParseTask(Base):
     __tablename__ = "parse_tasks"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(String, primary_key=True, index=True)
     batch_id = Column(String, nullable=False, index=True)
@@ -34,51 +31,6 @@ class ParseTask(Base):
     updated_at = Column(String, nullable=False)
 
 
-# 论文相关表
-class DBPaper(Base):
-    """已保存的论文"""
-
-    __tablename__ = "papers"
-
-    id = Column(Integer, primary_key=True)
-    entry_id = Column(String, unique=True, nullable=False, index=True)
-    title = Column(String, unique=True, nullable=False)
-    authors = Column(String, nullable=False)
-    summary = Column(Text, nullable=False)
-    published = Column(DateTime, nullable=False)
-    updated = Column(DateTime, nullable=False)
-    pdf_url = Column(String, nullable=False)
-    primary_category = Column(String, nullable=False)
-    categories = Column(String, nullable=False)
-    links = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    search_keywords = relationship(
-        "DBPaperKeyword", back_populates="paper", cascade="all, delete-orphan"
-    )
-
-
-class DBPaperKeyword(Base):
-    """论文搜索关键词关联"""
-
-    __tablename__ = "paper_keywords"
-
-    id = Column(Integer, primary_key=True)
-    paper_id = Column(Integer, ForeignKey("papers.id"), nullable=False)
-    keyword = Column(String, nullable=False)
-    search_sort_type = Column(String, nullable=False)
-    scraped_at = Column(DateTime, default=datetime.utcnow)
-
-    paper = relationship("DBPaper", back_populates="search_keywords")
-
-    __table_args__ = (
-        UniqueConstraint(
-            "paper_id", "keyword", "search_sort_type", name="_paper_keyword_sort_uc"
-        ),
-    )
-
-
 # ============================================
 # 新架构表 (v1.2+)
 # ============================================
@@ -88,6 +40,7 @@ class DBFile(Base):
     """文件索引表 - 基于内容哈希的文件追踪"""
 
     __tablename__ = "files"
+    __table_args__ = {"extend_existing": True}
 
     hash = Column(String(16), primary_key=True, index=True, comment="SHA-256 前16位")
     rel_path = Column(
@@ -113,6 +66,7 @@ class DBDerivative(Base):
     """派生数据表 - AI 生成内容的元数据"""
 
     __tablename__ = "derivatives"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     file_hash = Column(
@@ -143,6 +97,7 @@ class DBTask(Base):
     """任务队列表"""
 
     __tablename__ = "tasks"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     file_hash = Column(String(16), ForeignKey("files.hash"), nullable=True, index=True)
