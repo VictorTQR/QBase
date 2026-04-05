@@ -14,6 +14,8 @@ from api.audio import router as audio_router
 from api.vector import router as vector_router
 from api.websocket import router as websocket_router
 from api.papers import router as papers_router
+from api.workspace import router as workspace_router
+from api.files import router as files_router
 
 app = FastAPI(title="QBase Backend", version="0.1.0")
 
@@ -30,6 +32,8 @@ app.include_router(audio_router)
 app.include_router(vector_router)
 app.include_router(websocket_router)
 app.include_router(papers_router)
+app.include_router(workspace_router)
+app.include_router(files_router)
 
 
 @app.get("/health")
@@ -58,8 +62,8 @@ async def startup_event():
             ["ffprobe", "-version"],
             capture_output=True,
             check=True,
-            encoding='utf-8',
-            errors='replace'
+            encoding="utf-8",
+            errors="replace",
         )
         logger.info("✓ ffprobe 检查通过")
     except Exception as e:
@@ -71,8 +75,8 @@ async def startup_event():
             ["ffmpeg", "-version"],
             capture_output=True,
             check=True,
-            encoding='utf-8',
-            errors='replace'
+            encoding="utf-8",
+            errors="replace",
         )
         logger.info("✓ ffmpeg 检查通过")
     except Exception as e:

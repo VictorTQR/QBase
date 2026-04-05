@@ -1,6 +1,6 @@
 # QBase 项目路线图
 
-**更新日期**: 2026-03-03
+**更新日期**: 2026-04-05
 
 ## 版本概览
 
@@ -17,6 +17,7 @@
 | v0.9 | ✅ 已完成 | 解析管理 UI 重构与增强 | 2026-03-02 |
 | v1.0 | ✅ 已完成 | 音频转录功能 | 2026-03-02 |
 | v1.1 | ✅ 已完成 | 向量搜索与索引集成 | 2026-03-07 |
+| v1.2 | 🔄 进行中 | 新文件管理架构（准备阶段） | 2026-04-05 |
 
 ---
 
@@ -574,6 +575,59 @@
 - [向量索引集成实施报告](./implementation/2026-03-03-vector-index-integration.md)
 - [WebSocket实时更新实施报告](./implementation/2026-03-03-websocket-realtime-updates.md)
 - [解析管理功能文档](./features/parse-management.md)
+
+---
+
+## v1.2 - 新文件管理架构（准备阶段）🔄
+
+**状态**: 进行中（准备阶段已完成）
+**发布日期**: 2026-04-05
+
+### 功能列表
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| 清理 Dexie.js 依赖 | ✅ | 移除未使用的依赖 |
+| .qbase 目录规范 | ✅ | 创建标准目录结构和管理服务 |
+| SQLite Schema 扩展 | ✅ | 添加新架构所需的数据库表 |
+| 文件哈希计算工具 | ✅ | 实现 SHA-256 哈希计算 |
+| 文件扫描器 | 📋 | 自动扫描工作区文件 |
+| 前端集成 | 📋 | 新架构与现有工作区管理集成 |
+| 迁移工具 | 📋 | 现有解析数据迁移到新 Schema |
+
+### 已完成部分（准备阶段）
+
+**清理 Dexie.js (2026-04-05)**:
+- 从 package.json 移除未使用的 dexie 依赖
+- 精简项目依赖树
+
+**.qbase 目录规范 (2026-04-05)**:
+- QBaseWorkspaceService 工作区管理服务
+- .qbase 目录结构：generated/, indexes/, cache/, config.json, metadata.db
+- workspace API：初始化、检查状态
+
+**SQLite Schema 扩展 (2026-04-05)**:
+- DBFile 表：基于内容哈希的文件索引
+- DBDerivative 表：AI 生成内容的元数据
+- DBTask 表：任务队列管理
+- FileRepository 和 DerivativeRepository 数据访问层
+
+**文件哈希计算工具 (2026-04-05)**:
+- compute_file_hash() - SHA-256 文件哈希计算
+- compute_short_hash() - 内容短哈希
+- files API：计算文件哈希端点
+
+### 技术亮点
+
+- **渐进式迁移**: 仅添加基础设施，不影响现有功能
+- **向后兼容**: 现有 ParseTask 等表保持不变
+- **内容哈希**: 基于 SHA-256 的文件追踪，支持去重和变更检测
+- **标准化目录**: .qbase 目录结构为后续功能提供统一存储位置
+
+### 相关文档
+
+- [实施计划](./plans/2026-04-05-qbase-architecture-prep.md)
+- [实施报告](./implementation/2026-04-05-architecture-prep-complete.md)
 
 ---
 

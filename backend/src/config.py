@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     VECTOR_CHUNK_OVERLAP: int = 128
     VECTOR_AUTO_INDEX: bool = False
 
+    # .qbase 目录配置
+    QBASE_DIR_NAME: str = ".qbase"
+    GENERATED_DIR_NAME: str = "generated"
+    INDEXES_DIR_NAME: str = "indexes"
+    CACHE_DIR_NAME: str = "cache"
+    CONFIG_FILE_NAME: str = "config.json"
+    METADATA_DB_NAME: str = "metadata.db"
+
     class Config:
         env_file = ".env"
 

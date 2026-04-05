@@ -49,6 +49,7 @@
 - [向量搜索前端报告](./implementation/2026-03-03-vector-search-frontend.md) - 向量搜索前端实现（API 客户端、Store、搜索面板增强）
 - [解析功能修复报告](./implementation/2026-03-03-parse-features-bugfixes.md) - 解析功能 Bug 修复与增强（计数错误、错误处理、音频基础设施、右键菜单等）
 - [WebSocket实时更新报告](./implementation/2026-03-03-websocket-realtime-updates.md) - WebSocket 实时更新功能实现（后端管理器、前端客户端、任务状态广播）
+- [v1.2 架构准备报告](./implementation/2026-04-05-architecture-prep-complete.md) - 新文件管理架构准备阶段（依赖清理、.qbase 目录、SQLite Schema 扩展、文件哈希工具）
 
 ### 问题记录
 Bug 修复记录和问题追踪。

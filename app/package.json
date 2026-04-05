@@ -19,7 +19,6 @@
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
-    "dexie": "^4.3.0",
     "element-plus": "^2.13.2",
     "gray-matter": "^4.0.3",
     "hook-fetch": "^2.3.2",
