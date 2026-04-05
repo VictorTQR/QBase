@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional, Any, List
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database import async_session
+from src.database import AsyncSessionLocal
 from src.services.workspace_service import QBaseWorkspaceService
 
 router = APIRouter(prefix="/api/derivatives", tags=["derivatives"])
@@ -19,7 +19,7 @@ class SaveDerivativeRequest(BaseModel):
 
 
 async def get_session():
-    async with async_session() as session:
+    async with AsyncSessionLocal() as session:
         yield session
 
 

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.db_models import DBFile
-from src.utils.file_hash import compute_file_hash
+from src.utils.file_hash import compute_file_hash_sync
 
 
 class FileScanner:
@@ -135,7 +135,7 @@ class FileScanner:
             ):
                 return "unchanged"
 
-            file_hash = compute_file_hash(str(file_path))
+            file_hash = compute_file_hash_sync(str(file_path))
 
             if existing_file.hash == file_hash:
                 existing_file.mtime = mtime
@@ -154,7 +154,7 @@ class FileScanner:
             return "modified"
 
         else:
-            file_hash = compute_file_hash(str(file_path))
+            file_hash = compute_file_hash_sync(str(file_path))
             now = int(time.time())
 
             db_file = DBFile(

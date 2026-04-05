@@ -24,7 +24,7 @@ from src.models.schemas import (
     OperationResponse,
 )
 from src.utils.zip_handler import extract_markdown_from_zip
-from src.database import get_db, async_session
+from src.database import get_db, AsyncSessionLocal
 from src.utils.file_hash import compute_bytes_hash
 
 router = APIRouter(prefix="/api/mineru", tags=["MinerU"])
@@ -235,7 +235,7 @@ async def get_parse_result(task_id: str):
                     from src.services.workspace_service import QBaseWorkspaceService
                     from src.services.derivative_service import DerivativeService
 
-                    async with async_session() as session:
+                    async with AsyncSessionLocal() as session:
                         workspace_service = QBaseWorkspaceService(workspace_path)
                         derivative_service = workspace_service.get_derivative_service(
                             session

@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database import async_session
+from src.database import AsyncSessionLocal
 from src.services.workspace_service import QBaseWorkspaceService
 from src.services.file_scanner import FileScanner
 
@@ -19,7 +19,7 @@ class ScanWorkspaceRequest(BaseModel):
 
 
 async def get_session():
-    async with async_session() as session:
+    async with AsyncSessionLocal() as session:
         yield session
 
 

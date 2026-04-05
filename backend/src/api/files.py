@@ -5,10 +5,10 @@ from typing import List, Optional
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database import async_session
+from src.database import AsyncSessionLocal
 from src.models.db_models import DBFile
 from src.repositories.file_repository import FileRepository
-from src.utils.file_hash import compute_file_hash
+from src.utils.file_hash import compute_file_hash_sync
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
@@ -18,7 +18,7 @@ class ComputeHashRequest(BaseModel):
 
 
 async def get_session():
-    async with async_session() as session:
+    async with AsyncSessionLocal() as session:
         yield session
 
 
@@ -30,7 +30,7 @@ async def compute_hash(request: ComputeHashRequest):
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="文件不存在")
 
-        hash_value = compute_file_hash(str(file_path))
+        hash_value = compute_file_hash_sync(str(file_path))
         return {"success": True, "hash": hash_value, "file_path": request.file_path}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

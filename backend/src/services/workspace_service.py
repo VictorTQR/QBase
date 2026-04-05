@@ -34,7 +34,10 @@ class QBaseWorkspaceService:
             # 初始化工作区数据库
             from src.services.database_service import WorkspaceDatabaseService
             import asyncio
-            asyncio.create_task(WorkspaceDatabaseService.init_workspace_db(str(self.workspace_root)))
+
+            asyncio.create_task(
+                WorkspaceDatabaseService.init_workspace_db(str(self.workspace_root))
+            )
 
             logger.info(f"工作区 {self.workspace_root} 初始化成功")
             return True
@@ -102,7 +105,7 @@ cache/
         """
         from pathlib import Path
         import time
-        from src.utils.file_hash import compute_file_hash
+        from src.utils.file_hash import compute_file_hash_sync
 
         stats = {
             "total_files": 0,
@@ -182,7 +185,7 @@ cache/
             return "video"
         return "unknown"
 
-     def _process_file(
+    def _process_file(
         self,
         file_path: Path,
         rel_path: str,
@@ -198,12 +201,11 @@ cache/
             "new" | "modified" | "skipped"
         """
         import time
-        from src.utils.file_hash import compute_file_hash
-        from src.database import async_session
+        from src.utils.file_hash import compute_file_hash_sync
         from src.repositories.file_repository import FileRepository
 
         if force_hash:
-            file_hash = compute_file_hash(str(file_path))
+            file_hash = compute_file_hash_sync(str(file_path))
             logger.debug(f"强制计算哈希: {rel_path} -> {file_hash}")
             return "modified"
         else:
@@ -212,6 +214,7 @@ cache/
     def get_derivative_service(self, session):
         """获取派生数据服务"""
         from src.services.derivative_service import DerivativeService
+
         return DerivativeService(str(self.workspace_root), session)
 
     def get_generated_dir(self) -> Path:
