@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 
 
@@ -51,3 +51,13 @@ class PaperStatsResponse(BaseModel):
     total_papers: int
     total_keywords: int
     recent_papers: int  # 最近7天
+
+
+class PaperSaveResponse(BaseModel):
+    """论文保存响应"""
+    message: str
+    total: int
+    saved: int
+    skipped: int
+    keyword: str
+    sort_by: str

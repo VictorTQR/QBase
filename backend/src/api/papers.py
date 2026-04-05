@@ -15,6 +15,7 @@ from models.paper_schemas import (
     ImportPaperRequest,
     PaperListResponse,
     PaperStatsResponse,
+    PaperSaveResponse,
 )
 from papers.service import paper_service
 
@@ -51,7 +52,7 @@ async def search_papers(request: PaperSearchRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/save")
+@router.post("/save", response_model=PaperSaveResponse)
 async def save_papers(request: PaperSearchRequest):
     """
     搜索并保存论文到数据库
@@ -74,14 +75,14 @@ async def save_papers(request: PaperSearchRequest):
             sort_by=request.sort_by,
         )
 
-        return {
-            "message": "搜索并保存完成",
-            "total": result["total"],
-            "saved": result["saved"],
-            "skipped": result["skipped"],
-            "keyword": result["keyword"],
-            "sort_by": result["sort_by"],
-        }
+        return PaperSaveResponse(
+            message="搜索并保存完成",
+            total=result["total"],
+            saved=result["saved"],
+            skipped=result["skipped"],
+            keyword=result["keyword"],
+            sort_by=result["sort_by"],
+        )
 
     except Exception as e:
         logger.error(f"保存论文失败: {e}")
