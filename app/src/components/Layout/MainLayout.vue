@@ -2,6 +2,11 @@
   <div class="main-layout">
     <header class="header">
       <div class="logo">QBase</div>
+      <div class="workspace-display" @click="handleOpenWorkspaceSelector">
+        <el-icon><Folder /></el-icon>
+        <span class="workspace-name">{{ workspaceStore.workspaceName }}</span>
+        <el-icon class="dropdown-icon"><ArrowDown /></el-icon>
+      </div>
       <div class="actions">
         <el-button @click="handleOpenSearch" link>
           <el-icon><Search /></el-icon>
@@ -9,10 +14,6 @@
         </el-button>
         <el-button @click="handleOpenSettings" link>
           <el-icon><Setting /></el-icon>
-        </el-button>
-        <el-button @click="handleAddFolder" type="primary">
-          <el-icon><FolderAdd /></el-icon>
-          添加文件夹
         </el-button>
       </div>
     </header>
@@ -24,21 +25,20 @@
 </template>
 
 <script setup>
-import { FolderAdd, Search, Setting } from '@element-plus/icons-vue'
+import { Folder, Search, Setting, ArrowDown } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useSearchStore } from '@/stores/search'
+import { workspaceManager } from '@/utils/workspaceManager'
 import SearchPanel from '@/components/SearchPanel.vue'
 
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
 const searchStore = useSearchStore()
 
-async function handleAddFolder() {
-  const result = await window.electronAPI.selectFolder()
-  if (result) {
-    workspaceStore.addFolder(result)
-  }
+function handleOpenWorkspaceSelector() {
+  router.push('/workspace-selector')
 }
 
 function handleOpenSearch() {
@@ -71,6 +71,30 @@ function handleOpenSettings() {
   font-size: 18px;
   font-weight: bold;
   color: var(--el-text-color-primary);
+}
+
+.workspace-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.workspace-display:hover {
+  background-color: var(--el-fill-color-light);
+}
+
+.workspace-name {
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+}
+
+.dropdown-icon {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .actions {

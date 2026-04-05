@@ -1,36 +1,37 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import { ElMessage } from 'element-plus'
+import { workspaceManager } from '@/utils/workspaceManager'
+
+let initialized = false
 
 export const useWorkspaceStore = defineStore(
   'workspace',
   () => {
-    const folders = ref([])
+    const currentWorkspace = ref(null)
     const activeFileId = ref(null)
     const needsRefresh = ref(false)
 
-    function addFolder(folder) {
-      const exists = folders.value.some((f) => f.path === folder.path)
-      if (exists) {
-        ElMessage.warning('该文件夹已在工作区中')
-        return
+    const isWorkspaceSelected = computed(() => currentWorkspace.value !== null)
+    const workspaceName = computed(() => {
+      if (!currentWorkspace.value) return ''
+      return currentWorkspace.value.split(/[/\\]/).pop()
+    })
+
+    async function ensureInitialized() {
+      if (!initialized) {
+        await workspaceManager.init()
+        initialized = true
       }
-      const newFolder = {
-        id: Date.now().toString(),
-        name: folder.name,
-        path: folder.path,
-        type: 'folder',
-      }
-      folders.value.push(newFolder)
-      ElMessage.success('文件夹添加成功')
     }
 
-    function removeFolder(folderId) {
-      const index = folders.value.findIndex((f) => f.id === folderId)
-      if (index !== -1) {
-        folders.value.splice(index, 1)
-        ElMessage.success('文件夹已移除')
-      }
+    async function setCurrentWorkspace(workspacePath) {
+      await ensureInitialized()
+      currentWorkspace.value = workspacePath
+      await workspaceManager.setLastWorkspace(workspacePath)
+    }
+
+    function clearCurrentWorkspace() {
+      currentWorkspace.value = null
     }
 
     function refreshFileTree() {
@@ -41,20 +42,31 @@ export const useWorkspaceStore = defineStore(
       activeFileId.value = fileId
     }
 
+    async function initializeFromLastWorkspace() {
+      await ensureInitialized()
+      const lastWorkspace = await workspaceManager.getLastWorkspace()
+      if (lastWorkspace) {
+        currentWorkspace.value = lastWorkspace
+      }
+    }
+
     return {
-      folders,
+      currentWorkspace,
       activeFileId,
       needsRefresh,
-      addFolder,
-      removeFolder,
+      isWorkspaceSelected,
+      workspaceName,
+      setCurrentWorkspace,
+      clearCurrentWorkspace,
       refreshFileTree,
       selectFile,
+      initializeFromLastWorkspace,
     }
   },
   {
     persist: {
       key: 'qbase-workspace',
-      paths: ['folders'],
+      paths: ['currentWorkspace'],
     },
   },
 )

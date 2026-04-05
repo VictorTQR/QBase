@@ -1,7 +1,14 @@
-<script setup></script>
-
 <template>
-  <router-view></router-view>
+  <router-view />
 </template>
 
-<style scoped></style>
+<script setup>
+import { onMounted } from 'vue'
+import { useWorkspaceStore } from '@/stores/workspace'
+
+const workspaceStore = useWorkspaceStore()
+
+onMounted(async () => {
+  await workspaceStore.initializeFromLastWorkspace()
+})
+</script>
