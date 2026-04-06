@@ -15,16 +15,78 @@
       <el-icon><Warning /></el-icon>
       <span>{{ documentStore.error }}</span>
     </div>
-    <DocumentViewer v-else-if="documentStore.currentFile" />
+    <div v-else-if="documentStore.currentFile" class="doc-view">
+      <DocumentViewer />
+    </div>
+    <SelectionToolbar
+      :visible="selectionVisible"
+      :position="selectionPosition"
+      :selected-text="selectedText"
+      @chat="handleToolbarChat"
+      @flashcard="handleToolbarFlashcard"
+      @summary="handleToolbarSummary"
+    />
   </div>
 </template>
 
 <script setup>
+import { ref, onMounted, onUnmounted } from 'vue'
 import { Document, Loading, Warning } from '@element-plus/icons-vue'
 import { useDocumentStore } from '@/stores/document'
 import DocumentViewer from '@/components/DocumentViewer.vue'
+import SelectionToolbar from '@/components/shared/SelectionToolbar.vue'
 
 const documentStore = useDocumentStore()
+
+const selectedText = ref('')
+const selectionVisible = ref(false)
+const selectionPosition = ref({ left: 0, top: 0 })
+
+function handleSelection() {
+  const selection = window.getSelection()
+  const text = selection.toString().trim()
+
+  if (text.length > 4) {
+    selectedText.value = text
+    selectionVisible.value = true
+
+    const range = selection.getRangeAt(0)
+    const rect = range.getBoundingClientRect()
+    const containerRect = document.querySelector('.doc-view')?.getBoundingClientRect()
+
+    if (containerRect) {
+      selectionPosition.value = {
+        left: rect.left - containerRect.left + 20,
+        top: rect.top - containerRect.top - 10
+      }
+    }
+  } else {
+    selectionVisible.value = false
+  }
+}
+
+function handleToolbarChat(text) {
+  console.log('Chat about:', text)
+  selectionVisible.value = false
+}
+
+function handleToolbarFlashcard(text) {
+  console.log('Generate flashcard:', text)
+  selectionVisible.value = false
+}
+
+function handleToolbarSummary(text) {
+  console.log('Generate summary:', text)
+  selectionVisible.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('mouseup', handleSelection)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('mouseup', handleSelection)
+})
 </script>
 
 <style scoped>
@@ -34,6 +96,7 @@ const documentStore = useDocumentStore()
   flex-direction: column;
   overflow: hidden;
   background-color: var(--el-bg-color-page);
+  position: relative;
 }
 
 .file-header {
@@ -60,5 +123,11 @@ const documentStore = useDocumentStore()
   justify-content: center;
   gap: 8px;
   color: var(--el-text-color-secondary);
+}
+
+.doc-view {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
 }
 </style>
