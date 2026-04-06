@@ -1,4 +1,5 @@
 """论文服务层"""
+
 from typing import List, Dict, Any, Optional
 from loguru import logger
 
@@ -150,9 +151,7 @@ class PaperService:
             logger.error(f"导入论文时出错: {e}")
             raise
 
-    def get_saved_papers(
-        self, limit: int = 100, offset: int = 0
-    ) -> Dict[str, Any]:
+    def get_saved_papers(self, limit: int = 100, offset: int = 0) -> Dict[str, Any]:
         """
         获取已保存的论文列表
 
@@ -164,10 +163,10 @@ class PaperService:
             论文列表字典
         """
         try:
-            papers = self.database.list_papers(limit=limit, offset=offset)
+            papers, total = self.database.list_papers(limit=limit, offset=offset)
             return {
                 "papers": papers,
-                "total": len(papers),
+                "total": total,
                 "offset": offset,
                 "limit": limit,
             }

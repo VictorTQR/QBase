@@ -40,11 +40,12 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" link @click="openPdf(row)"> PDF </el-button>
             <el-button type="info" size="small" link @click="openArxiv(row)"> arXiv </el-button>
             <el-button type="success" size="small" link @click="showDetails(row)"> 详情 </el-button>
+            <el-button type="danger" size="small" link @click="handleDelete(row)"> 删除 </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -120,9 +121,10 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { Loading } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import { PapersBackendApi } from '@/api/papers'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { usePapersStore } from '@/stores/papers'
 
 const props = defineProps({
   refresh: {
@@ -133,23 +135,15 @@ const props = defineProps({
 
 const emit = defineEmits(['loaded'])
 
-const loading = ref(false)
-const papers = ref([])
-const currentPage = ref(1)
-const pageSize = ref(20)
-const total = ref(0)
+const store = usePapersStore()
+const { papers, loading, currentPage, pageSize, total } = storeToRefs(store)
 const detailsVisible = ref(false)
 const currentPaper = ref(null)
 
 async function loadPapers() {
   try {
-    loading.value = true
-    const offset = (currentPage.value - 1) * pageSize.value
-    const result = await PapersBackendApi.getPaperList(offset, pageSize.value)
-
+    const result = await store.fetchPapers()
     if (result.success) {
-      papers.value = result.data?.papers || []
-      total.value = result.data?.total || 0
       emit('loaded', {
         count: papers.value.length,
         total: total.value,
@@ -160,8 +154,6 @@ async function loadPapers() {
   } catch (error) {
     console.error('加载论文列表失败:', error)
     ElMessage.error('加载论文列表失败')
-  } finally {
-    loading.value = false
   }
 }
 
@@ -189,6 +181,27 @@ function openArxiv(paper) {
 function showDetails(paper) {
   currentPaper.value = paper
   detailsVisible.value = true
+}
+
+async function handleDelete(paper) {
+  try {
+    await ElMessageBox.confirm(`确定要删除论文"${paper.title}"吗？`, '确认删除', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    const result = await store.deletePaper(paper.entry_id)
+    if (result.success) {
+      ElMessage.success('删除成功')
+    } else {
+      ElMessage.error(result.message || '删除失败')
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除论文失败:', error)
+      ElMessage.error('删除论文失败')
+    }
+  }
 }
 
 function formatDate(dateString) {

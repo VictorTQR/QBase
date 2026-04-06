@@ -1,8 +1,7 @@
 """arXiv 论文抓取器"""
+
 import asyncio
 from typing import List, Optional
-from datetime import datetime
-import json
 from loguru import logger
 import arxiv
 
@@ -12,26 +11,25 @@ class ArxivScraper:
 
     def __init__(self):
         """初始化抓取器"""
-        self.client = arxiv.Client(
-            page_size=100, delay_seconds=3.0, num_retries=3
-        )
+        self.client = arxiv.Client(page_size=100, delay_seconds=3.0, num_retries=3)
         logger.info("ArxivScraper 初始化完成")
 
     def _convert_paper_to_dict(self, paper: arxiv.Result) -> dict:
         """将 arXiv 论文对象转换为字典"""
+        arxiv_id = paper.entry_id.split("/")[-1].split("v")[0]
         return {
             "entry_id": paper.entry_id,
+            "arxiv_id": arxiv_id,
             "title": paper.title,
-            "authors": json.dumps([a.name for a in paper.authors]),
+            "authors": [a.name for a in paper.authors],
             "summary": paper.summary.replace("\n", " ").strip(),
-            "published": paper.published,
-            "updated": paper.updated,
+            "published": paper.published.isoformat(),
+            "published_date": paper.published.isoformat(),
+            "updated": paper.updated.isoformat(),
             "pdf_url": paper.pdf_url,
             "primary_category": paper.primary_category,
-            "categories": json.dumps(paper.categories),
-            "links": json.dumps(
-                [{"type": link.type, "href": link.href} for link in paper.links]
-            ),
+            "categories": list(paper.categories),
+            "links": [{"type": link.type, "href": link.href} for link in paper.links],
         }
 
     async def search_papers(

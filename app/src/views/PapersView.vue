@@ -1,22 +1,20 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { Document, Search, Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { PapersBackendApi } from '@/api/papers'
+import { usePapersStore } from '@/stores/papers'
 import PaperSearchDialog from '@/components/PaperSearchDialog.vue'
 import PaperList from '@/components/PaperList.vue'
 
 const router = useRouter()
-const stats = ref({
-  total_papers: 0,
-  total_authors: 0,
-  total_categories: 0,
-  latest_paper_date: null,
-})
+const store = usePapersStore()
+const { loading } = storeToRefs(store)
+
+const stats = computed(() => store.stats || { total_papers: 0, total_keywords: 0, recent_papers: 0 })
 const searchDialogVisible = ref(false)
 const paperListRefresh = ref(0)
-const loading = ref(false)
 
 function goBack() {
   router.push('/')
@@ -24,19 +22,13 @@ function goBack() {
 
 async function loadStats() {
   try {
-    loading.value = true
-    const result = await PapersBackendApi.getPaperStats()
-
-    if (result.success) {
-      stats.value = result.data || {}
-    } else {
+    const result = await store.fetchStats()
+    if (!result.success) {
       ElMessage.error(result.message || '加载统计信息失败')
     }
   } catch (error) {
     console.error('加载统计信息失败:', error)
     ElMessage.error('加载统计信息失败')
-  } finally {
-    loading.value = false
   }
 }
 
@@ -45,19 +37,12 @@ function openSearchDialog() {
 }
 
 function handleSearchSaved() {
-  loadStats()
   paperListRefresh.value++
 }
 
 function handleRefresh() {
   loadStats()
   paperListRefresh.value++
-}
-
-function formatDate(dateString) {
-  if (!dateString) return '-'
-  const date = new Date(dateString)
-  return date.toLocaleDateString('zh-CN')
 }
 
 onMounted(() => {
@@ -109,8 +94,8 @@ onMounted(() => {
           <el-icon><Document /></el-icon>
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ stats.total_authors }}</div>
-          <div class="stat-label">作者总数</div>
+          <div class="stat-value">{{ stats.total_keywords }}</div>
+          <div class="stat-label">搜索关键词</div>
         </div>
       </div>
 
@@ -119,8 +104,8 @@ onMounted(() => {
           <el-icon><Document /></el-icon>
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ stats.total_categories }}</div>
-          <div class="stat-label">分类总数</div>
+          <div class="stat-value">{{ stats.recent_papers }}</div>
+          <div class="stat-label">近7天新增</div>
         </div>
       </div>
 
@@ -129,8 +114,8 @@ onMounted(() => {
           <el-icon><Document /></el-icon>
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ formatDate(stats.latest_paper_date) }}</div>
-          <div class="stat-label">最新论文</div>
+          <div class="stat-value">{{ stats.total_papers }}</div>
+          <div class="stat-label">论文总计</div>
         </div>
       </div>
     </div>

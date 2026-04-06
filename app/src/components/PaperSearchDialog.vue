@@ -42,7 +42,7 @@
       </div>
 
       <div class="results-list">
-        <div v-for="paper in searchResults" :key="paper.id" class="paper-item">
+        <div v-for="paper in searchResults" :key="paper.arxiv_id" class="paper-item">
           <div class="paper-title">
             {{ paper.title }}
           </div>
@@ -51,7 +51,7 @@
             {{ paper.summary }}
           </div>
           <div class="paper-meta">
-            <span class="paper-id">{{ paper.id }}</span>
+            <span class="paper-id">{{ paper.arxiv_id }}</span>
             <span class="paper-published">{{ formatDate(paper.published) }}</span>
             <el-tag v-if="paper.primary_category" size="small" type="info">
               {{ paper.primary_category }}
@@ -74,9 +74,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { ElMessage } from 'element-plus'
-import { PapersBackendApi } from '@/api/papers'
+import { usePapersStore } from '@/stores/papers'
 
 const props = defineProps({
   modelValue: {
@@ -87,11 +88,13 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'saved'])
 
+const store = usePapersStore()
+const { searchResults } = storeToRefs(store)
+const searching = computed(() => store.searchLoading)
+
 const visible = ref(props.modelValue)
-const searching = ref(false)
 const saving = ref(false)
 const searched = ref(false)
-const searchResults = ref([])
 
 const searchForm = reactive({
   keyword: '',
@@ -117,16 +120,14 @@ async function handleSearch() {
   }
 
   try {
-    searching.value = true
     searched.value = false
-    const result = await PapersBackendApi.searchPapers(
+    const result = await store.searchPapers(
       searchForm.keyword,
       searchForm.maxResults,
       searchForm.sortBy,
     )
 
     if (result.success) {
-      searchResults.value = result.data || []
       searched.value = true
       ElMessage.success(`找到 ${searchResults.value.length} 篇论文`)
     } else {
@@ -135,8 +136,6 @@ async function handleSearch() {
   } catch (error) {
     console.error('搜索论文失败:', error)
     ElMessage.error('搜索论文失败')
-  } finally {
-    searching.value = false
   }
 }
 
@@ -144,7 +143,7 @@ function handleReset() {
   searchForm.keyword = ''
   searchForm.sortBy = 'relevance'
   searchForm.maxResults = 10
-  searchResults.value = []
+  store.clearSearchResults()
   searched.value = false
 }
 
@@ -156,14 +155,14 @@ async function handleSaveAll() {
 
   try {
     saving.value = true
-    const result = await PapersBackendApi.savePapers(
+    const result = await store.savePapers(
       searchForm.keyword,
       searchForm.maxResults,
       searchForm.sortBy,
     )
 
     if (result.success) {
-      ElMessage.success(`成功保存 ${result.data?.saved_count || 0} 篇论文`)
+      ElMessage.success(result.message || '保存成功')
       emit('saved')
       handleClose()
     } else {
@@ -178,12 +177,12 @@ async function handleSaveAll() {
 }
 
 function openPdf(paper) {
-  const pdfUrl = `https://arxiv.org/pdf/${paper.id}.pdf`
+  const pdfUrl = `https://arxiv.org/pdf/${paper.arxiv_id}.pdf`
   window.open(pdfUrl, '_blank')
 }
 
 function openArxiv(paper) {
-  const arxivUrl = `https://arxiv.org/abs/${paper.id}`
+  const arxivUrl = `https://arxiv.org/abs/${paper.arxiv_id}`
   window.open(arxivUrl, '_blank')
 }
 

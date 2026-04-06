@@ -80,4 +80,15 @@ export class PapersBackendApi {
       throw new Error('获取论文统计信息失败')
     }
   }
+
+  static async deletePaper(entryId) {
+    console.log('[PapersBackendApi] deletePaper 调用，参数:', { entryId })
+    try {
+      const request = backend.client.delete(`/api/papers/paper/${entryId}`)
+      return await request.json()
+    } catch (error) {
+      console.error('[PapersBackendApi] deletePaper 失败:', error)
+      throw new Error('删除论文失败')
+    }
+  }
 }

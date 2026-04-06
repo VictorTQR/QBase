@@ -118,3 +118,39 @@ class DBTask(Base):
     created_at = Column(Integer, nullable=True, comment="创建时间戳")
     started_at = Column(Integer, nullable=True, comment="开始时间戳")
     completed_at = Column(Integer, nullable=True, comment="完成时间戳")
+
+
+class DBPaperV2(Base):
+    """论文表 - 主数据库版本"""
+
+    __tablename__ = "papers_v2"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    entry_id = Column(String, unique=True, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    authors = Column(Text, nullable=False)
+    summary = Column(Text, nullable=False)
+    published = Column(String, nullable=False)
+    updated = Column(String, nullable=False)
+    pdf_url = Column(String, nullable=False)
+    primary_category = Column(String, nullable=False)
+    categories = Column(Text, nullable=False)
+    links = Column(Text, nullable=False)
+    created_at = Column(Integer, nullable=True)
+    updated_at = Column(Integer, nullable=True)
+
+
+class DBPaperKeywordV2(Base):
+    """论文关键词关联表 - 主数据库版本"""
+
+    __tablename__ = "paper_keywords_v2"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    paper_id = Column(
+        Integer, ForeignKey("papers_v2.id", ondelete="CASCADE"), nullable=False
+    )
+    keyword = Column(String, nullable=False, index=True)
+    search_sort_type = Column(String, nullable=False)
+    scraped_at = Column(Integer, nullable=True)

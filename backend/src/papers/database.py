@@ -99,7 +99,9 @@ class PaperDatabase:
 
                 # 情况1: 元数据重复注册 -> 跳过（表已定义，无需处理）
                 if "already defined for this metadata" in err:
-                    logger.debug("MetaData already registered, skipping table definition")
+                    logger.debug(
+                        "MetaData already registered, skipping table definition"
+                    )
                     return
 
                 # 情况2: 索引/表已存在 -> 降级逐表处理
@@ -124,6 +126,28 @@ class PaperDatabase:
         """获取数据库会话"""
         return Session(self.engine)
 
+    @staticmethod
+    def _to_dict(paper: DBPaper) -> Dict[str, Any]:
+        """将 DBPaper 对象序列化为前端兼容字典"""
+        arxiv_id = paper.entry_id.split("/")[-1].split("v")[0]
+        return {
+            "id": paper.id,
+            "entry_id": paper.entry_id,
+            "arxiv_id": arxiv_id,
+            "title": paper.title,
+            "authors": json.loads(paper.authors),
+            "summary": paper.summary,
+            "published": paper.published.isoformat(),
+            "published_date": paper.published.isoformat(),
+            "updated": paper.updated.isoformat(),
+            "pdf_url": paper.pdf_url,
+            "primary_category": paper.primary_category,
+            "categories": json.loads(paper.categories),
+            "links": json.loads(paper.links),
+            "created_at": paper.created_at.isoformat(),
+            "updated_at": paper.updated_at.isoformat(),
+        }
+
     def save_paper(
         self, paper_data: Dict[str, Any], keyword: str, sort_type: str
     ) -> Optional[int]:
@@ -131,7 +155,7 @@ class PaperDatabase:
         保存论文到数据库
 
         Args:
-            paper_data: 论文数据字典
+            paper_data: 论文数据字典（authors/categories/links 为列表）
             keyword: 搜索关键词
             sort_type: 排序类型
 
@@ -140,7 +164,6 @@ class PaperDatabase:
         """
         with self.get_session() as session:
             try:
-                # 检查论文是否已存在
                 existing = (
                     session.query(DBPaper)
                     .filter(DBPaper.entry_id == paper_data["entry_id"])
@@ -150,12 +173,32 @@ class PaperDatabase:
                     logger.debug(f"论文已存在: {paper_data['title']}")
                     return None
 
-                # 创建论文记录
-                db_paper = DBPaper(**paper_data)
-                session.add(db_paper)
-                session.flush()  # 获取 ID
+                published_dt = paper_data["published"]
+                if isinstance(published_dt, str):
+                    published_dt = datetime.fromisoformat(published_dt)
+                updated_dt = paper_data["updated"]
+                if isinstance(updated_dt, str):
+                    updated_dt = datetime.fromisoformat(updated_dt)
 
-                # 创建关键词关联
+                db_data = {
+                    "entry_id": paper_data["entry_id"],
+                    "title": paper_data["title"],
+                    "authors": json.dumps(paper_data["authors"], ensure_ascii=False),
+                    "summary": paper_data["summary"],
+                    "published": published_dt,
+                    "updated": updated_dt,
+                    "pdf_url": paper_data["pdf_url"],
+                    "primary_category": paper_data["primary_category"],
+                    "categories": json.dumps(
+                        paper_data["categories"], ensure_ascii=False
+                    ),
+                    "links": json.dumps(paper_data["links"], ensure_ascii=False),
+                }
+
+                db_paper = DBPaper(**db_data)
+                session.add(db_paper)
+                session.flush()
+
                 keyword_assoc = DBPaperKeyword(
                     paper_id=db_paper.id,
                     keyword=keyword,
@@ -190,26 +233,14 @@ class PaperDatabase:
                 if not paper:
                     return None
 
-                return {
-                    "id": paper.id,
-                    "entry_id": paper.entry_id,
-                    "title": paper.title,
-                    "authors": json.loads(paper.authors),
-                    "summary": paper.summary,
-                    "published": paper.published.isoformat(),
-                    "updated": paper.updated.isoformat(),
-                    "pdf_url": paper.pdf_url,
-                    "primary_category": paper.primary_category,
-                    "categories": json.loads(paper.categories),
-                    "links": json.loads(paper.links),
-                    "created_at": paper.created_at.isoformat(),
-                    "updated_at": paper.updated_at.isoformat(),
-                }
+                return self._to_dict(paper)
             except Exception as e:
                 logger.error(f"获取论文时出错: {e}")
                 raise
 
-    def list_papers(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+    def list_papers(
+        self, limit: int = 100, offset: int = 0
+    ) -> tuple[List[Dict[str, Any]], int]:
         """
         列出所有论文（分页）
 
@@ -218,10 +249,12 @@ class PaperDatabase:
             offset: 偏移量
 
         Returns:
-            论文列表
+            (论文列表, 总数) 元组
         """
         with self.get_session() as session:
             try:
+                total = session.query(func.count(DBPaper.id)).scalar()
+
                 papers = (
                     session.query(DBPaper)
                     .order_by(desc(DBPaper.created_at))
@@ -230,24 +263,8 @@ class PaperDatabase:
                     .all()
                 )
 
-                return [
-                    {
-                        "id": p.id,
-                        "entry_id": p.entry_id,
-                        "title": p.title,
-                        "authors": json.loads(p.authors),
-                        "summary": p.summary,
-                        "published": p.published.isoformat(),
-                        "updated": p.updated.isoformat(),
-                        "pdf_url": p.pdf_url,
-                        "primary_category": p.primary_category,
-                        "categories": json.loads(p.categories),
-                        "links": json.loads(p.links),
-                        "created_at": p.created_at.isoformat(),
-                        "updated_at": p.updated_at.isoformat(),
-                    }
-                    for p in papers
-                ]
+                result = [self._to_dict(p) for p in papers]
+                return result, total
             except Exception as e:
                 logger.error(f"列出论文时出错: {e}")
                 raise
