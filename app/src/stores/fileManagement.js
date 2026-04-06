@@ -7,7 +7,7 @@ import { useWorkspaceStore } from './workspace'
 
 export const useFileManagementStore = defineStore('fileManagement', () => {
   const workspaceStore = useWorkspaceStore()
-  
+
   const files = ref([])
   const totalFiles = ref(0)
   const isLoading = ref(false)
@@ -15,25 +15,15 @@ export const useFileManagementStore = defineStore('fileManagement', () => {
   const scanStats = ref(null)
   const selectedFile = ref(null)
 
-  // 获取当前工作区路径（简化：取第一个文件夹）
   const currentWorkspacePath = computed(() => {
-    if (workspaceStore.folders.length > 0) {
-      return workspaceStore.folders[0].path
-    }
-    return null
+    return workspaceStore.currentWorkspace
   })
 
-  const pendingFiles = computed(() => 
-    files.value.filter(f => f.status === 'pending')
-  )
+  const pendingFiles = computed(() => files.value.filter((f) => f.status === 'pending'))
 
-  const readyFiles = computed(() => 
-    files.value.filter(f => f.status === 'ready')
-  )
+  const readyFiles = computed(() => files.value.filter((f) => f.status === 'ready'))
 
-  const missingFiles = computed(() => 
-    files.value.filter(f => f.status === 'missing')
-  )
+  const missingFiles = computed(() => files.value.filter((f) => f.status === 'missing'))
 
   async function initializeAndScan() {
     const workspacePath = currentWorkspacePath.value
@@ -50,9 +40,9 @@ export const useFileManagementStore = defineStore('fileManagement', () => {
         console.warn('无效的工作区路径:', workspacePath)
         return
       }
-      
+
       isLoading.value = true
-      
+
       // 检查并初始化工作区
       const initCheck = await workspaceBackendApi.checkInitialized(workspacePath)
       if (!initCheck.initialized) {
@@ -62,7 +52,6 @@ export const useFileManagementStore = defineStore('fileManagement', () => {
 
       // 扫描工作区
       await scanWorkspace(workspacePath)
-      
     } catch (error) {
       console.error('初始化工作区失败:', error)
       ElMessage.error(`初始化失败: ${error.message}`)
@@ -75,15 +64,16 @@ export const useFileManagementStore = defineStore('fileManagement', () => {
     try {
       isScanning.value = true
       scanStats.value = null
-      
+
       const result = await workspaceBackendApi.scanWorkspace(workspacePath, forceHash)
       scanStats.value = result.stats
-      
-      ElMessage.success(`扫描完成: 新增 ${result.stats.new_files} 个，修改 ${result.stats.modified_files} 个`)
-      
+
+      ElMessage.success(
+        `扫描完成: 新增 ${result.stats.new_files} 个，修改 ${result.stats.modified_files} 个`,
+      )
+
       // 刷新文件列表
       await loadFiles(workspacePath)
-      
     } catch (error) {
       console.error('扫描工作区失败:', error)
       ElMessage.error(`扫描失败: ${error.message}`)
@@ -95,11 +85,10 @@ export const useFileManagementStore = defineStore('fileManagement', () => {
   async function loadFiles(workspacePath, options = {}) {
     try {
       isLoading.value = true
-      
+
       const result = await fileBackendApi.listFiles(workspacePath, options)
       files.value = result.files
       totalFiles.value = result.total
-      
     } catch (error) {
       console.error('加载文件列表失败:', error)
       ElMessage.error(`加载失败: ${error.message}`)

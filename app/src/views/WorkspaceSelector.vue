@@ -38,14 +38,16 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { workspaceManager } from '@/utils/workspaceManager'
+import { useWorkspaceStore } from '@/stores/workspace'
 
 const router = useRouter()
+const workspaceStore = useWorkspaceStore()
 const workspaces = ref([])
 
 const workspacesWithNames = computed(() => {
-  return workspaces.value.map(ws => ({
+  return workspaces.value.map((ws) => ({
     ...ws,
-    name: ws.path.split(/[/\\]/).pop()
+    name: ws.path.split(/[/\\]/).pop(),
   }))
 })
 
@@ -83,8 +85,9 @@ function showDemo() {
   ElMessage.info('快速入门功能即将推出')
 }
 
-function openWorkspace(workspacePath) {
+async function openWorkspace(workspacePath) {
   workspaceManager.addWorkspace(workspacePath)
+  await workspaceStore.setCurrentWorkspace(workspacePath)
 
   ElMessage.success('工作区已打开')
   router.push('/')
@@ -139,7 +142,7 @@ onMounted(() => {
 }
 
 .ws-card {
-  background: rgba(255,255,255,0.95);
+  background: rgba(255, 255, 255, 0.95);
   color: var(--text-primary);
   padding: 24px;
   border-radius: var(--radius-xl);
@@ -150,7 +153,7 @@ onMounted(() => {
 
 .ws-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
 }
 
 .ws-card h3 {
@@ -177,8 +180,8 @@ onMounted(() => {
 }
 
 .ws-card.create {
-  background: rgba(255,255,255,0.75);
-  border: 2px dashed rgba(255,255,255,0.5);
+  background: rgba(255, 255, 255, 0.75);
+  border: 2px dashed rgba(255, 255, 255, 0.5);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -205,8 +208,8 @@ onMounted(() => {
 .ws-btn {
   padding: 12px 24px;
   border-radius: var(--radius-lg);
-  background: rgba(255,255,255,0.2);
-  border: 1px solid rgba(255,255,255,0.4);
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   color: white;
   cursor: pointer;
   font-weight: 500;
@@ -218,7 +221,7 @@ onMounted(() => {
 }
 
 .ws-btn:hover {
-  background: rgba(255,255,255,0.35);
+  background: rgba(255, 255, 255, 0.35);
   transform: translateY(-1px);
 }
 
@@ -229,6 +232,6 @@ onMounted(() => {
 }
 
 .ws-btn.primary:hover {
-  background: rgba(255,255,255,0.95);
+  background: rgba(255, 255, 255, 0.95);
 }
 </style>
