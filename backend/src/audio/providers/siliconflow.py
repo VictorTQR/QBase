@@ -2,8 +2,8 @@ import httpx
 from typing import Optional
 from loguru import logger
 
-from ..providers.base import ASRProvider
-from ...config import settings
+from audio.providers.base import ASRProvider
+from config import settings
 
 
 class SiliconFlowASRProvider(ASRProvider):
@@ -18,59 +18,64 @@ class SiliconFlowASRProvider(ASRProvider):
         self.api_key = api_key or settings.SILICONFLOW_API_KEY
         self.base_url = base_url or settings.SILICONFLOW_API_BASE_URL
         self.model = model or settings.SILICONFLOW_ASR_MODEL
-        self._client: Optional[httpx.AsyncClient] = None
-
-    async def _get_client(self) -> httpx.AsyncClient:
-        if self._client is None:
-            self._client = httpx.AsyncClient(
-                base_url=self.base_url,
-                timeout=httpx.Timeout(300.0),  # 5 分钟超时
-                follow_redirects=True,
-            )
-        return self._client
 
     async def transcribe(
-        self, audio_file_path: str, model: Optional[str] = None
-    ) -> str:
-        use_model = model or self.model
-        client = await self._get_client()
+        self, audio_path: str, language: str = "zh"
+    ) -> dict:
+        """
+        转录音频文件
 
-        audio_path = Path(audio_file_path)
-        if not audio_path.exists():
-            raise FileNotFoundError(f"音频文件不存在: {audio_file_path}")
+        Args:
+            audio_path: 音频文件路径
+            language: 语言代码
 
-        logger.info(f"开始转录音频: {audio_file_path}, 模型: {use_model}")
+        Returns:
+            转录结果
+        """
+        url = f"{self.base_url}/v1/audio/transcriptions"
 
-        with open(audio_file_path, "rb") as f:
-            files = {"file": (audio_path.name, f, "audio/mpeg")}
-            data = {"model": use_model}
-            headers = {"Authorization": f"Bearer {self.api_key}"}
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+        }
 
+        # 读取音频文件
+        with open(audio_path, "rb") as f:
+            audio_data = f.read()
+
+        files = {
+            "file": ("audio.wav", audio_data, "audio/wav"),
+            "model": (None, self.model),
+            "language": (None, language),
+        }
+
+        async with httpx.AsyncClient() as client:
             response = await client.post(
-                "/v1/audio/transcriptions", files=files, data=data, headers=headers
+                url, headers=headers, files=files, timeout=300.0
             )
-
-            if response.status_code != 200:
-                logger.error(
-                    f"硅基流动 API 错误: {response.status_code} - {response.text}"
-                )
-                raise Exception(f"转录失败: {response.status_code} - {response.text}")
-
+            response.raise_for_status()
             result = response.json()
-            transcription = result.get("text", "")
-            logger.info(f"转录完成，文本长度: {len(transcription)}")
-            return transcription
 
-    def validate_config(self) -> bool:
-        if not self.api_key:
-            logger.error("硅基流动 API Key 未配置")
-            return False
-        if not self.base_url:
-            logger.error("硅基流动 API Base URL 未配置")
-            return False
-        return True
+        return {
+            "text": result.get("text", ""),
+            "model": self.model,
+        }
 
-    async def close(self):
-        if self._client:
-            await self._client.aclose()
-            self._client = None
+    async def transcribe_chunk(
+        self, chunk_path: str, chunk_id: str
+    ) -> dict:
+        """
+        转录单个音频分块
+
+        Args:
+            chunk_path: 分块文件路径
+            chunk_id: 分块 ID
+
+        Returns:
+            转录结果
+        """
+        result = await self.transcribe(chunk_path)
+        return {
+            "chunk_id": chunk_id,
+            "text": result["text"],
+            "model": result["model"],
+        }

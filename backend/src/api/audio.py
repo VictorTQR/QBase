@@ -2,16 +2,16 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import Optional
 from loguru import logger
 
-from ..models.audio_schemas import (
+from models.audio_schemas import (
     AudioTranscriptionRequest,
     LocalAudioTranscriptionRequest,
     AudioTranscriptionResponse,
     AudioTaskInfo,
     AudioTaskStatus,
 )
-from ..audio.task_manager import audio_task_manager
-from ..processors import AudioProcessor
-from ..audio.chunker import AudioChunker
+from audio.task_manager import audio_task_manager
+from processors import AudioProcessor
+from audio.chunker import AudioChunker
 
 router = APIRouter(prefix="/api/audio", tags=["audio"])
 

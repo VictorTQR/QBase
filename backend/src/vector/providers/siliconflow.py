@@ -2,8 +2,8 @@ import aiohttp
 from typing import List, Optional
 from loguru import logger
 
-from ..providers.base import EmbeddingProvider
-from ...config import settings
+from vector.providers.base import EmbeddingProvider
+from config import settings
 
 
 MODEL_DIMENSIONS = {"BAAI/bge-large-zh-v1.5": 1024, "BAAI/bge-m3": 1024}

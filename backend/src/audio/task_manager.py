@@ -3,10 +3,10 @@ from typing import Dict, Optional
 from loguru import logger
 from datetime import datetime
 
-from ..database import AsyncSessionLocal
-from ..repositories.parse_task_repository import ParseTaskRepository
-from ..utils.websocket_manager import websocket_manager
-from ..models.audio_schemas import AudioTaskInfo, AudioTaskStatus, AudioChunkInfo
+from database import AsyncSessionLocal
+from repositories.parse_task_repository import ParseTaskRepository
+from utils.websocket_manager import websocket_manager
+from models.audio_schemas import AudioTaskInfo, AudioTaskStatus, AudioChunkInfo
 
 
 class AudioTaskManager:
@@ -73,7 +73,7 @@ class AudioTaskManager:
         for chunk_data in chunks:
             chunk_status_str = chunk_data.get("status", "pending")
             # 将字符串状态转换为 AudioTaskStatus 枚举
-            from ..models.audio_schemas import AudioTaskStatus
+            from models.audio_schemas import AudioTaskStatus
 
             chunk_status = AudioTaskStatus.PENDING
             for status in AudioTaskStatus:
@@ -147,25 +147,83 @@ class AudioTaskManager:
 
             task_data = {
                 "id": task_info.task_id,
-                "batch_id": f"audio_{int(time.time())}",
+                "batch_id": f"audio_{task_info.task_id}",
                 "file_name": task_info.file_name,
                 "file_path": task_info.file_path,
-                "file_hash": file_hash or f"audio_{task_info.task_id}",
+                "file_hash": file_hash or "",
                 "file_size": task_info.total_size,
-                "parser_type": "siliconflow_asr",
+                "parser_type": "audio",
                 "file_type": "audio",
                 "state": self._map_status_to_state(task_info.status),
                 "error_msg": task_info.error,
                 "markdown_content": task_info.transcription,
-                "task_metadata": json.dumps(metadata, ensure_ascii=False),
+                "task_metadata": json.dumps(metadata),
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat(),
             }
 
             task = await repo.create(task_data)
-            logger.info(f"添加音频任务到数据库: {task.id}")
-            # 将新创建的 ParseTask 转换为 AudioTaskInfo 返回
+            logger.info(f"创建音频任务: {task.id}")
+
+            # 广播任务创建事件
+            await websocket_manager.broadcast(
+                "audio",
+                {
+                    "type": "task_created",
+                    "task": self._parse_task_to_audio_info(task).model_dump(),
+                },
+            )
+
             return self._parse_task_to_audio_info(task)
+        finally:
+            await session.close()
+
+    async def update_task(
+        self, task_id: str, status: AudioTaskStatus, transcription: str = None, error: str = None
+    ):
+        """更新音频任务状态"""
+        import json
+
+        repo, session = await self._get_repo()
+        try:
+            task = await repo.get_by_id(task_id)
+            if not task:
+                logger.warning(f"更新任务失败，任务不存在: {task_id}")
+                return None
+
+            updates = {
+                "state": self._map_status_to_state(status),
+            }
+
+            if transcription is not None:
+                updates["markdown_content"] = transcription
+
+            if error is not None:
+                updates["error_msg"] = error
+
+            # 更新 metadata
+            metadata = {}
+            if task.task_metadata:
+                try:
+                    metadata = json.loads(task.task_metadata)
+                except:
+                    pass
+
+            metadata["updated_at_timestamp"] = int(time.time())
+            updates["task_metadata"] = json.dumps(metadata)
+
+            updated_task = await repo.update(task_id, updates)
+
+            # 广播任务更新事件
+            await websocket_manager.broadcast(
+                "audio",
+                {
+                    "type": "task_updated",
+                    "task": self._parse_task_to_audio_info(updated_task).model_dump(),
+                },
+            )
+
+            return self._parse_task_to_audio_info(updated_task)
         finally:
             await session.close()
 
@@ -174,103 +232,91 @@ class AudioTaskManager:
         repo, session = await self._get_repo()
         try:
             task = await repo.get_by_id(task_id)
-            if task and task.file_type == "audio":
-                return self._parse_task_to_audio_info(task)
-            return None
+            if not task:
+                return None
+            return self._parse_task_to_audio_info(task)
         finally:
             await session.close()
 
-    async def update_task(self, task_info: AudioTaskInfo):
-        """更新音频任务"""
+    async def list_tasks(
+        self, status: Optional[AudioTaskStatus] = None, limit: int = 100
+    ) -> list[AudioTaskInfo]:
+        """列出音频任务"""
+        repo, session = await self._get_repo()
+        try:
+            if status:
+                state = self._map_status_to_state(status)
+                tasks = await repo.list_by_state(state, limit)
+            else:
+                tasks = await repo.list_all(limit)
+
+            return [self._parse_task_to_audio_info(task) for task in tasks]
+        finally:
+            await session.close()
+
+    async def update_chunk(
+        self, task_id: str, chunk_id: str, status: AudioTaskStatus, transcription: str = None, error: str = None
+    ):
+        """更新音频分块状态"""
         import json
 
         repo, session = await self._get_repo()
         try:
-            metadata = {
-                "total_duration": task_info.total_duration,
-                "chunk_count": len(task_info.chunks),
-                "chunks": [],
-                "created_at_timestamp": task_info.created_at,
-                "updated_at_timestamp": task_info.updated_at,
-            }
+            task = await repo.get_by_id(task_id)
+            if not task or not task.task_metadata:
+                return None
 
-            for chunk in task_info.chunks:
-                metadata["chunks"].append(
-                    {
-                        "chunk_id": chunk.chunk_id,
-                        "file_path": chunk.file_path,
-                        "start_time": chunk.start_time,
-                        "end_time": chunk.end_time,
-                        "duration": chunk.duration,
-                        "status": chunk.status.value
-                        if hasattr(chunk.status, "value")
-                        else str(chunk.status),
-                        "transcription": chunk.transcription,
-                        "error": chunk.error,
-                    }
-                )
+            metadata = json.loads(task.task_metadata)
+            chunks = metadata.get("chunks", [])
 
-            updates = {
-                "state": self._map_status_to_state(task_info.status),
-                "error_msg": task_info.error,
-                "markdown_content": task_info.transcription,
-                "task_metadata": json.dumps(metadata, ensure_ascii=False),
-            }
+            for chunk in chunks:
+                if chunk["chunk_id"] == chunk_id:
+                    chunk["status"] = status.value
+                    if transcription is not None:
+                        chunk["transcription"] = transcription
+                    if error is not None:
+                        chunk["error"] = error
+                    break
 
-            task = await repo.update(task_info.task_id, updates)
+            updates = {"task_metadata": json.dumps(metadata)}
+            updated_task = await repo.update(task_id, updates)
 
-            # WebSocket 广播
-            try:
-                asyncio.create_task(
-                    websocket_manager.broadcast_task_update(
-                        "audio",
-                        {
-                            "type": "task_update",
-                            "task_id": task_info.task_id,
-                            "task_type": "audio",
-                            "state": self._map_status_to_state(task_info.status),
-                            "data": {
-                                "task_id": task_info.task_id,
-                                "status": task_info.status.value
-                                if hasattr(task_info.status, "value")
-                                else str(task_info.status),
-                                "file_name": task_info.file_name,
-                            },
-                        },
-                    )
-                )
-            except Exception as e:
-                logger.error(f"Failed to broadcast audio task update: {e}")
+            # 广播分块更新事件
+            await websocket_manager.broadcast(
+                "audio",
+                {
+                    "type": "chunk_updated",
+                    "task_id": task_id,
+                    "chunk_id": chunk_id,
+                    "status": status.value,
+                },
+            )
 
-            return task
+            return self._parse_task_to_audio_info(updated_task)
         finally:
             await session.close()
 
-    async def remove_task(self, task_id: str):
+    async def delete_task(self, task_id: str) -> bool:
         """删除音频任务"""
         repo, session = await self._get_repo()
         try:
             from sqlalchemy import delete
-            from ..models.db_models import ParseTask
+            from models.db_models import ParseTask
 
             await session.execute(delete(ParseTask).where(ParseTask.id == task_id))
             await session.commit()
             logger.info(f"删除音频任务: {task_id}")
-        finally:
-            await session.close()
 
-    async def get_all_tasks(self) -> Dict[str, AudioTaskInfo]:
-        """获取所有音频任务"""
-        repo, session = await self._get_repo()
-        try:
-            tasks = await repo.list_by_type("audio", limit=1000)
-            result = {}
-            for task in tasks:
-                result[task.id] = self._parse_task_to_audio_info(task)
-            return result
+            # 广播任务删除事件
+            await websocket_manager.broadcast(
+                "audio",
+                {"type": "task_deleted", "task_id": task_id},
+            )
+
+            return True
         finally:
             await session.close()
 
 
-# 全局单例实例
+# 全局音频任务管理器实例
 audio_task_manager = AudioTaskManager()

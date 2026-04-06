@@ -8,15 +8,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from config import settings
-from api.mineru import router as mineru_router
-from api.audio import router as audio_router
-from api.vector import router as vector_router
-from api.websocket import router as websocket_router
-from api.papers import router as papers_router
-from api.workspace import router as workspace_router
-from api.files import router as files_router
-from api import derivatives
+from src.config import settings
+from src.api.mineru import router as mineru_router
+from src.api.audio import router as audio_router
+from src.api.vector import router as vector_router
+from src.api.websocket import router as websocket_router
+from src.api.papers import router as papers_router
+from src.api.workspace import router as workspace_router
+from src.api.files import router as files_router
+from src.api import derivatives
 from src.utils.error_handler import setup_error_handlers
 
 app = FastAPI(title="QBase Backend", version="0.1.0")

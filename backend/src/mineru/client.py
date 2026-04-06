@@ -2,7 +2,7 @@ import httpx
 from loguru import logger
 from typing import List, Dict, Any, Optional
 
-from ..config import settings
+from config import settings
 
 
 class MinerUClient:
@@ -17,112 +17,122 @@ class MinerUClient:
         }
 
     async def batch_apply_upload_urls(
-        self, files: List[Dict[str, Any]], model_version: str = "vlm"
+        self, files: List[Dict[str, str]]
     ) -> Dict[str, Any]:
         """
-        批量申请上传链接
+        申请批量上传 URL
 
         Args:
-            files: 文件列表，每个文件包含 name 和可选的 data_id
-            model_version: 模型版本，默认为 "vlm"
+            files: 文件列表，每个文件包含 name 字段
 
         Returns:
             包含 batch_id 和 file_urls 的字典
         """
-        url = f"{self.base_url}/api/v4/file-urls/batch"
-        data = {"files": files, "model_version": model_version}
+        url = f"{self.base_url}/api/v1/batch_parse/batch_apply_upload_urls"
 
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(url, headers=self.headers, json=data)
-                response.raise_for_status()
-                result = response.json()
+        payload = {"files": files}
 
-                if result.get("code") == 0:
-                    logger.info(
-                        f"批量申请上传链接成功，batch_id: {result['data']['batch_id']}"
-                    )
-                    return result["data"]
-                else:
-                    logger.error(f"批量申请上传链接失败: {result.get('msg')}")
-                    raise Exception(f"批量申请上传链接失败: {result.get('msg')}")
-        except Exception as e:
-            logger.error(f"批量申请上传链接请求异常: {str(e)}")
-            raise
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url, headers=self.headers, json=payload, timeout=30.0
+            )
+            response.raise_for_status()
+            return response.json()
 
     async def upload_file(self, upload_url: str, file_content: bytes) -> bool:
         """
         上传文件到指定 URL
 
         Args:
-            upload_url: 上传链接
-            file_content: 文件内容（字节）
+            upload_url: 上传 URL
+            file_content: 文件内容
 
         Returns:
             上传是否成功
         """
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.put(upload_url, content=file_content)
-
-                if response.status_code == 200:
-                    logger.info(f"文件上传成功")
-                    return True
-                else:
-                    logger.error(f"文件上传失败，状态码: {response.status_code}")
-                    return False
+                response = await client.put(
+                    upload_url,
+                    content=file_content,
+                    headers={"Content-Type": "application/octet-stream"},
+                    timeout=60.0,
+                )
+                response.raise_for_status()
+                return True
         except Exception as e:
-            logger.error(f"文件上传请求异常: {str(e)}")
-            raise
+            logger.error(f"上传文件失败: {e}")
+            return False
 
-    async def batch_query_results(self, batch_id: str) -> Dict[str, Any]:
+    async def create_batch_parse_task(
+        self, batch_id: str, enable_formula: bool = True, enable_table: bool = True
+    ) -> Dict[str, Any]:
         """
-        批量查询任务结果
+        创建批量解析任务
 
         Args:
-            batch_id: 批量任务 ID
+            batch_id: 批次 ID
+            enable_formula: 是否启用公式识别
+            enable_table: 是否启用表格识别
 
         Returns:
-            批量任务结果
+            任务信息
         """
-        url = f"{self.base_url}/api/v4/extract-results/batch/{batch_id}"
+        url = f"{self.base_url}/api/v1/batch_parse/batch_parse"
 
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url, headers=self.headers)
-                response.raise_for_status()
-                result = response.json()
+        payload = {
+            "batch_id": batch_id,
+            "enable_formula": enable_formula,
+            "enable_table": enable_table,
+        }
 
-                if result.get("code") == 0:
-                    logger.info(f"批量查询任务结果成功")
-                    return result["data"]
-                else:
-                    logger.error(f"批量查询任务结果失败: {result.get('msg')}")
-                    raise Exception(f"批量查询任务结果失败: {result.get('msg')}")
-        except Exception as e:
-            logger.error(f"批量查询任务结果请求异常: {str(e)}")
-            raise
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url, headers=self.headers, json=payload, timeout=30.0
+            )
+            response.raise_for_status()
+            return response.json()
 
-    async def download_zip(self, zip_url: str) -> bytes:
+    async def get_batch_status(self, batch_id: str) -> Dict[str, Any]:
         """
-        下载结果 ZIP 文件
+        获取批量解析任务状态
 
         Args:
-            zip_url: ZIP 文件下载链接
+            batch_id: 批次 ID
 
         Returns:
-            ZIP 文件内容（字节）
+            任务状态信息
+        """
+        url = f"{self.base_url}/api/v1/batch_parse/batch_status"
+
+        params = {"batch_id": batch_id}
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                url, headers=self.headers, params=params, timeout=30.0
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def download_result(self, download_url: str) -> Optional[bytes]:
+        """
+        下载解析结果
+
+        Args:
+            download_url: 下载 URL
+
+        Returns:
+            文件内容，失败返回 None
         """
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(zip_url)
+                response = await client.get(download_url, timeout=60.0)
                 response.raise_for_status()
-
-                logger.info(f"ZIP 文件下载成功")
                 return response.content
         except Exception as e:
-            logger.error(f"ZIP 文件下载请求异常: {str(e)}")
-            raise
+            logger.error(f"下载结果失败: {e}")
+            return None
 
 
+# 全局 MinerU 客户端实例
 mineru_client = MinerUClient()
