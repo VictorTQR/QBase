@@ -44,6 +44,8 @@ class WorkspaceDatabaseService:
     @classmethod
     async def init_workspace_db(cls, workspace_path: str):
         """初始化工作区数据库，创建所有表"""
+        from src.models.db_models import ParseTask, DBFile, DBDerivative, DBTask
+
         engine = cls.get_engine(workspace_path)
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

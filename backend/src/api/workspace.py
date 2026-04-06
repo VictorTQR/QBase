@@ -1,10 +1,9 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database import AsyncSessionLocal
 from src.services.workspace_service import QBaseWorkspaceService
 from src.services.file_scanner import FileScanner
+from src.services.database_service import WorkspaceDatabaseService
 
 router = APIRouter(prefix="/api/workspace", tags=["workspace"])
 
@@ -16,11 +15,6 @@ class InitializeWorkspaceRequest(BaseModel):
 class ScanWorkspaceRequest(BaseModel):
     workspace_path: str
     force_hash: bool = False
-
-
-async def get_session():
-    async with AsyncSessionLocal() as session:
-        yield session
 
 
 @router.post("/initialize")
@@ -45,17 +39,21 @@ async def check_initialized(workspace_path: str):
 
 
 @router.post("/scan")
-async def scan_workspace(
-    request: ScanWorkspaceRequest, session: AsyncSession = Depends(get_session)
-):
+async def scan_workspace(request: ScanWorkspaceRequest):
     """扫描工作区文件"""
     try:
         workspace_service = QBaseWorkspaceService(request.workspace_path)
         if not workspace_service.is_initialized():
             workspace_service.initialize_workspace()
 
-        scanner = FileScanner(request.workspace_path, session)
-        stats = await scanner.scan_full(force_hash=request.force_hash)
+        await WorkspaceDatabaseService.init_workspace_db(request.workspace_path)
+
+        session_factory = WorkspaceDatabaseService.get_session_factory(
+            request.workspace_path
+        )
+        async with session_factory() as session:
+            scanner = FileScanner(request.workspace_path, session)
+            stats = await scanner.scan_full(force_hash=request.force_hash)
 
         return {"success": True, "message": "扫描完成", "stats": stats}
     except Exception as e:

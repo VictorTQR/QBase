@@ -18,6 +18,9 @@ Base = declarative_base()
 
 async def init_db():
     """初始化数据库，创建所有表"""
+    # 延迟导入模型以避免循环导入
+    from src.models.db_models import ParseTask, DBFile, DBDerivative, DBTask
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("数据库初始化完成")

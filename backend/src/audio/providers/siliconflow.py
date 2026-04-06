@@ -1,14 +1,9 @@
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 import httpx
 from typing import Optional
 from loguru import logger
 
-from audio.providers.base import ASRProvider
-from config import settings
+from ..providers.base import ASRProvider
+from ...config import settings
 
 
 class SiliconFlowASRProvider(ASRProvider):

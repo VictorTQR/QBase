@@ -3,12 +3,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from typing import Optional
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from models.paper_schemas import (
+from ..models.paper_schemas import (
     ArxivPaper,
     PaperSearchRequest,
     PaperSearchResponse,
@@ -17,7 +12,7 @@ from models.paper_schemas import (
     PaperStatsResponse,
     PaperSaveResponse,
 )
-from papers.service import paper_service
+from ..papers.service import paper_service
 
 router = APIRouter(prefix="/api/papers", tags=["papers"])
 

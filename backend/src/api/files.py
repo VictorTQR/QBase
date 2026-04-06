@@ -1,13 +1,12 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 from sqlalchemy import select, desc
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database import AsyncSessionLocal
 from src.models.db_models import DBFile
 from src.repositories.file_repository import FileRepository
+from src.services.database_service import WorkspaceDatabaseService
 from src.utils.file_hash import compute_file_hash_sync
 
 router = APIRouter(prefix="/api/files", tags=["files"])
@@ -15,11 +14,6 @@ router = APIRouter(prefix="/api/files", tags=["files"])
 
 class ComputeHashRequest(BaseModel):
     file_path: str
-
-
-async def get_session():
-    async with AsyncSessionLocal() as session:
-        yield session
 
 
 @router.post("/hash")
@@ -42,41 +36,42 @@ async def list_files(
     status: Optional[str] = None,
     offset: int = 0,
     limit: int = 100,
-    session: AsyncSession = Depends(get_session),
 ):
     """列出工作区文件"""
     try:
-        query = select(DBFile)
-        if status:
-            query = query.where(DBFile.status == status)
-        query = query.order_by(desc(DBFile.updated_at)).offset(offset).limit(limit)
+        session_factory = WorkspaceDatabaseService.get_session_factory(workspace_path)
+        async with session_factory() as session:
+            query = select(DBFile)
+            if status:
+                query = query.where(DBFile.status == status)
+            query = query.order_by(desc(DBFile.updated_at)).offset(offset).limit(limit)
 
-        result = await session.execute(query)
-        files = result.scalars().all()
+            result = await session.execute(query)
+            files = result.scalars().all()
 
-        file_list = []
-        for f in files:
-            file_list.append(
-                {
-                    "hash": f.hash,
-                    "rel_path": f.rel_path,
-                    "file_type": f.file_type,
-                    "size": f.size,
-                    "mtime": f.mtime,
-                    "status": f.status,
-                    "created_at": f.created_at,
-                    "updated_at": f.updated_at,
-                    "absolute_path": str(Path(workspace_path) / f.rel_path)
-                    if workspace_path
-                    else None,
-                }
-            )
+            file_list = []
+            for f in files:
+                file_list.append(
+                    {
+                        "hash": f.hash,
+                        "rel_path": f.rel_path,
+                        "file_type": f.file_type,
+                        "size": f.size,
+                        "mtime": f.mtime,
+                        "status": f.status,
+                        "created_at": f.created_at,
+                        "updated_at": f.updated_at,
+                        "absolute_path": str(Path(workspace_path) / f.rel_path)
+                        if workspace_path
+                        else None,
+                    }
+                )
 
-        count_query = select(DBFile)
-        if status:
-            count_query = count_query.where(DBFile.status == status)
-        count_result = await session.execute(count_query)
-        total = len(count_result.scalars().all())
+            count_query = select(DBFile)
+            if status:
+                count_query = count_query.where(DBFile.status == status)
+            count_result = await session.execute(count_query)
+            total = len(count_result.scalars().all())
 
         return {
             "success": True,
@@ -93,15 +88,16 @@ async def list_files(
 async def get_file(
     file_hash: str,
     workspace_path: Optional[str] = None,
-    session: AsyncSession = Depends(get_session),
 ):
     """获取单个文件信息"""
     try:
-        repo = FileRepository(session)
-        db_file = await repo.get_by_hash(file_hash)
+        session_factory = WorkspaceDatabaseService.get_session_factory(workspace_path)
+        async with session_factory() as session:
+            repo = FileRepository(session)
+            db_file = await repo.get_by_hash(file_hash)
 
-        if not db_file:
-            raise HTTPException(status_code=404, detail="文件不存在")
+            if not db_file:
+                raise HTTPException(status_code=404, detail="文件不存在")
 
         return {
             "success": True,
@@ -126,14 +122,16 @@ async def get_file(
 
 
 @router.delete("/{file_hash}")
-async def delete_file(file_hash: str, session: AsyncSession = Depends(get_session)):
+async def delete_file(file_hash: str, workspace_path: Optional[str] = None):
     """删除文件记录（不删除物理文件）"""
     try:
-        repo = FileRepository(session)
-        success = await repo.delete(file_hash)
+        session_factory = WorkspaceDatabaseService.get_session_factory(workspace_path)
+        async with session_factory() as session:
+            repo = FileRepository(session)
+            success = await repo.delete(file_hash)
 
-        if not success:
-            raise HTTPException(status_code=404, detail="文件不存在")
+            if not success:
+                raise HTTPException(status_code=404, detail="文件不存在")
 
         return {"success": True, "message": "文件记录已删除"}
     except HTTPException:

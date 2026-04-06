@@ -4,12 +4,7 @@ import uuid
 from typing import List, Tuple, Optional
 from loguru import logger
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from config import settings
+from ..config import settings
 
 
 class AudioChunker:

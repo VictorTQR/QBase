@@ -3,19 +3,14 @@ import uuid
 from typing import Any, Optional
 from loguru import logger
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from config import settings
-from processors.base import FileProcessor
-from audio.providers import ASRProvider, SiliconFlowASRProvider
-from audio.chunker import AudioChunker
-from audio.task_manager import AudioTaskManager
-from audio.utils import is_audio_file
-from models.audio_schemas import AudioTaskStatus, AudioChunkInfo, AudioTaskInfo
-from utils.file_hash import compute_bytes_hash, compute_file_hash
+from ..config import settings
+from ..processors.base import FileProcessor
+from ..audio.providers import ASRProvider, SiliconFlowASRProvider
+from ..audio.chunker import AudioChunker
+from ..audio.task_manager import AudioTaskManager
+from ..audio.utils import is_audio_file
+from ..models.audio_schemas import AudioTaskStatus, AudioChunkInfo, AudioTaskInfo
+from ..utils.file_hash import compute_bytes_hash, compute_file_hash
 
 
 class AudioProcessor(FileProcessor):
