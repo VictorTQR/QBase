@@ -3,7 +3,9 @@ export function buildFileTree(files) {
   const pathMap = {}
 
   files.forEach((file) => {
-    const parts = file.rel_path.split('/')
+    // 统一处理 Windows 和 Unix 路径分隔符
+    const normalizedPath = file.rel_path.replace(/\\/g, '/')
+    const parts = normalizedPath.split('/')
     let currentLevel = tree
 
     parts.forEach((part, index) => {

@@ -246,7 +246,6 @@ onMounted(() => {
 }
 
 :deep(.el-tree-node__content) {
-  padding: 0 !important;
   height: auto !important;
 }
 
