@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QBase - 重塑版 UI/UX 预览</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        :root {
+            --qbase-primary: #2563eb;
+            --qbase-accent: #7c3aed;
+            --qbase-success: #10b981;
+            --qbase-bg-canvas: #fafafa;
+            --qbase-bg-elevated: #ffffff;
+        }
+
+        .glass {
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            background: rgba(255, 255, 255, 0.85);
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .animate-slide-in {
+            animation: slideIn 0.3s ease;
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.2s ease;
+        }
+
+        .reading-progress {
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: 3px;
+            height: 100vh;
+            background: #e2e8f0;
+            z-index: 50;
+        }
+
+        .reading-progress-bar {
+            width: 100%;
+            background: linear-gradient(to bottom, var(--qbase-primary), var(--qbase-accent));
+            transition: height 0.1s ease;
+        }
+
+        .hover-card {
+            transition: all 0.2s ease;
+        }
+        .hover-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.15);
+        }
+
+        .drop-zone {
+            border: 2px dashed #cbd5e1;
+            transition: all 0.3s ease;
+        }
+        .drop-zone.drag-over {
+            border-color: var(--qbase-primary);
+            background: rgba(37, 99, 235, 0.05);
+        }
+
+        .ai-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+        .ai-status.idle { background: #10b981; }
+        .ai-status.thinking { 
+            background: #f59e0b; 
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        .ai-status.suggestion { 
+            background: var(--qbase-accent);
+            box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.3);
+        }
+
+        .selection-toolbar {
+            position: absolute;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            padding: 6px;
+            display: flex;
+            gap: 4px;
+            z-index: 100;
+            transform: translate(-50%, -100%);
+            margin-top: -10px;
+        }
+
+        .selection-toolbar::after {
+            content: '';
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 6px solid white;
+        }
+
+        .typewriter {
+            overflow: hidden;
+            border-right: 2px solid var(--qbase-accent);
+            white-space: nowrap;
+            animation: typing 0.5s steps(20, end), blink-caret 0.75s step-end infinite;
+        }
+
+        @keyframes typing {
+            from { width: 0 }
+            to { width: 100% }
+        }
+
+        @keyframes blink-caret {
+            from, to { border-color: transparent }
+            50% { border-color: var(--qbase-accent) }
+        }
+
+        .command-palette {
+            position: fixed;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            max-width: 90vw;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            z-index: 100;
+        }
+
+        .mindmap-node {
+            fill: white;
+            stroke: var(--qbase-primary);
+            stroke-width: 2;
+        }
+        .mindmap-text {
+            font-size: 12px;
+            fill: #334155;
+            text-anchor: middle;
+            dominant-baseline: middle;
+        }
+        .mindmap-link {
+            fill: none;
+            stroke: #cbd5e1;
+            stroke-width: 1.5;
+        }
+    </style>
+<base target="_blank">
+</head>
+<body class="bg-gray-50 text-gray-900 overflow-hidden">
+
+    <div id="app" class="h-screen flex flex-col">
+        <!-- 阅读进度条 -->
+        <div class="reading-progress">
+            <div class="reading-progress-bar" :style="{ height: readingProgress + '%' }"></div>
+        </div>
+
+        <!-- Header -->
+        <header class="glass h-12 flex items-center justify-between px-4 border-b border-gray-200 z-40">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">Q</div>
+                <span class="font-semibold text-gray-800">QBase</span>
+                <div class="h-4 w-px bg-gray-300 mx-2"></div>
+                <button @click="showWorkspaceSelector = true" class="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                    <i class="fas fa-folder-open text-gray-400"></i>
+                    <span>我的知识库</span>
+                    <i class="fas fa-chevron-down text-xs text-gray-400"></i>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2 mr-2 cursor-pointer" @click="toggleAIPanel" title="AI 状态">
+                    <div class="ai-status" :class="aiStatus"></div>
+                    <span class="text-xs text-gray-500" v-if="aiStatus === 'thinking'">思考中...</span>
+                </div>
+
+                <button @click="openCommandPalette" class="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-md text-sm text-gray-600 transition-colors">
+                    <i class="fas fa-search text-xs"></i>
+                    <span>搜索</span>
+                    <kbd class="px-1.5 py-0.5 bg-white rounded text-xs border border-gray-300">⌘K</kbd>
+                </button>
+
+                <button @click="showSettings = true" class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 transition-colors">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- 主布局 -->
+        <div class="flex-1 flex overflow-hidden">
+            <!-- Sidebar -->
+            <aside class="bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-out" :class="sidebarCollapsed ? 'w-16' : 'w-64'">
+                <div class="h-12 flex items-center justify-between px-3 border-b border-gray-100">
+                    <span v-if="!sidebarCollapsed" class="text-xs font-medium text-gray-500 uppercase tracking-wider">文件</span>
+                    <button @click="sidebarCollapsed = !sidebarCollapsed" class="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 transition-colors">
+                        <i class="fas" :class="sidebarCollapsed ? 'fa-chevron-right' : 'fa-chevron-left'" style="font-size: 10px;"></i>
+                    </button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto py-2">
+                    <div v-for="item in fileTree" :key="item.id" @click="selectFile(item)" 
+                         class="group flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors"
+                         :class="[sidebarCollapsed ? 'justify-center' : '', selectedFile?.id === item.id ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-50 text-gray-700']">
+                        <i class="fas" :class="item.icon" :style="{ color: item.color }"></i>
+                        <span v-if="!sidebarCollapsed" class="text-sm truncate flex-1">{{ item.name }}</span>
+                        <div v-if="!sidebarCollapsed && item.status" class="w-2 h-2 rounded-full" :class="{
+                            'bg-yellow-400': item.status === 'pending',
+                            'bg-blue-400 animate-pulse': item.status === 'processing',
+                            'bg-green-400': item.status === 'ready',
+                            'bg-red-400': item.status === 'error'
+                        }"></div>
+                    </div>
+                </div>
+
+                <div v-if="!sidebarCollapsed" class="p-3 border-t border-gray-100">
+                    <button @click="showParseManagement = true" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-md transition-colors">
+                        <i class="fas fa-microchip text-purple-500"></i>
+                        <span>解析管理</span>
+                        <span class="ml-auto text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">3</span>
+                    </button>
+                </div>
+                <div v-else class="p-2 border-t border-gray-100 flex justify-center">
+                    <button @click="showParseManagement = true" class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 text-purple-500">
+                        <i class="fas fa-microchip"></i>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Content Pane -->
+            <main class="flex-1 bg-gray-50 relative overflow-hidden" 
+                  @dragover.prevent="dragOver = true" 
+                  @dragleave.prevent="dragOver = false" 
+                  @drop.prevent="handleDrop"
+                  :class="{ 'drop-zone drag-over': dragOver }">
+
+                <div v-if="dragOver" class="absolute inset-0 bg-blue-50/90 backdrop-blur-sm z-30 flex items-center justify-center">
+                    <div class="text-center">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-blue-500 mb-3"></i>
+                        <p class="text-lg font-medium text-blue-900">释放以导入文件</p>
+                        <p class="text-sm text-blue-600 mt-1">支持 PDF、Markdown、图片等格式</p>
+                    </div>
+                </div>
+
+                <div v-if="selectedFile" class="h-10 flex items-center gap-2 px-4 bg-white/50 border-b border-gray-200 text-sm">
+                    <button class="text-gray-400 hover:text-gray-600"><i class="fas fa-chevron-left"></i></button>
+                    <span class="text-gray-400">我的知识库</span>
+                    <i class="fas fa-chevron-right text-xs text-gray-300"></i>
+                    <span class="text-gray-600">{{ selectedFile.name }}</span>
+                    <div class="flex-1"></div>
+                    <button @click="enterFocusMode" class="text-gray-400 hover:text-gray-600" title="专注模式">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                </div>
+
+                <div class="h-full overflow-y-auto p-8" @scroll="updateReadingProgress" ref="contentRef">
+                    <div v-if="selectedFile" class="max-w-3xl mx-auto bg-white rounded-xl shadow-sm p-8 min-h-[600px]">
+                        <div v-if="selectedFile.type === 'markdown'" class="prose prose-slate max-w-none">
+                            <h1 class="text-3xl font-bold text-gray-900 mb-4">{{ selectedFile.name.replace('.md', '') }}</h1>
+                            <div class="flex items-center gap-4 text-sm text-gray-500 mb-8 pb-4 border-b border-gray-100">
+                                <span><i class="far fa-calendar mr-1"></i> 2026-04-06</span>
+                                <span><i class="far fa-clock mr-1"></i> 阅读约 5 分钟</span>
+                                <span><i class="fas fa-tag mr-1"></i> 机器学习</span>
+                            </div>
+
+                            <p class="text-gray-700 leading-relaxed mb-4" @mouseup="handleTextSelection">
+                                深度学习是机器学习的一个分支，它基于人工神经网络，特别是深度神经网络。深度学习模型通过多层非线性变换，能够学习数据的层次化表示。
+                            </p>
+
+                            <h2 class="text-xl font-semibold text-gray-900 mt-8 mb-4">核心概念</h2>
+
+                            <p class="text-gray-700 leading-relaxed mb-4" @mouseup="handleTextSelection">
+                                神经网络由多个层组成，每一层都包含多个神经元。数据从输入层进入，经过隐藏层的处理，最终到达输出层。每一层都会提取数据的不同特征，从低级特征（如边缘、颜色）到高级特征（如形状、物体）。
+                            </p>
+
+                            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 my-6 rounded-r-lg">
+                                <p class="text-blue-800 text-sm">
+                                    <i class="fas fa-lightbulb mr-2"></i>
+                                    <strong>提示：</strong> 深度学习在图像识别、自然语言处理和语音识别等领域取得了突破性进展。
+                                </p>
+                            </div>
+
+                            <h2 class="text-xl font-semibold text-gray-900 mt-8 mb-4">应用场景</h2>
+
+                            <ul class="space-y-2 text-gray-700">
+                                <li class="flex items-start gap-2">
+                                    <i class="fas fa-check-circle text-green-500 mt-1"></i>
+                                    <span>计算机视觉：图像分类、目标检测、人脸识别</span>
+                                </li>
+                                <li class="flex items-start gap-2">
+                                    <i class="fas fa-check-circle text-green-500 mt-1"></i>
+                                    <span>自然语言处理：机器翻译、情感分析、问答系统</span>
+                                </li>
+                                <li class="flex items-start gap-2">
+                                    <i class="fas fa-check-circle text-green-500 mt-1"></i>
+                                    <span>语音识别：语音助手、实时字幕、声纹识别</span>
+                                </li>
+                            </ul>
+
+                            <p class="text-gray-700 leading-relaxed mt-6" @mouseup="handleTextSelection">
+                                随着计算能力的提升和大数据的普及，深度学习技术正在快速发展，为各行各业带来革命性的变化。
+                            </p>
+                        </div>
+
+                        <div v-else-if="selectedFile.type === 'pdf'" class="bg-gray-800 text-gray-200 p-8 rounded-lg">
+                            <div class="flex items-center justify-between mb-6">
+                                <h2 class="text-xl font-semibold">{{ selectedFile.name }}</h2>
+                                <div class="flex items-center gap-2">
+                                    <button class="px-3 py-1 bg-gray-700 rounded text-sm">上一页</button>
+                                    <span class="text-sm">1 / 42</span>
+                                    <button class="px-3 py-1 bg-gray-700 rounded text-sm">下一页</button>
+                                </div>
+                            </div>
+                            <div class="bg-gray-700 h-96 flex items-center justify-center rounded">
+                                <div class="text-center">
+                                    <i class="fas fa-file-pdf text-6xl text-red-400 mb-4"></i>
+                                    <p>PDF 预览区域</p>
+                                    <p class="text-sm text-gray-400 mt-2">支持缩放、标注、文本选择</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-else class="h-full flex items-center justify-center">
+                        <div class="text-center text-gray-400">
+                            <i class="fas fa-book-open text-6xl mb-4 opacity-30"></i>
+                            <p class="text-lg">选择一个文件开始阅读</p>
+                            <p class="text-sm mt-2">或拖拽文件到此处导入</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="selectionToolbar.show" class="selection-toolbar" :style="{ left: selectionToolbar.x + 'px', top: selectionToolbar.y + 'px' }">
+                    <button @click="aiAction('explain')" class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-purple-600" title="解释">
+                        <i class="fas fa-magic"></i>
+                    </button>
+                    <button @click="aiAction('translate')" class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-blue-600" title="翻译">
+                        <i class="fas fa-language"></i>
+                    </button>
+                    <button @click="aiAction('flashcard')" class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-green-600" title="生成闪卡">
+                        <i class="fas fa-clone"></i>
+                    </button>
+                    <button @click="aiAction('highlight')" class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-yellow-600" title="高亮">
+                        <i class="fas fa-highlighter"></i>
+                    </button>
+                    <div class="w-px h-6 bg-gray-200 mx-1"></div>
+                    <button @click="aiAction('ask')" class="px-3 h-8 flex items-center gap-1 rounded bg-purple-100 text-purple-700 text-sm font-medium hover:bg-purple-200">
+                        <i class="fas fa-robot text-xs"></i>
+                        询问 AI
+                    </button>
+                </div>
+            </main>
+
+            <!-- AI Panel -->
+            <aside v-if="aiPanelOpen" class="bg-white border-l border-gray-200 flex flex-col transition-all duration-300" :class="aiPanelCollapsed ? 'w-16' : 'w-[450px]'">
+                <div class="h-full flex">
+                    <div class="w-16 border-r border-gray-100 flex flex-col items-center py-4 gap-2">
+                        <button v-for="tab in aiTabs" :key="tab.id" @click="activeAITab = tab.id"
+                                class="w-10 h-10 rounded-xl flex items-center justify-center transition-all relative group"
+                                :class="activeAITab === tab.id ? 'bg-purple-100 text-purple-600' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'">
+                            <i :class="tab.icon"></i>
+                            <span class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">{{ tab.name }}</span>
+                        </button>
+                        <div class="flex-1"></div>
+                        <button @click="aiPanelCollapsed = !aiPanelCollapsed" class="w-10 h-10 rounded-xl flex items-center justify-center text-gray-400 hover:bg-gray-100">
+                            <i class="fas" :class="aiPanelCollapsed ? 'fa-chevron-left' : 'fa-chevron-right'"></i>
+                        </button>
+                    </div>
+
+                    <div v-if="!aiPanelCollapsed" class="flex-1 flex flex-col">
+                        <!-- 聊天模块 -->
+                        <div v-if="activeAITab === 'chat'" class="flex-1 flex flex-col">
+                            <div class="h-12 flex items-center px-4 border-b border-gray-100">
+                                <span class="font-medium text-gray-800">AI 助手</span>
+                                <span class="ml-2 px-2 py-0.5 bg-purple-100 text-purple-600 text-xs rounded-full">GPT-4</span>
+                            </div>
+
+                            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                                <div v-for="(msg, idx) in chatMessages" :key="idx" class="flex gap-3" :class="msg.role === 'user' ? 'flex-row-reverse' : ''">
+                                    <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" :class="msg.role === 'user' ? 'bg-gray-200' : 'bg-purple-100'">
+                                        <i class="fas" :class="msg.role === 'user' ? 'fa-user text-gray-600' : 'fa-robot text-purple-600'"></i>
+                                    </div>
+                                    <div class="max-w-[80%] rounded-2xl px-4 py-2 text-sm" :class="msg.role === 'user' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-800'">
+                                        <p>{{ msg.content }}</p>
+                                    </div>
+                                </div>
+
+                                <div v-if="aiThinking" class="flex gap-3">
+                                    <div class="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
+                                        <i class="fas fa-robot text-purple-600 animate-pulse"></i>
+                                    </div>
+                                    <div class="bg-gray-100 rounded-2xl px-4 py-3 flex items-center gap-2">
+                                        <div class="flex gap-1">
+                                            <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0s"></span>
+                                            <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></span>
+                                            <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></span>
+                                        </div>
+                                        <span class="text-xs text-gray-500">正在思考...</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="p-4 border-t border-gray-100">
+                                <div class="flex gap-2">
+                                    <input v-model="chatInput" @keyup.enter="sendMessage" placeholder="询问关于当前文档的任何问题..." 
+                                           class="flex-1 px-4 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                    <button @click="sendMessage" class="w-10 h-10 bg-purple-600 text-white rounded-lg flex items-center justify-center hover:bg-purple-700 transition-colors">
+                                        <i class="fas fa-paper-plane text-sm"></i>
+                                    </button>
+                                </div>
+                                <div class="flex gap-2 mt-2">
+                                    <button @click="quickAsk('总结这篇文章')" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs text-gray-600 transition-colors">总结文章</button>
+                                    <button @click="quickAsk('提取关键概念')" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs text-gray-600 transition-colors">提取概念</button>
+                                    <button @click="quickAsk('生成思维导图')" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs text-gray-600 transition-colors">生成导图</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 思维导图模块 -->
+                        <div v-else-if="activeAITab === 'mindmap'" class="flex-1 flex flex-col">
+                            <div class="h-12 flex items-center justify-between px-4 border-b border-gray-100">
+                                <span class="font-medium text-gray-800">思维导图</span>
+                                <button @click="generateMindmap" class="text-sm text-purple-600 hover:text-purple-700">
+                                    <i class="fas fa-sync-alt mr-1"></i>重新生成
+                                </button>
+                            </div>
+                            <div class="flex-1 overflow-auto p-4 bg-gray-50">
+                                <svg v-if="mindmapData" width="400" height="300" class="mx-auto">
+                                    <g v-for="(link, idx) in mindmapData.links" :key="'link-'+idx">
+                                        <line :x1="link.source.x" :y1="link.source.y" :x2="link.target.x" :y2="link.target.y" class="mindmap-link" />
+                                    </g>
+                                    <g v-for="(node, idx) in mindmapData.nodes" :key="'node-'+idx">
+                                        <circle :cx="node.x" :cy="node.y" r="30" class="mindmap-node" />
+                                        <text :x="node.x" :y="node.y" class="mindmap-text">{{ node.label }}</text>
+                                    </g>
+                                </svg>
+                                <div v-else class="h-full flex items-center justify-center text-gray-400">
+                                    <button @click="generateMindmap" class="flex flex-col items-center gap-2 hover:text-purple-600 transition-colors">
+                                        <i class="fas fa-project-diagram text-4xl"></i>
+                                        <span class="text-sm">点击生成思维导图</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 闪卡模块 -->
+                        <div v-else-if="activeAITab === 'flashcard'" class="flex-1 flex flex-col">
+                            <div class="h-12 flex items-center justify-between px-4 border-b border-gray-100">
+                                <span class="font-medium text-gray-800">闪卡</span>
+                                <div class="flex gap-2">
+                                    <button class="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">列表</button>
+                                    <button class="text-xs px-2 py-1 bg-purple-100 text-purple-600 rounded">学习</button>
+                                </div>
+                            </div>
+                            <div class="flex-1 overflow-y-auto p-4">
+                                <div v-if="flashcards.length === 0" class="text-center text-gray-400 py-8">
+                                    <i class="fas fa-clone text-3xl mb-2"></i>
+                                    <p class="text-sm">暂无闪卡，选中文本生成</p>
+                                </div>
+                                <div v-else class="space-y-3">
+                                    <div v-for="(card, idx) in flashcards" :key="idx" class="bg-white border border-gray-200 rounded-lg p-4 hover-card cursor-pointer" @click="card.flipped = !card.flipped">
+                                        <div v-if="!card.flipped">
+                                            <p class="text-sm font-medium text-gray-800">{{ card.front }}</p>
+                                            <p class="text-xs text-gray-400 mt-2">点击翻转</p>
+                                        </div>
+                                        <div v-else>
+                                            <p class="text-sm text-gray-700">{{ card.back }}</p>
+                                            <div class="flex gap-2 mt-3">
+                                                <button class="flex-1 py-1 bg-red-100 text-red-600 rounded text-xs">困难</button>
+                                                <button class="flex-1 py-1 bg-yellow-100 text-yellow-600 rounded text-xs">一般</button>
+                                                <button class="flex-1 py-1 bg-green-100 text-green-600 rounded text-xs">简单</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 摘要模块 -->
+                        <div v-else-if="activeAITab === 'summary'" class="flex-1 flex flex-col">
+                            <div class="h-12 flex items-center px-4 border-b border-gray-100">
+                                <span class="font-medium text-gray-800">文档摘要</span>
+                            </div>
+                            <div class="flex-1 overflow-y-auto p-4">
+                                <div class="bg-purple-50 rounded-lg p-4 mb-4">
+                                    <h4 class="text-sm font-medium text-purple-900 mb-2">核心观点</h4>
+                                    <ul class="space-y-2">
+                                        <li v-for="(point, idx) in summaryPoints" :key="idx" class="flex items-start gap-2 text-sm text-purple-800">
+                                            <i class="fas fa-check-circle text-purple-500 mt-0.5"></i>
+                                            <span>{{ point }}</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="bg-gray-50 rounded-lg p-4">
+                                    <h4 class="text-sm font-medium text-gray-700 mb-2">关键数据</h4>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div class="bg-white p-3 rounded border border-gray-200">
+                                            <p class="text-2xl font-bold text-gray-800">85%</p>
+                                            <p class="text-xs text-gray-500">准确率提升</p>
+                                        </div>
+                                        <div class="bg-white p-3 rounded border border-gray-200">
+                                            <p class="text-2xl font-bold text-gray-800">3x</p>
+                                            <p class="text-xs text-gray-500">效率增长</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- Command Palette -->
+        <div v-if="commandPaletteOpen" class="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-32" @click="commandPaletteOpen = false">
+            <div class="command-palette animate-slide-in" @click.stop>
+                <div class="p-4 border-b border-gray-100">
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-search text-gray-400"></i>
+                        <input v-model="commandQuery" @keyup.enter="executeCommand" placeholder="搜索文件、命令或询问 AI..." 
+                               class="flex-1 text-lg outline-none" autofocus>
+                        <kbd class="px-2 py-1 bg-gray-100 rounded text-xs text-gray-500">ESC 关闭</kbd>
+                    </div>
+                </div>
+                <div class="max-h-80 overflow-y-auto py-2">
+                    <div v-for="(group, gidx) in commandGroups" :key="gidx">
+                        <div class="px-4 py-1 text-xs font-medium text-gray-400 uppercase">{{ group.name }}</div>
+                        <button v-for="(cmd, cidx) in group.commands" :key="cidx" @click="executeCommand(cmd)"
+                                class="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-100 transition-colors"
+                                :class="{ 'bg-blue-50': selectedCommand === cmd }">
+                            <i :class="cmd.icon" class="text-gray-400 w-5"></i>
+                            <div class="flex-1 text-left">
+                                <p class="text-sm text-gray-800">{{ cmd.name }}</p>
+                                <p v-if="cmd.desc" class="text-xs text-gray-400">{{ cmd.desc }}</p>
+                            </div>
+                            <kbd v-if="cmd.shortcut" class="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-500">{{ cmd.shortcut }}</kbd>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workspace Selector Modal -->
+        <div v-if="showWorkspaceSelector" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-8 animate-slide-in">
+                <div class="flex items-center justify-between mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">选择工作区</h2>
+                        <p class="text-gray-500 mt-1">继续上次的工作或创建新的知识库</p>
+                    </div>
+                    <button @click="showWorkspaceSelector = false" class="w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="text-sm font-medium text-gray-700 mb-3">最近打开</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div v-for="ws in workspaces" :key="ws.id" @click="selectWorkspace(ws)"
+                             class="p-4 border border-gray-200 rounded-xl hover:border-purple-300 hover:shadow-lg transition-all cursor-pointer group">
+                            <div class="flex items-start gap-3">
+                                <div class="w-12 h-12 bg-gradient-to-br from-blue-100 to-purple-100 rounded-lg flex items-center justify-center text-2xl">
+                                    {{ ws.emoji }}
+                                </div>
+                                <div class="flex-1">
+                                    <h4 class="font-medium text-gray-800 group-hover:text-purple-600 transition-colors">{{ ws.name }}</h4>
+                                    <p class="text-xs text-gray-500 mt-1">{{ ws.path }}</p>
+                                    <p class="text-xs text-gray-400 mt-2">{{ ws.files }} 个文件 · {{ ws.lastOpened }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex gap-3">
+                    <button class="flex-1 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+                        <i class="fas fa-folder-open"></i>
+                        打开文件夹
+                    </button>
+                    <button class="flex-1 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors flex items-center justify-center gap-2">
+                        <i class="fas fa-plus"></i>
+                        创建新工作区
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Parse Management Modal -->
+        <div v-if="showParseManagement" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click="showParseManagement = false">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col animate-slide-in" @click.stop>
+                <div class="h-14 flex items-center justify-between px-6 border-b border-gray-200">
+                    <div class="flex items-center gap-4">
+                        <button @click="showParseManagement = false" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                        <h2 class="text-lg font-semibold text-gray-800">解析管理</h2>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button @click="viewMode = 'kanban'" class="px-3 py-1.5 rounded text-sm" :class="viewMode === 'kanban' ? 'bg-purple-100 text-purple-600' : 'text-gray-600 hover:bg-gray-100'">看板</button>
+                        <button @click="viewMode = 'list'" class="px-3 py-1.5 rounded text-sm" :class="viewMode === 'list' ? 'bg-purple-100 text-purple-600' : 'text-gray-600 hover:bg-gray-100'">列表</button>
+                        <button class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-4 bg-blue-50 border-b border-blue-100">
+                    <div class="flex items-center gap-3">
+                        <div class="flex-1">
+                            <p class="text-sm text-blue-800">正在索引: research-paper.pdf (3/10)</p>
+                            <div class="w-full h-2 bg-blue-200 rounded-full mt-2">
+                                <div class="h-full bg-blue-500 rounded-full transition-all" style="width: 70%"></div>
+                            </div>
+                        </div>
+                        <span class="text-sm font-medium text-blue-600">70%</span>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-auto p-6">
+                    <div v-if="viewMode === 'kanban'" class="grid grid-cols-4 gap-4">
+                        <div v-for="col in kanbanColumns" :key="col.id" class="bg-gray-50 rounded-lg p-3">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-sm font-medium text-gray-700">{{ col.name }}</span>
+                                <span class="text-xs text-gray-400">{{ col.items.length }}</span>
+                            </div>
+                            <div class="space-y-2">
+                                <div v-for="item in col.items" :key="item.id" class="bg-white p-3 rounded-lg border border-gray-200 hover-card cursor-pointer">
+                                    <div class="flex items-start gap-2">
+                                        <i :class="item.icon" :style="{ color: item.color }"></i>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm font-medium text-gray-800 truncate">{{ item.name }}</p>
+                                            <p class="text-xs text-gray-400 truncate">{{ item.path }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div v-if="showSettings" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click="showSettings = false">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl h-[70vh] flex animate-slide-in" @click.stop>
+                <div class="w-56 border-r border-gray-200 p-4">
+                    <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">设置</h3>
+                    <div class="space-y-1">
+                        <button v-for="setting in settingTabs" :key="setting.id" @click="activeSetting = setting.id"
+                                class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors"
+                                :class="activeSetting === setting.id ? 'bg-purple-50 text-purple-600' : 'text-gray-600 hover:bg-gray-50'">
+                            <i :class="setting.icon"></i>
+                            <span>{{ setting.name }}</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="flex-1 p-6 overflow-y-auto">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-6">{{ settingTabs.find(s => s.id === activeSetting)?.name }}</h2>
+
+                    <div v-if="activeSetting === 'general'" class="space-y-6">
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div>
+                                <p class="font-medium text-gray-800">自动保存</p>
+                                <p class="text-sm text-gray-500">自动保存阅读进度和笔记</p>
+                            </div>
+                            <button class="w-12 h-6 bg-purple-600 rounded-full relative" @click="toggleSetting('autoSave')">
+                                <span class="absolute right-1 top-1 w-4 h-4 bg-white rounded-full transition-all"></span>
+                            </button>
+                        </div>
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div>
+                                <p class="font-medium text-gray-800">智能索引</p>
+                                <p class="text-sm text-gray-500">自动索引新添加的文件</p>
+                            </div>
+                            <button class="w-12 h-6 bg-purple-600 rounded-full relative">
+                                <span class="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-else-if="activeSetting === 'llm'" class="space-y-6">
+                        <div class="bg-purple-50 rounded-lg p-4">
+                            <h4 class="text-sm font-medium text-purple-900 mb-3">AI 模型配置</h4>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="text-xs text-purple-700">API Key</label>
+                                    <input type="password" value="sk-••••••••••••••••" class="w-full mt-1 px-3 py-2 border border-purple-200 rounded-lg text-sm">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-purple-700">模型选择</label>
+                                    <select class="w-full mt-1 px-3 py-2 border border-purple-200 rounded-lg text-sm bg-white">
+                                        <option>GPT-4</option>
+                                        <option>GPT-3.5 Turbo</option>
+                                        <option>Claude 3</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
+
+        createApp({
+            setup() {
+                // 状态
+                const sidebarCollapsed = ref(false);
+                const aiPanelOpen = ref(true);
+                const aiPanelCollapsed = ref(false);
+                const activeAITab = ref('chat');
+                const selectedFile = ref(null);
+                const readingProgress = ref(0);
+                const dragOver = ref(false);
+                const aiStatus = ref('idle');
+                const aiThinking = ref(false);
+                const chatInput = ref('');
+                const chatMessages = ref([
+                    { role: 'assistant', content: '你好！我是你的 AI 助手。选择一段文字，我可以帮你解释、翻译或生成闪卡。', typing: false }
+                ]);
+                const commandPaletteOpen = ref(false);
+                const commandQuery = ref('');
+                const showWorkspaceSelector = ref(false);
+                const showParseManagement = ref(false);
+                const showSettings = ref(false);
+                const viewMode = ref('kanban');
+                const activeSetting = ref('general');
+                const mindmapData = ref(null);
+                const flashcards = ref([]);
+                const contentRef = ref(null);
+
+                const selectionToolbar = ref({ show: false, x: 0, y: 0, text: '' });
+
+                // 数据
+                const fileTree = ref([
+                    { id: 1, name: '深度学习入门.md', type: 'markdown', icon: 'fa-file-alt', color: '#2563eb', status: 'ready' },
+                    { id: 2, name: '神经网络架构.pdf', type: 'pdf', icon: 'fa-file-pdf', color: '#ef4444', status: 'processing' },
+                    { id: 3, name: 'PyTorch 教程.md', type: 'markdown', icon: 'fa-file-alt', color: '#2563eb', status: 'ready' },
+                    { id: 4, name: '论文笔记.md', type: 'markdown', icon: 'fa-file-alt', color: '#2563eb', status: 'pending' },
+                    { id: 5, name: '数据集说明.pdf', type: 'pdf', icon: 'fa-file-pdf', color: '#ef4444', status: 'ready' },
+                ]);
+
+                const aiTabs = [
+                    { id: 'chat', name: '聊天', icon: 'fas fa-comment-dots' },
+                    { id: 'mindmap', name: '思维导图', icon: 'fas fa-project-diagram' },
+                    { id: 'flashcard', name: '闪卡', icon: 'fas fa-clone' },
+                    { id: 'summary', name: '摘要', icon: 'fas fa-file-alt' },
+                ];
+
+                const workspaces = [
+                    { id: 1, name: '机器学习研究', emoji: '🤖', path: '/Users/docs/ml-research', files: 128, lastOpened: '2 小时前' },
+                    { id: 2, name: '论文阅读', emoji: '📄', path: '/Users/docs/papers', files: 56, lastOpened: '昨天' },
+                    { id: 3, name: '项目文档', emoji: '💼', path: '/Users/docs/projects', files: 34, lastOpened: '3 天前' },
+                    { id: 4, name: '个人笔记', emoji: '📝', path: '/Users/docs/notes', files: 89, lastOpened: '1 周前' },
+                ];
+
+                const kanbanColumns = [
+                    { id: 'pending', name: '待处理', items: [
+                        { id: 1, name: '论文笔记.md', path: '/notes/', icon: 'fa-file-alt', color: '#2563eb' },
+                        { id: 2, name: '未命名.pdf', path: '/downloads/', icon: 'fa-file-pdf', color: '#ef4444' },
+                    ]},
+                    { id: 'processing', name: '处理中', items: [
+                        { id: 3, name: '神经网络架构.pdf', path: '/papers/', icon: 'fa-file-pdf', color: '#ef4444' },
+                    ]},
+                    { id: 'ready', name: '已完成', items: [
+                        { id: 4, name: '深度学习入门.md', path: '/tutorials/', icon: 'fa-file-alt', color: '#2563eb' },
+                        { id: 5, name: 'PyTorch 教程.md', path: '/tutorials/', icon: 'fa-file-alt', color: '#2563eb' },
+                        { id: 6, name: '数据集说明.pdf', path: '/docs/', icon: 'fa-file-pdf', color: '#ef4444' },
+                    ]},
+                    { id: 'error', name: '失败', items: []},
+                ];
+
+                const settingTabs = [
+                    { id: 'general', name: '通用设置', icon: 'fas fa-cog' },
+                    { id: 'llm', name: 'LLM 配置', icon: 'fas fa-robot' },
+                    { id: 'about', name: '关于', icon: 'fas fa-info-circle' },
+                ];
+
+                const summaryPoints = [
+                    '深度学习是机器学习的一个分支，基于多层神经网络',
+                    '在计算机视觉、NLP 和语音识别领域取得突破性进展',
+                    '需要大量数据和计算资源进行训练',
+                    '通过反向传播算法优化网络权重',
+                ];
+
+                const commandGroups = computed(() => [
+                    {
+                        name: '文件',
+                        commands: fileTree.value.map(f => ({
+                            name: f.name,
+                            icon: f.icon,
+                            action: () => selectFile(f)
+                        }))
+                    },
+                    {
+                        name: '操作',
+                        commands: [
+                            { name: '打开解析管理', icon: 'fas fa-microchip', shortcut: '⌘P', action: () => showParseManagement.value = true },
+                            { name: '生成思维导图', icon: 'fas fa-project-diagram', action: () => { activeAITab.value = 'mindmap'; generateMindmap(); } },
+                            { name: '进入专注模式', icon: 'fas fa-expand', shortcut: '⌘.', action: enterFocusMode },
+                        ]
+                    },
+                    {
+                        name: 'AI 指令',
+                        commands: [
+                            { name: '总结当前文档', icon: 'fas fa-file-alt', action: () => quickAsk('总结这篇文章') },
+                            { name: '提取关键概念', icon: 'fas fa-key', action: () => quickAsk('提取关键概念') },
+                            { name: '生成闪卡', icon: 'fas fa-clone', action: () => quickAsk('生成闪卡') },
+                        ]
+                    }
+                ]);
+
+                // 方法
+                const selectFile = (file) => {
+                    selectedFile.value = file;
+                    readingProgress.value = 0;
+                };
+
+                const toggleAIPanel = () => {
+                    if (!aiPanelOpen.value) {
+                        aiPanelOpen.value = true;
+                    } else {
+                        aiPanelCollapsed.value = !aiPanelCollapsed.value;
+                    }
+                };
+
+                const updateReadingProgress = () => {
+                    if (!contentRef.value) return;
+                    const scrollTop = contentRef.value.scrollTop;
+                    const scrollHeight = contentRef.value.scrollHeight - contentRef.value.clientHeight;
+                    readingProgress.value = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
+                };
+
+                const handleDrop = (e) => {
+                    dragOver.value = false;
+                    // 模拟文件导入
+                    const newFile = {
+                        id: Date.now(),
+                        name: '新导入的文件.pdf',
+                        type: 'pdf',
+                        icon: 'fa-file-pdf',
+                        color: '#ef4444',
+                        status: 'pending'
+                    };
+                    fileTree.value.unshift(newFile);
+                    alert('文件已导入并开始索引');
+                };
+
+                const handleTextSelection = () => {
+                    const selection = window.getSelection();
+                    const text = selection.toString().trim();
+
+                    if (text.length > 0) {
+                        const range = selection.getRangeAt(0);
+                        const rect = range.getBoundingClientRect();
+                        selectionToolbar.value = {
+                            show: true,
+                            x: rect.left + rect.width / 2,
+                            y: rect.top + window.scrollY,
+                            text: text
+                        };
+                    } else {
+                        selectionToolbar.value.show = false;
+                    }
+                };
+
+                const aiAction = (action) => {
+                    const text = selectionToolbar.value.text;
+                    selectionToolbar.value.show = false;
+
+                    if (!aiPanelOpen.value) {
+                        aiPanelOpen.value = true;
+                        aiPanelCollapsed.value = false;
+                    }
+                    activeAITab.value = 'chat';
+
+                    chatMessages.value.push({ role: 'user', content: `对选中的文字执行 "${action}": "${text.substring(0, 50)}..."` });
+                    aiThinking.value = true;
+                    aiStatus.value = 'thinking';
+
+                    setTimeout(() => {
+                        aiThinking.value = false;
+                        aiStatus.value = 'idle';
+                        let response = '';
+                        switch(action) {
+                            case 'explain':
+                                response = `这段文字主要讲述了深度学习的基本概念。深度学习是机器学习的一个分支，通过多层神经网络学习数据的层次化表示。`;
+                                break;
+                            case 'translate':
+                                response = `英文翻译：Deep learning is a branch of machine learning based on artificial neural networks, particularly deep neural networks.`;
+                                break;
+                            case 'flashcard':
+                                response = `已为您生成闪卡！正面：什么是深度学习？ 背面：基于多层神经网络的机器学习方法。`;
+                                flashcards.value.push({
+                                    front: '什么是深度学习？',
+                                    back: '基于多层神经网络的机器学习方法，能够学习数据的层次化表示。',
+                                    flipped: false
+                                });
+                                break;
+                            case 'highlight':
+                                response = '已将选中文字标记为高亮。';
+                                break;
+                            case 'ask':
+                                response = '您想了解关于这段文字的什么信息？我可以帮您深入分析。';
+                                break;
+                        }
+                        chatMessages.value.push({ role: 'assistant', content: response });
+                    }, 1500);
+                };
+
+                const sendMessage = () => {
+                    if (!chatInput.value.trim()) return;
+                    chatMessages.value.push({ role: 'user', content: chatInput.value });
+                    const userMsg = chatInput.value;
+                    chatInput.value = '';
+                    aiThinking.value = true;
+                    aiStatus.value = 'thinking';
+
+                    setTimeout(() => {
+                        aiThinking.value = false;
+                        aiStatus.value = 'idle';
+                        chatMessages.value.push({ 
+                            role: 'assistant', 
+                            content: `关于 "${userMsg}"，根据当前文档内容，我可以告诉您：深度学习是一种强大的机器学习技术，特别适合处理复杂的模式识别任务。` 
+                        });
+                    }, 2000);
+                };
+
+                const quickAsk = (question) => {
+                    chatInput.value = question;
+                    sendMessage();
+                    if (commandPaletteOpen.value) commandPaletteOpen.value = false;
+                };
+
+                const openCommandPalette = () => {
+                    commandPaletteOpen.value = true;
+                    commandQuery.value = '';
+                };
+
+                const executeCommand = (cmd) => {
+                    if (typeof cmd === 'object' && cmd.action) {
+                        cmd.action();
+                    }
+                    commandPaletteOpen.value = false;
+                };
+
+                const generateMindmap = () => {
+                    mindmapData.value = {
+                        nodes: [
+                            { x: 200, y: 150, label: '深度学习' },
+                            { x: 100, y: 80, label: '神经网络' },
+                            { x: 300, y: 80, label: '反向传播' },
+                            { x: 100, y: 220, label: 'CNN' },
+                            { x: 300, y: 220, label: 'RNN' },
+                        ],
+                        links: [
+                            { source: { x: 200, y: 150 }, target: { x: 100, y: 80 } },
+                            { source: { x: 200, y: 150 }, target: { x: 300, y: 80 } },
+                            { source: { x: 200, y: 150 }, target: { x: 100, y: 220 } },
+                            { source: { x: 200, y: 150 }, target: { x: 300, y: 220 } },
+                        ]
+                    };
+                };
+
+                const enterFocusMode = () => {
+                    sidebarCollapsed.value = true;
+                    aiPanelOpen.value = false;
+                    alert('已进入专注模式，按 ESC 退出');
+                };
+
+                const selectWorkspace = (ws) => {
+                    showWorkspaceSelector.value = false;
+                    alert(`已切换到工作区：${ws.name}`);
+                };
+
+                // 键盘快捷键
+                const handleKeydown = (e) => {
+                    if (e.metaKey && e.key === 'k') {
+                        e.preventDefault();
+                        openCommandPalette();
+                    }
+                    if (e.key === 'Escape') {
+                        commandPaletteOpen.value = false;
+                        selectionToolbar.value.show = false;
+                    }
+                };
+
+                onMounted(() => {
+                    window.addEventListener('keydown', handleKeydown);
+                    window.addEventListener('mouseup', handleTextSelection);
+                });
+
+                onUnmounted(() => {
+                    window.removeEventListener('keydown', handleKeydown);
+                    window.removeEventListener('mouseup', handleTextSelection);
+                });
+
+                return {
+                    sidebarCollapsed,
+                    aiPanelOpen,
+                    aiPanelCollapsed,
+                    activeAITab,
+                    selectedFile,
+                    readingProgress,
+                    dragOver,
+                    aiStatus,
+                    aiThinking,
+                    chatInput,
+                    chatMessages,
+                    commandPaletteOpen,
+                    commandQuery,
+                    showWorkspaceSelector,
+                    showParseManagement,
+                    showSettings,
+                    viewMode,
+                    activeSetting,
+                    mindmapData,
+                    flashcards,
+                    contentRef,
+                    selectionToolbar,
+                    fileTree,
+                    aiTabs,
+                    workspaces,
+                    kanbanColumns,
+                    settingTabs,
+                    summaryPoints,
+                    commandGroups,
+                    selectFile,
+                    toggleAIPanel,
+                    updateReadingProgress,
+                    handleDrop,
+                    handleTextSelection,
+                    aiAction,
+                    sendMessage,
+                    quickAsk,
+                    openCommandPalette,
+                    executeCommand,
+                    generateMindmap,
+                    enterFocusMode,
+                    selectWorkspace,
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
