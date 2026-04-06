@@ -37,7 +37,7 @@ export class WebSocketClient {
 
   emit(event, data) {
     if (!this.listeners.has(event)) return
-    this.listeners.get(event).forEach(cb => cb(data))
+    this.listeners.get(event).forEach((cb) => cb(data))
   }
 
   disconnect() {

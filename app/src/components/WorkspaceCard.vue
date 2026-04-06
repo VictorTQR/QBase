@@ -32,18 +32,13 @@ function handleClick() {
 
 async function handleRemove() {
   try {
-    await ElMessageBox.confirm(
-      `确定要移除工作区「${props.workspace.name}」吗？`,
-      '移除工作区',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    )
+    await ElMessageBox.confirm(`确定要移除工作区「${props.workspace.name}」吗？`, '移除工作区', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
     emit('remove', props.workspace)
-  } catch {
-  }
+  } catch {}
 }
 </script>
 

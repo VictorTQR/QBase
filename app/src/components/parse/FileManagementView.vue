@@ -23,33 +23,31 @@ const isDeleting = ref(false)
 
 const mergedFiles = computed(() => {
   const tasks = parseStore.tasks
-  return tasks.map(task => {
+  return tasks.map((task) => {
     const isIndexed = vectorStore.isFileIndexed(task.file_path)
-    const indexedFile = vectorStore.indexedFilesList?.find(
-      f => f.file_path === task.file_path
-    )
-    
+    const indexedFile = vectorStore.indexedFilesList?.find((f) => f.file_path === task.file_path)
+
     return {
       ...task,
       vectorIndexed: isIndexed,
-      chunkCount: indexedFile?.chunk_count || 0
+      chunkCount: indexedFile?.chunk_count || 0,
     }
   })
 })
 
 const filteredFiles = computed(() => {
   let files = mergedFiles.value
-  
+
   if (searchText.value) {
     const search = searchText.value.toLowerCase()
-    files = files.filter(f => 
-      f.file_name.toLowerCase().includes(search) ||
-      f.file_path?.toLowerCase().includes(search)
+    files = files.filter(
+      (f) =>
+        f.file_name.toLowerCase().includes(search) || f.file_path?.toLowerCase().includes(search),
     )
   }
-  
+
   if (fileTypeFilter.value) {
-    files = files.filter(f => {
+    files = files.filter((f) => {
       if (fileTypeFilter.value === 'document') {
         return f.parser_type === 'mineru' || f.file_name?.endsWith('.md')
       } else if (fileTypeFilter.value === 'audio') {
@@ -58,9 +56,9 @@ const filteredFiles = computed(() => {
       return true
     })
   }
-  
+
   if (statusFilter.value) {
-    files = files.filter(f => {
+    files = files.filter((f) => {
       if (statusFilter.value === 'pending') {
         return f.state === 'pending'
       } else if (statusFilter.value === 'running') {
@@ -73,7 +71,7 @@ const filteredFiles = computed(() => {
       return true
     })
   }
-  
+
   return files
 })
 
@@ -82,12 +80,12 @@ const doneTasksWithoutIndex = computed(() => {
   return parseStore.doneTasks.filter((task) => !vectorStore.isFileIndexed(task.file_path))
 })
 const selectedFilesArray = computed(() => {
-  return filteredFiles.value.filter(f => selectedFiles.value.has(f.id))
+  return filteredFiles.value.filter((f) => selectedFiles.value.has(f.id))
 })
 
 function toggleSelectAll() {
   if (selectAll.value) {
-    selectedFiles.value = new Set(filteredFiles.value.map(f => f.id))
+    selectedFiles.value = new Set(filteredFiles.value.map((f) => f.id))
   } else {
     selectedFiles.value = new Set()
   }
@@ -131,7 +129,7 @@ onMounted(async () => {
       parseStore.fetchTasks(),
       parseStore.fetchStats(),
       vectorStore.loadStats(),
-      vectorStore.loadIndexedFiles()
+      vectorStore.loadIndexedFiles(),
     ])
   } catch (err) {
     console.error('加载数据失败:', err)
@@ -209,9 +207,10 @@ async function handleBatchParse() {
 }
 
 async function handleBatchIndex() {
-  const filesToIndex = selectedFilesArray.value.length > 0 
-    ? selectedFilesArray.value.filter(f => f.state === 'done' && !f.vectorIndexed)
-    : doneTasksWithoutIndex.value
+  const filesToIndex =
+    selectedFilesArray.value.length > 0
+      ? selectedFilesArray.value.filter((f) => f.state === 'done' && !f.vectorIndexed)
+      : doneTasksWithoutIndex.value
 
   if (filesToIndex.length === 0) {
     ElMessage.warning('没有需要索引的文档')
@@ -280,13 +279,7 @@ async function handleRetry(file) {
 
 async function handleIndex(file) {
   try {
-    await vectorStore.indexDocument(
-      file.file_path,
-      file.file_name,
-      null,
-      null,
-      file.id
-    )
+    await vectorStore.indexDocument(file.file_path, file.file_name, null, null, file.id)
     ElMessage.success(`已成功索引 ${file.file_name}`)
   } catch (err) {
     ElMessage.error(`索引失败: ${err.message}`)
@@ -328,14 +321,34 @@ async function handleIndex(file) {
         <span>个文件已选中</span>
       </div>
       <div class="batch-buttons">
-        <el-button type="primary" size="small" :loading="isBatchParsing" :disabled="pendingTasks.length === 0" @click="handleBatchParse">批量解析</el-button>
-        <el-button size="small" :loading="isBatchIndexing" :disabled="doneTasksWithoutIndex.length === 0" @click="handleBatchIndex">批量索引</el-button>
-        <el-button type="danger" size="small" :loading="isDeleting" :disabled="selectedFiles.size === 0" @click="handleDeleteSelected">删除</el-button>
+        <el-button
+          type="primary"
+          size="small"
+          :loading="isBatchParsing"
+          :disabled="pendingTasks.length === 0"
+          @click="handleBatchParse"
+          >批量解析</el-button
+        >
+        <el-button
+          size="small"
+          :loading="isBatchIndexing"
+          :disabled="doneTasksWithoutIndex.length === 0"
+          @click="handleBatchIndex"
+          >批量索引</el-button
+        >
+        <el-button
+          type="danger"
+          size="small"
+          :loading="isDeleting"
+          :disabled="selectedFiles.size === 0"
+          @click="handleDeleteSelected"
+          >删除</el-button
+        >
       </div>
     </div>
 
     <div class="table-container">
-      <el-table :data="filteredFiles" style="width: 100%; min-width: 900px;" table-layout="auto">
+      <el-table :data="filteredFiles" style="width: 100%; min-width: 900px" table-layout="auto">
         <el-table-column min-width="8%">
           <template #header>
             <el-checkbox v-model="selectAll" @change="toggleSelectAll" />
@@ -369,38 +382,23 @@ async function handleIndex(file) {
                 <div class="step-icon success">✓</div>
               </div>
               <div class="step-connector" :class="{ completed: row.state !== 'pending' }"></div>
-              
+
               <div class="step">
-                <div
-                  class="step-icon"
-                  :class="getParseStageClass(row)"
-                >
+                <div class="step-icon" :class="getParseStageClass(row)">
                   {{ getParseStageIcon(row) }}
                 </div>
               </div>
-              <div
-                class="step-connector"
-                :class="{ completed: row.state === 'done' }"
-              ></div>
-              
+              <div class="step-connector" :class="{ completed: row.state === 'done' }"></div>
+
               <div class="step">
-                <div
-                  class="step-icon"
-                  :class="getIndexStageClass(row)"
-                >
+                <div class="step-icon" :class="getIndexStageClass(row)">
                   {{ getIndexStageIcon(row) }}
                 </div>
               </div>
-              <div
-                class="step-connector"
-                :class="{ completed: row.vectorIndexed }"
-              ></div>
-              
+              <div class="step-connector" :class="{ completed: row.vectorIndexed }"></div>
+
               <div class="step">
-                <div
-                  class="step-icon"
-                  :class="row.vectorIndexed ? 'success' : 'pending'"
-                >
+                <div class="step-icon" :class="row.vectorIndexed ? 'success' : 'pending'">
                   {{ row.vectorIndexed ? '✓' : '○' }}
                 </div>
               </div>
@@ -430,9 +428,7 @@ async function handleIndex(file) {
         <el-table-column label="操作" min-width="12%">
           <template #default="{ row }">
             <div class="action-buttons">
-              <el-button type="primary" size="small" @click="openDrawer(row)">
-                详情
-              </el-button>
+              <el-button type="primary" size="small" @click="openDrawer(row)"> 详情 </el-button>
               <el-button v-if="row.state === 'failed'" size="small" @click="handleRetry(row)">
                 重试
               </el-button>
@@ -440,7 +436,9 @@ async function handleIndex(file) {
                 v-if="row.state === 'done' && !row.vectorIndexed"
                 type="primary"
                 size="small"
-                :loading="vectorStore.isIndexing && vectorStore.currentIndexingFile === row.file_name"
+                :loading="
+                  vectorStore.isIndexing && vectorStore.currentIndexingFile === row.file_name
+                "
                 @click="handleIndex(row)"
               >
                 索引
@@ -451,10 +449,7 @@ async function handleIndex(file) {
       </el-table>
     </div>
 
-    <ChunkDetailsDrawer
-      v-model:visible="drawerVisible"
-      :file="selectedFile"
-    />
+    <ChunkDetailsDrawer v-model:visible="drawerVisible" :file="selectedFile" />
   </div>
 </template>
 
@@ -633,7 +628,8 @@ async function handleIndex(file) {
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.4);
   }

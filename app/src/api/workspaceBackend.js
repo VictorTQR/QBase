@@ -24,7 +24,7 @@ class WorkspaceBackendApi {
           if (typeof data.detail === 'string') {
             errorMsg = data.detail
           } else if (Array.isArray(data.detail)) {
-            errorMsg = data.detail.map(d => d.msg || JSON.stringify(d)).join(', ')
+            errorMsg = data.detail.map((d) => d.msg || JSON.stringify(d)).join(', ')
           } else {
             errorMsg = JSON.stringify(data.detail)
           }
@@ -46,7 +46,9 @@ class WorkspaceBackendApi {
   }
 
   async checkInitialized(workspacePath) {
-    return this.request(`/api/workspace/check-initialized?workspace_path=${encodeURIComponent(workspacePath)}`)
+    return this.request(
+      `/api/workspace/check-initialized?workspace_path=${encodeURIComponent(workspacePath)}`,
+    )
   }
 
   async scanWorkspace(workspacePath, forceHash = false) {

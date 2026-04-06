@@ -42,30 +42,9 @@
 
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button
-              type="primary"
-              size="small"
-              link
-              @click="openPdf(row)"
-            >
-              PDF
-            </el-button>
-            <el-button
-              type="info"
-              size="small"
-              link
-              @click="openArxiv(row)"
-            >
-              arXiv
-            </el-button>
-            <el-button
-              type="success"
-              size="small"
-              link
-              @click="showDetails(row)"
-            >
-              详情
-            </el-button>
+            <el-button type="primary" size="small" link @click="openPdf(row)"> PDF </el-button>
+            <el-button type="info" size="small" link @click="openArxiv(row)"> arXiv </el-button>
+            <el-button type="success" size="small" link @click="showDetails(row)"> 详情 </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -83,11 +62,7 @@
       </div>
     </div>
 
-    <el-dialog
-      v-model="detailsVisible"
-      :title="currentPaper?.title"
-      width="700px"
-    >
+    <el-dialog v-model="detailsVisible" :title="currentPaper?.title" width="700px">
       <div v-if="currentPaper" class="paper-details">
         <div class="detail-section">
           <h4>基本信息</h4>
@@ -114,7 +89,10 @@
           <div class="abstract">{{ currentPaper.summary }}</div>
         </div>
 
-        <div v-if="currentPaper.categories && currentPaper.categories.length > 0" class="detail-section">
+        <div
+          v-if="currentPaper.categories && currentPaper.categories.length > 0"
+          class="detail-section"
+        >
           <h4>所有分类</h4>
           <div class="categories">
             <el-tag
@@ -131,12 +109,8 @@
         <div class="detail-section">
           <h4>操作</h4>
           <div class="detail-actions">
-            <el-button type="primary" @click="openPdf(currentPaper)">
-              查看 PDF
-            </el-button>
-            <el-button type="info" @click="openArxiv(currentPaper)">
-              访问 arXiv 页面
-            </el-button>
+            <el-button type="primary" @click="openPdf(currentPaper)"> 查看 PDF </el-button>
+            <el-button type="info" @click="openArxiv(currentPaper)"> 访问 arXiv 页面 </el-button>
           </div>
         </div>
       </div>
@@ -223,11 +197,14 @@ function formatDate(dateString) {
   return date.toLocaleDateString('zh-CN')
 }
 
-watch(() => props.refresh, (newVal) => {
-  if (newVal) {
-    loadPapers()
-  }
-})
+watch(
+  () => props.refresh,
+  (newVal) => {
+    if (newVal) {
+      loadPapers()
+    }
+  },
+)
 
 onMounted(() => {
   loadPapers()

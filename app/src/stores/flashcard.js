@@ -26,10 +26,10 @@ function generateId() {
 export const useFlashcardStore = defineStore('flashcard', () => {
   // 双写期：继续使用 LocalStorage
   const repository = new LocalStorageFlashcardRepository()
-  
+
   // TODO: 后续可以根据配置切换到 FileSystemFlashcardRepository
   // const workspaceStore = useWorkspaceStore()
-  // const repository = workspaceStore.folders.length > 0 
+  // const repository = workspaceStore.folders.length > 0
   //   ? new FileSystemFlashcardRepository(workspaceStore.folders[0].path)
   //   : new LocalStorageFlashcardRepository()
 
@@ -125,19 +125,19 @@ export const useFlashcardStore = defineStore('flashcard', () => {
                 generated_at: Date.now(),
                 title: set.title,
                 source_file: set.sourceFile,
-                cards: flashcards.map(card => ({
+                cards: flashcards.map((card) => ({
                   q: card.front,
                   a: card.back,
                   difficulty: card.difficulty,
-                  tags: []
-                }))
+                  tags: [],
+                })),
               }
 
               await derivativeBackendApi.saveDerivative(
                 workspacePath,
                 hashResult.hash,
                 'flashcards',
-                flashcardsData
+                flashcardsData,
               )
               console.log('闪卡已保存到文件系统')
             }

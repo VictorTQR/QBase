@@ -68,7 +68,7 @@ onMounted(async () => {
     parseStore.fetchTasks(),
     parseStore.fetchStats(),
     vectorStore.loadStats(),
-    vectorStore.loadIndexedFiles()
+    vectorStore.loadIndexedFiles(),
   ])
   connectWebSocket()
 })
@@ -83,8 +83,15 @@ onUnmounted(() => {
     <header class="header">
       <div class="header-left">
         <button class="back-btn" @click="goBack">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
         </button>
         <h1 class="header-title">解析管理</h1>
@@ -92,8 +99,17 @@ onUnmounted(() => {
       <div class="header-right">
         <el-button @click="refresh">
           <template #icon>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"
+              />
             </svg>
           </template>
           刷新
@@ -112,8 +128,9 @@ onUnmounted(() => {
     <div v-if="vectorStore.isIndexing" class="indexing-banner">
       <div class="indexing-content">
         <span class="indexing-text">
-          正在索引: {{ vectorStore.currentIndexingFile }}
-          ({{ vectorStore.indexingProgress }}/{{ vectorStore.indexingTotal }})
+          正在索引: {{ vectorStore.currentIndexingFile }} ({{ vectorStore.indexingProgress }}/{{
+            vectorStore.indexingTotal
+          }})
         </span>
         <el-progress
           :percentage="Math.round((vectorStore.indexingProgress / vectorStore.indexingTotal) * 100)"

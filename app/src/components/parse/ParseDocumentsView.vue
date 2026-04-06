@@ -77,7 +77,9 @@
                 type="primary"
                 size="small"
                 link
-                :loading="vectorStore.isIndexing && vectorStore.currentIndexingFile === task.file_name"
+                :loading="
+                  vectorStore.isIndexing && vectorStore.currentIndexingFile === task.file_name
+                "
                 @click.stop="handleIndexDocument(task)"
               >
                 索引向量
@@ -143,7 +145,10 @@
       </el-tab-pane>
     </el-tabs>
 
-    <ParseDetailsDrawer v-model:visible="drawerVisible" :task="selectedTask || selectedIndexedFile" />
+    <ParseDetailsDrawer
+      v-model:visible="drawerVisible"
+      :task="selectedTask || selectedIndexedFile"
+    />
   </div>
 </template>
 
@@ -194,13 +199,7 @@ function handleSelectTask(task) {
 
 async function handleIndexDocument(task) {
   try {
-    await vectorStore.indexDocument(
-      task.file_path, 
-      task.file_name, 
-      null, 
-      null,
-      task.id
-    )
+    await vectorStore.indexDocument(task.file_path, task.file_name, null, null, task.id)
     ElMessage.success(`已成功索引 ${task.file_name}`)
   } catch (err) {
     ElMessage.error(`索引失败: ${err.message}`)
@@ -214,11 +213,7 @@ async function handleBatchIndex() {
   }
 
   try {
-    const result = await vectorStore.indexBatch(
-      doneTasksWithoutIndex.value,
-      null,
-      null,
-    )
+    const result = await vectorStore.indexBatch(doneTasksWithoutIndex.value, null, null)
 
     if (result.failed.length > 0) {
       ElMessage.warning(`成功索引 ${result.results.length} 个文档，失败 ${result.failed.length} 个`)

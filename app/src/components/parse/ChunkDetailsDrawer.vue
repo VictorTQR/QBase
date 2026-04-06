@@ -5,12 +5,12 @@ import { useVectorStore } from '@/stores/vector'
 const props = defineProps({
   visible: {
     type: Boolean,
-    default: false
+    default: false,
   },
   file: {
     type: Object,
-    default: null
-  }
+    default: null,
+  },
 })
 
 const emit = defineEmits(['update:visible', 'close'])
@@ -24,9 +24,7 @@ function handleClose() {
 
 const indexedFileInfo = computed(() => {
   if (!props.file) return null
-  return vectorStore.indexedFilesList?.find(
-    f => f.file_path === props.file.file_path
-  )
+  return vectorStore.indexedFilesList?.find((f) => f.file_path === props.file.file_path)
 })
 
 const chunks = computed(() => {
@@ -35,8 +33,18 @@ const chunks = computed(() => {
     { id: 1, preview: '第一章 引言 深度学习是机器学习的一个分支...', tokens: 384, status: 'done' },
     { id: 2, preview: '1.1 什么是神经网络 人工神经网络是受生物...', tokens: 412, status: 'done' },
     { id: 3, preview: '1.2 历史背景 深度学习的历史可以追溯到...', tokens: 356, status: 'running' },
-    { id: 4, preview: '1.3 应用场景 深度学习在计算机视觉、自然...', tokens: 298, status: 'pending' },
-    { id: 5, preview: '第二章 神经网络基础 本章介绍神经网络的基...', tokens: 421, status: 'pending' }
+    {
+      id: 4,
+      preview: '1.3 应用场景 深度学习在计算机视觉、自然...',
+      tokens: 298,
+      status: 'pending',
+    },
+    {
+      id: 5,
+      preview: '第二章 神经网络基础 本章介绍神经网络的基...',
+      tokens: 421,
+      status: 'pending',
+    },
   ]
 })
 
@@ -136,10 +144,16 @@ function formatDate(timestamp) {
     <div class="drawer-content" v-if="file">
       <div v-if="file.state === 'failed'" class="error-section">
         <div class="error-header">
-          <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          <svg
+            class="error-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
           <span class="error-title">处理失败</span>
         </div>
@@ -188,32 +202,32 @@ function formatDate(timestamp) {
 
       <div class="info-section">
         <div class="section-title">文件信息</div>
-          <div class="info-grid">
-            <div class="info-row">
-              <div class="info-label">路径</div>
-              <div class="info-value">{{ file.file_path || '未知' }}</div>
-            </div>
-            <div class="info-row">
-              <div class="info-label">大小</div>
-              <div class="info-value">{{ file?.file_size || '-' }}</div>
-            </div>
-            <div class="info-row">
-              <div class="info-label">页数</div>
-              <div class="info-value">{{ file?.page_count || '-' }}</div>
-            </div>
-            <div class="info-row">
-              <div class="info-label">解析时间</div>
-              <div class="info-value">{{ formatDate(file.created_at) }}</div>
-            </div>
-            <div class="info-row">
-              <div class="info-label">分块数</div>
-              <div class="info-value">{{ indexedFileInfo?.chunk_count || '-' }}</div>
-            </div>
-            <div class="info-row">
-              <div class="info-label">Token 数</div>
-              <div class="info-value">-</div>
-            </div>
+        <div class="info-grid">
+          <div class="info-row">
+            <div class="info-label">路径</div>
+            <div class="info-value">{{ file.file_path || '未知' }}</div>
           </div>
+          <div class="info-row">
+            <div class="info-label">大小</div>
+            <div class="info-value">{{ file?.file_size || '-' }}</div>
+          </div>
+          <div class="info-row">
+            <div class="info-label">页数</div>
+            <div class="info-value">{{ file?.page_count || '-' }}</div>
+          </div>
+          <div class="info-row">
+            <div class="info-label">解析时间</div>
+            <div class="info-value">{{ formatDate(file.created_at) }}</div>
+          </div>
+          <div class="info-row">
+            <div class="info-label">分块数</div>
+            <div class="info-value">{{ indexedFileInfo?.chunk_count || '-' }}</div>
+          </div>
+          <div class="info-row">
+            <div class="info-label">Token 数</div>
+            <div class="info-value">-</div>
+          </div>
+        </div>
       </div>
 
       <div class="info-section">
@@ -491,7 +505,8 @@ function formatDate(timestamp) {
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.4);
   }

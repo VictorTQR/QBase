@@ -40,7 +40,7 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const workspaceStore = useWorkspaceStore()
-  
+
   if (to.meta.requiresWorkspace && !workspaceStore.isWorkspaceSelected) {
     next('/workspace-selector')
   } else if (to.path === '/workspace-selector' && workspaceStore.isWorkspaceSelected) {

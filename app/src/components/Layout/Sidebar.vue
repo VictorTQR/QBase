@@ -6,7 +6,12 @@
         <span class="workspace-name">{{ workspaceStore.workspaceName }}</span>
       </div>
       <div class="header-actions">
-        <el-button :loading="fileManagementStore.isScanning" link type="primary" @click="handleScan">
+        <el-button
+          :loading="fileManagementStore.isScanning"
+          link
+          type="primary"
+          @click="handleScan"
+        >
           <el-icon><Refresh /></el-icon>
         </el-button>
       </div>
@@ -61,29 +66,29 @@ const fileManagementStore = useFileManagementStore()
 
 function getFileIcon(fileType) {
   const icons = {
-    'markdown': '📝',
-    'pdf': '📄',
-    'audio': '🎵',
-    'video': '🎬',
+    markdown: '📝',
+    pdf: '📄',
+    audio: '🎵',
+    video: '🎬',
   }
   return icons[fileType] || '📄'
 }
 
 function getStatusText(status) {
   const texts = {
-    'pending': '待处理',
-    'processing': '处理中',
-    'ready': '就绪',
-    'error': '错误',
-    'missing': '缺失',
-    'orphan': '孤立',
+    pending: '待处理',
+    processing: '处理中',
+    ready: '就绪',
+    error: '错误',
+    missing: '缺失',
+    orphan: '孤立',
   }
   return texts[status] || status
 }
 
 async function handleFileClick(file) {
   fileManagementStore.selectFile(file)
-  
+
   const workspacePath = workspaceStore.currentWorkspace
   if (workspacePath) {
     const fullPath = `${workspacePath}/${file.rel_path}`
@@ -120,7 +125,7 @@ onMounted(() => {
 
 <style scoped>
 .sidebar {
-  width: 25%;
+  width: 100%;
   min-width: 200px;
   border-right: 1px solid var(--el-border-color);
   display: flex;

@@ -57,7 +57,7 @@ function handleSelection() {
     if (containerRect) {
       selectionPosition.value = {
         left: rect.left - containerRect.left + 20,
-        top: rect.top - containerRect.top - 10
+        top: rect.top - containerRect.top - 10,
       }
     }
   } else {

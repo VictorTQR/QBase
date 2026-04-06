@@ -45,20 +45,20 @@ class DerivativeBackendApi {
 
   async loadDerivative(workspacePath, fileHash, derivativeType) {
     return this.request(
-      `/api/derivatives/load?workspace_path=${encodeURIComponent(workspacePath)}&file_hash=${encodeURIComponent(fileHash)}&derivative_type=${encodeURIComponent(derivativeType)}`
+      `/api/derivatives/load?workspace_path=${encodeURIComponent(workspacePath)}&file_hash=${encodeURIComponent(fileHash)}&derivative_type=${encodeURIComponent(derivativeType)}`,
     )
   }
 
   async listDerivatives(workspacePath, fileHash) {
     return this.request(
-      `/api/derivatives/list?workspace_path=${encodeURIComponent(workspacePath)}&file_hash=${encodeURIComponent(fileHash)}`
+      `/api/derivatives/list?workspace_path=${encodeURIComponent(workspacePath)}&file_hash=${encodeURIComponent(fileHash)}`,
     )
   }
 
   async deleteDerivative(workspacePath, fileHash, derivativeType) {
     return this.request(
       `/api/derivatives/delete?workspace_path=${encodeURIComponent(workspacePath)}&file_hash=${encodeURIComponent(fileHash)}&derivative_type=${encodeURIComponent(derivativeType)}`,
-      { method: 'DELETE' }
+      { method: 'DELETE' },
     )
   }
 

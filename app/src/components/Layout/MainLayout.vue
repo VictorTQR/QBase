@@ -36,10 +36,7 @@
       <slot />
     </div>
     <SearchPanel />
-    <CommandPalette
-      v-model="showCommandPalette"
-      @execute="handleCommandExecute"
-    />
+    <CommandPalette v-model="showCommandPalette" @execute="handleCommandExecute" />
   </div>
 </template>
 
@@ -221,11 +218,11 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.main-area[data-mode="focus"] {
+.main-area[data-mode='focus'] {
   grid-template-columns: 0 1fr 0;
 }
 
-.main-area[data-mode="ai"] {
+.main-area[data-mode='ai'] {
   grid-template-columns: 0 30% 1fr;
 }
 
@@ -235,9 +232,9 @@ onUnmounted(() => {
   opacity: 1;
 }
 
-.main-area[data-mode="focus"] > *:nth-child(1),
-.main-area[data-mode="focus"] > *:nth-child(3),
-.main-area[data-mode="ai"] > *:nth-child(1) {
+.main-area[data-mode='focus'] > *:nth-child(1),
+.main-area[data-mode='focus'] > *:nth-child(3),
+.main-area[data-mode='ai'] > *:nth-child(1) {
   opacity: 0;
   width: 0 !important;
   pointer-events: none;

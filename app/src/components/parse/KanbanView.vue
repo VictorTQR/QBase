@@ -17,12 +17,12 @@ const isDeleting = ref(false)
 
 const mergedFiles = computed(() => {
   const tasks = parseStore.tasks
-  return tasks.map(task => {
+  return tasks.map((task) => {
     const isIndexed = vectorStore.isFileIndexed(task.file_path)
     return {
       ...task,
       vectorIndexed: isIndexed,
-      kanbanColumn: getKanbanColumn(task, isIndexed)
+      kanbanColumn: getKanbanColumn(task, isIndexed),
     }
   })
 })
@@ -41,18 +41,12 @@ function getKanbanColumn(task, isIndexed) {
   return 'pending'
 }
 
-const pendingFiles = computed(() => 
-  mergedFiles.value.filter(f => f.kanbanColumn === 'pending')
+const pendingFiles = computed(() => mergedFiles.value.filter((f) => f.kanbanColumn === 'pending'))
+const runningFiles = computed(() => mergedFiles.value.filter((f) => f.kanbanColumn === 'running'))
+const completedFiles = computed(() =>
+  mergedFiles.value.filter((f) => f.kanbanColumn === 'completed'),
 )
-const runningFiles = computed(() => 
-  mergedFiles.value.filter(f => f.kanbanColumn === 'running')
-)
-const completedFiles = computed(() => 
-  mergedFiles.value.filter(f => f.kanbanColumn === 'completed')
-)
-const failedFiles = computed(() => 
-  mergedFiles.value.filter(f => f.kanbanColumn === 'failed')
-)
+const failedFiles = computed(() => mergedFiles.value.filter((f) => f.kanbanColumn === 'failed'))
 
 function openDrawer(file) {
   selectedFile.value = file
@@ -61,10 +55,7 @@ function openDrawer(file) {
 
 onMounted(async () => {
   try {
-    await Promise.all([
-      parseStore.fetchTasks(),
-      vectorStore.loadIndexedFiles()
-    ])
+    await Promise.all([parseStore.fetchTasks(), vectorStore.loadIndexedFiles()])
   } catch (err) {
     console.error('加载数据失败:', err)
   }
@@ -108,15 +99,11 @@ async function handleRetry(file) {
 
 async function handleDelete(file) {
   try {
-    await ElMessageBox.confirm(
-      `确定要删除 ${file.file_name} 吗？`,
-      '确认删除',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning',
-      },
-    )
+    await ElMessageBox.confirm(`确定要删除 ${file.file_name} 吗？`, '确认删除', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
 
     isDeleting.value = true
     ElMessage.info('删除功能待后端 API 支持')
@@ -158,7 +145,13 @@ async function handleDelete(file) {
             </div>
             <div class="card-footer">
               <div class="card-tags"></div>
-              <el-button type="primary" size="small" style="padding: 4px 10px; font-size: 12px" :loading="isStarting" @click.stop="handleStartParse(file)">
+              <el-button
+                type="primary"
+                size="small"
+                style="padding: 4px 10px; font-size: 12px"
+                :loading="isStarting"
+                @click.stop="handleStartParse(file)"
+              >
                 开始
               </el-button>
             </div>
@@ -258,10 +251,22 @@ async function handleDelete(file) {
             <div class="card-footer">
               <div class="card-tags"></div>
               <div style="display: flex; gap: 6px">
-                <el-button type="primary" size="small" style="padding: 4px 10px; font-size: 12px" :loading="isRetrying" @click.stop="handleRetry(file)">
+                <el-button
+                  type="primary"
+                  size="small"
+                  style="padding: 4px 10px; font-size: 12px"
+                  :loading="isRetrying"
+                  @click.stop="handleRetry(file)"
+                >
                   重试
                 </el-button>
-                <el-button type="danger" size="small" style="padding: 4px 10px; font-size: 12px" :loading="isDeleting" @click.stop="handleDelete(file)">
+                <el-button
+                  type="danger"
+                  size="small"
+                  style="padding: 4px 10px; font-size: 12px"
+                  :loading="isDeleting"
+                  @click.stop="handleDelete(file)"
+                >
                   删除
                 </el-button>
               </div>
@@ -271,10 +276,7 @@ async function handleDelete(file) {
       </div>
     </div>
 
-    <ChunkDetailsDrawer
-      v-model:visible="drawerVisible"
-      :file="selectedFile"
-    />
+    <ChunkDetailsDrawer v-model:visible="drawerVisible" :file="selectedFile" />
   </div>
 </template>
 

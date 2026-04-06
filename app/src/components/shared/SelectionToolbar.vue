@@ -1,18 +1,8 @@
 <template>
-  <div
-    class="selection-toolbar"
-    :class="{ show: visible }"
-    :style="positionStyle"
-  >
-    <button class="toolbar-btn primary" @click="handleChat">
-      💬 提问
-    </button>
-    <button class="toolbar-btn" @click="handleFlashcard">
-      🃏 闪卡
-    </button>
-    <button class="toolbar-btn" @click="handleSummary">
-      📑 摘要
-    </button>
+  <div class="selection-toolbar" :class="{ show: visible }" :style="positionStyle">
+    <button class="toolbar-btn primary" @click="handleChat">💬 提问</button>
+    <button class="toolbar-btn" @click="handleFlashcard">🃏 闪卡</button>
+    <button class="toolbar-btn" @click="handleSummary">📑 摘要</button>
   </div>
 </template>
 
@@ -22,23 +12,23 @@ import { computed } from 'vue'
 const props = defineProps({
   visible: {
     type: Boolean,
-    default: false
+    default: false,
   },
   position: {
     type: Object,
-    default: () => ({ left: 0, top: 0 })
+    default: () => ({ left: 0, top: 0 }),
   },
   selectedText: {
     type: String,
-    default: ''
-  }
+    default: '',
+  },
 })
 
 const emit = defineEmits(['chat', 'flashcard', 'summary'])
 
 const positionStyle = computed(() => ({
   left: `${props.position.left}px`,
-  top: `${props.position.top}px`
+  top: `${props.position.top}px`,
 }))
 
 function handleChat() {

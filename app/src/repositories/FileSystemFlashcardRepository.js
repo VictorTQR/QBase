@@ -20,13 +20,17 @@ export class FileSystemFlashcardRepository {
   async getAll() {
     // 双写期：暂时还是从 LocalStorage 读取
     // 后续可以从文件系统扫描
-    const localStorageRepo = new (await import('./LocalStorageFlashcardRepository')).LocalStorageFlashcardRepository()
+    const localStorageRepo = new (
+      await import('./LocalStorageFlashcardRepository')
+    ).LocalStorageFlashcardRepository()
     return await localStorageRepo.getAll()
   }
 
   async create(set) {
     // 双写：同时写 LocalStorage 和文件系统
-    const localStorageRepo = new (await import('./LocalStorageFlashcardRepository')).LocalStorageFlashcardRepository()
+    const localStorageRepo = new (
+      await import('./LocalStorageFlashcardRepository')
+    ).LocalStorageFlashcardRepository()
     const result = await localStorageRepo.create(set)
 
     // 尝试写入文件系统
@@ -40,19 +44,19 @@ export class FileSystemFlashcardRepository {
             generated_at: Date.now(),
             title: set.title,
             source_file: set.sourceFile,
-            cards: set.flashcards.map(card => ({
+            cards: set.flashcards.map((card) => ({
               q: card.front,
               a: card.back,
               difficulty: card.difficulty,
-              tags: []
-            }))
+              tags: [],
+            })),
           }
 
           await derivativeBackendApi.saveDerivative(
             this.workspacePath,
             fileHash,
             'flashcards',
-            flashcardsData
+            flashcardsData,
           )
           console.log('闪卡已保存到文件系统')
         }
@@ -66,13 +70,17 @@ export class FileSystemFlashcardRepository {
 
   async update(setId, updates) {
     // 双写期：主要更新 LocalStorage
-    const localStorageRepo = new (await import('./LocalStorageFlashcardRepository')).LocalStorageFlashcardRepository()
+    const localStorageRepo = new (
+      await import('./LocalStorageFlashcardRepository')
+    ).LocalStorageFlashcardRepository()
     return await localStorageRepo.update(setId, updates)
   }
 
   async delete(setId) {
     // 双写期：主要删除 LocalStorage
-    const localStorageRepo = new (await import('./LocalStorageFlashcardRepository')).LocalStorageFlashcardRepository()
+    const localStorageRepo = new (
+      await import('./LocalStorageFlashcardRepository')
+    ).LocalStorageFlashcardRepository()
     return await localStorageRepo.delete(setId)
   }
 }

@@ -70,8 +70,15 @@ onMounted(() => {
     <header class="header">
       <div class="header-left">
         <button class="back-btn" @click="goBack">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
         </button>
         <h1 class="header-title">论文管理</h1>
@@ -141,10 +148,7 @@ onMounted(() => {
       <PaperList :refresh="paperListRefresh" @loaded="loadStats" />
     </div>
 
-    <PaperSearchDialog
-      v-model="searchDialogVisible"
-      @saved="handleSearchSaved"
-    />
+    <PaperSearchDialog v-model="searchDialogVisible" @saved="handleSearchSaved" />
   </div>
 </template>
 

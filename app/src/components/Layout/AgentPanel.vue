@@ -13,7 +13,7 @@ const agentTabs = [
   { id: 'chat', name: '对话', icon: '💬' },
   { id: 'flashcard', name: '闪卡', icon: '🃏' },
   { id: 'mindmap', name: '导图', icon: '🧠' },
-  { id: 'summary', name: '摘要', icon: '📊' }
+  { id: 'summary', name: '摘要', icon: '📊' },
 ]
 const activeTab = ref('chat')
 

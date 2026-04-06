@@ -24,18 +24,11 @@
       </el-form-item>
 
       <el-form-item label="结果数量">
-        <el-input-number
-          v-model="searchForm.maxResults"
-          :min="1"
-          :max="100"
-          :step="10"
-        />
+        <el-input-number v-model="searchForm.maxResults" :min="1" :max="100" :step="10" />
       </el-form-item>
 
       <el-form-item>
-        <el-button type="primary" :loading="searching" @click="handleSearch">
-          搜索
-        </el-button>
+        <el-button type="primary" :loading="searching" @click="handleSearch"> 搜索 </el-button>
         <el-button @click="handleReset">重置</el-button>
       </el-form-item>
     </el-form>
@@ -43,12 +36,7 @@
     <div v-if="searchResults.length > 0" class="search-results">
       <div class="results-header">
         <span>找到 {{ searchResults.length }} 篇论文</span>
-        <el-button
-          type="primary"
-          size="small"
-          :loading="saving"
-          @click="handleSaveAll"
-        >
+        <el-button type="primary" size="small" :loading="saving" @click="handleSaveAll">
           保存全部
         </el-button>
       </div>
@@ -58,9 +46,7 @@
           <div class="paper-title">
             {{ paper.title }}
           </div>
-          <div class="paper-authors">
-            作者: {{ paper.authors.join(', ') }}
-          </div>
+          <div class="paper-authors">作者: {{ paper.authors.join(', ') }}</div>
           <div class="paper-abstract">
             {{ paper.summary }}
           </div>
@@ -72,18 +58,8 @@
             </el-tag>
           </div>
           <div class="paper-actions">
-            <el-button
-              type="primary"
-              size="small"
-              @click="openPdf(paper)"
-            >
-              查看 PDF
-            </el-button>
-            <el-button
-              type="success"
-              size="small"
-              @click="openArxiv(paper)"
-            >
+            <el-button type="primary" size="small" @click="openPdf(paper)"> 查看 PDF </el-button>
+            <el-button type="success" size="small" @click="openArxiv(paper)">
               arXiv 页面
             </el-button>
           </div>
@@ -123,9 +99,12 @@ const searchForm = reactive({
   maxResults: 10,
 })
 
-watch(() => props.modelValue, (newVal) => {
-  visible.value = newVal
-})
+watch(
+  () => props.modelValue,
+  (newVal) => {
+    visible.value = newVal
+  },
+)
 
 watch(visible, (newVal) => {
   emit('update:modelValue', newVal)
@@ -143,7 +122,7 @@ async function handleSearch() {
     const result = await PapersBackendApi.searchPapers(
       searchForm.keyword,
       searchForm.maxResults,
-      searchForm.sortBy
+      searchForm.sortBy,
     )
 
     if (result.success) {
@@ -180,7 +159,7 @@ async function handleSaveAll() {
     const result = await PapersBackendApi.savePapers(
       searchForm.keyword,
       searchForm.maxResults,
-      searchForm.sortBy
+      searchForm.sortBy,
     )
 
     if (result.success) {
