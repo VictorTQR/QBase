@@ -23,19 +23,31 @@
     </div>
 
     <div class="file-tree-container">
-      <div v-if="fileManagementStore.files.length > 0" class="file-list">
-        <div
-          v-for="file in fileManagementStore.files"
-          :key="file.hash"
-          class="file-item"
-          :class="{ active: fileManagementStore.selectedFile?.hash === file.hash }"
-          @click="handleFileClick(file)"
-        >
-          <span class="file-icon">{{ getFileIcon(file.file_type) }}</span>
-          <span class="file-name">{{ file.rel_path.split('/').pop() }}</span>
-          <span class="file-status" :class="file.status">{{ getStatusText(file.status) }}</span>
-        </div>
-      </div>
+      <el-tree
+        v-if="treeData.length > 0"
+        :data="treeData"
+        :props="{ children: 'children', label: 'label' }"
+        node-key="label"
+        default-expand-all
+        :expand-on-click-node="false"
+        @node-click="handleNodeClick"
+      >
+        <template #default="{ node, data }">
+          <div
+            class="custom-tree-node"
+            :class="{
+              active: data.isFile && fileManagementStore.selectedFile?.hash === data.file?.hash,
+            }"
+          >
+            <span v-if="data.isFile" class="file-icon">{{ getFileIcon(data.file.file_type) }}</span>
+            <span v-else class="folder-icon">📁</span>
+            <span class="node-label">{{ data.label }}</span>
+            <span v-if="data.isFile" class="file-status" :class="data.file.status">
+              {{ getStatusText(data.file.status) }}
+            </span>
+          </div>
+        </template>
+      </el-tree>
 
       <div v-else class="empty-state">
         <el-empty description="暂无文件，点击刷新按钮扫描" />
@@ -52,17 +64,22 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Refresh, Document } from '@element-plus/icons-vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDocumentStore } from '@/stores/document'
 import { useFileManagementStore } from '@/stores/fileManagement'
+import { buildFileTree } from '@/utils/treeUtils'
 
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
 const documentStore = useDocumentStore()
 const fileManagementStore = useFileManagementStore()
+
+const treeData = computed(() => {
+  return buildFileTree(fileManagementStore.files)
+})
 
 function getFileIcon(fileType) {
   const icons = {
@@ -100,6 +117,12 @@ async function handleFileClick(file) {
       fileType: file.file_type,
     }
     documentStore.loadFile(fileData)
+  }
+}
+
+function handleNodeClick(data) {
+  if (data.isFile && data.file) {
+    handleFileClick(data.file)
   }
 }
 
@@ -190,39 +213,50 @@ onMounted(() => {
   padding: 4px 0;
 }
 
-.file-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.file-item {
+.custom-tree-node {
   display: flex;
   align-items: center;
   padding: 8px 12px;
   cursor: pointer;
   gap: 8px;
   transition: background-color 0.2s;
+  flex: 1;
+  min-width: 0;
 }
 
-.file-item:hover {
+.custom-tree-node:hover {
   background-color: var(--el-fill-color-light);
 }
 
-.file-item.active {
+.custom-tree-node.active {
   background-color: var(--el-fill-color);
 }
 
-.file-icon {
-  font-size: 16px;
-  flex-shrink: 0;
-}
-
-.file-name {
+.node-label {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
+}
+
+.folder-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+:deep(.el-tree-node__content) {
+  padding: 0 !important;
+  height: auto !important;
+}
+
+:deep(.el-tree) {
+  --el-tree-node-padding: 4px 0;
+}
+
+.file-icon {
+  font-size: 16px;
+  flex-shrink: 0;
 }
 
 .file-status {
