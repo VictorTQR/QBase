@@ -93,9 +93,8 @@ async def index_document(request: Request):
             logger.info(
                 f"[Vector API] 从数据库获取内容，task_id: {validated_request.task_id}"
             )
-            repo, session = AsyncSessionLocal(), None
+            session = AsyncSessionLocal()
             try:
-                session = AsyncSessionLocal()
                 repo = ParseTaskRepository(session)
                 task = await repo.get_by_id(validated_request.task_id)
                 if task and task.markdown_content:
@@ -110,8 +109,7 @@ async def index_document(request: Request):
             except Exception as e:
                 logger.error(f"[Vector API] 从数据库获取内容失败: {e}")
             finally:
-                if session:
-                    await session.close()
+                await session.close()
 
         if not content:
             raise HTTPException(
