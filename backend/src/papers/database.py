@@ -87,8 +87,37 @@ class PaperDatabase:
         logger.info(f"PaperDatabase 初始化完成 (数据库: {db_path})")
 
     def _init_db(self):
-        """初始化数据库表"""
-        Base.metadata.create_all(self.engine)
+        """初始化数据库表，兼容元数据重复注册场景"""
+
+        def _safe_init():
+            """安全初始化：捕获元数据冲突 + 索引冲突"""
+            try:
+                # 首选：标准幂等创建
+                Base.metadata.create_all(self.engine, checkfirst=True)
+            except Exception as e:
+                err = str(e).lower()
+
+                # 情况1: 元数据重复注册 -> 跳过（表已定义，无需处理）
+                if "already defined for this metadata" in err:
+                    logger.debug("MetaData already registered, skipping table definition")
+                    return
+
+                # 情况2: 索引/表已存在 -> 降级逐表处理
+                if "already exists" in err:
+                    logger.debug("Object exists, falling back to per-table creation")
+                    for table in Base.metadata.sorted_tables:
+                        try:
+                            table.create(self.engine, checkfirst=True)
+                        except Exception as e2:
+                            if "already exists" in str(e2).lower():
+                                logger.debug(f"Skip existing: {table.name}")
+                            else:
+                                raise
+                else:
+                    # 其他未知错误，原样抛出
+                    raise
+
+        _safe_init()
         logger.info("论文数据库表初始化完成")
 
     def get_session(self) -> Session:
