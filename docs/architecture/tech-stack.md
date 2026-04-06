@@ -1,7 +1,7 @@
 # QBase 技术栈
 
-**版本**: v0.9
-**更新日期**: 2026-03-02
+**版本**: v1.2
+**更新日期**: 2026-04-06
 
 ## 前端技术
 
@@ -11,7 +11,13 @@
 | Vue Router | ^5.0.2 | 路由管理 |
 | Electron | ^40.6.0 | 桌面应用 |
 | Pinia | ^3.0.4 | 状态管理 |
+| Element Plus | ^2.13.2 | UI 组件库 |
+| Element-Plus-X | ^1.3.98 | AI 体验组件 |
 | Vite | ^7.3.1 | 构建工具 |
+| Vitest | ^4.0.18 | 单元测试 |
+| Oxlint | ~1.47.0 | 快速 lint |
+| ESLint | ^10.0.1 | 代码检查 |
+| Prettier | 3.8.1 | 代码格式化 |
 
 ## 后端技术
 
@@ -20,12 +26,17 @@
 | Python | >=3.12 | 编程语言 |
 | FastAPI | >=0.135.1 | Web 框架 |
 | Uvicorn | >=0.41.0 | ASGI 服务器 |
-| HTTPX | >=0.27.0 | 异步 HTTP 客户端 |
+| SQLAlchemy | >=2.0 | ORM 框架 |
+| aiosqlite | - | 异步 SQLite 驱动 |
+| LanceDB | - | 向量数据库 |
+| HTTPX / aiohttp | - | 异步 HTTP 客户端 |
 | Pydantic | - | 数据验证 |
 | pydantic-settings | >=2.0.0 | 配置管理 |
 | python-multipart | >=0.0.9 | 文件上传支持 |
 | aiofiles | >=24.1.0 | 异步文件操作 |
 | Loguru | >=0.7.3 | 日志记录 |
+| ffmpeg | - | 音频处理 |
+| pyarrow | - | 数据处理 |
 | uv | - | 包管理器 |
 
 ## UI 组件库

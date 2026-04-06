@@ -28,12 +28,12 @@
 | Pinia | ^3.0.4 | 状态管理 |
 | Element Plus | ^2.13.2 | UI 组件库 |
 | Element-Plus-X | ^1.3.98 | AI 体验组件 |
-| Dexie.js | ^4.3.0 | IndexedDB 封装 |
 | Vite | ^7.3.1 | 构建工具 |
 | Vitest | ^4.0.18 | 测试框架 |
 | FastAPI | - | 后端 API 框架 |
 | LanceDB | - | 向量数据库 |
-| aiohttp | - | 异步 HTTP 客户端 |
+| SQLAlchemy | - | ORM 框架 |
+| aiohttp/httpx | - | 异步 HTTP 客户端 |
 | pyarrow | - | 数据处理库 |
 | ffmpeg | - | 音频处理 |
 
@@ -89,6 +89,7 @@ npm run format  # 格式化代码
 | v0.9 | ✅ 已完成 | 解析管理 UI 重构 |
 | v1.0 | ✅ 已完成 | 后端集成+音频转录 |
 | v1.1 | ✅ 已完成 | 向量搜索与索引 |
+| v1.2 | ✅ 已完成 | 新文件管理架构准备与启动修复 |
 
 详见 [项目路线图](./docs/roadmap.md)
 
@@ -96,16 +97,26 @@ npm run format  # 格式化代码
 
 ```
 QBase/
-├── app/                    # 应用主目录
+├── app/                    # 前端/Electron 应用
 │   ├── src/               # 源代码
 │   │   ├── components/    # Vue 组件
 │   │   ├── stores/        # Pinia stores
 │   │   ├── repositories/  # 数据存储抽象层
+│   │   ├── api/           # API 客户端
 │   │   ├── views/         # 页面视图
 │   │   └── router/        # 路由配置
 │   ├── electron/          # Electron 主进程
 │   └── public/            # 静态资源
+├── backend/                # FastAPI 后端服务
+│   ├── src/               # 后端源代码
+│   │   ├── api/           # API 路由
+│   │   ├── models/        # 数据模型
+│   │   ├── vector/        # 向量搜索模块
+│   │   ├── audio/         # 音频处理模块
+│   │   └── services/      # 业务服务
+│   └── storage/           # 数据存储目录
 ├── docs/                   # 项目文档
+├── demo/                   # 演示文件
 ├── official_docs/          # 第三方库文档
 ├── AGENTS.md              # AI 代理开发指南
 ├── CLAUDE.md              # 开发原则

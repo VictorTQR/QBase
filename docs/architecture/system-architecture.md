@@ -1,7 +1,7 @@
 # QBase 系统架构
 
-**版本**: v1.1
-**更新日期**: 2026-03-07
+**版本**: v1.2
+**更新日期**: 2026-04-06
 
 ## 核心定位
 
@@ -57,6 +57,8 @@ QBase 是一个本地知识库管理系统，核心特性：
 | vector | 向量索引和搜索（LanceDB） | ✅ |
 | flashcard | 闪卡生成和管理 | ✅ |
 | settings | 应用设置页面 | ✅ |
+| papers | 论文管理（arXiv 搜索与本地保存） | ✅ |
+| fileManagement | 新文件管理架构（.qbase 目录、文件哈希） | 🔄 |
 
 ## UI 布局
 
@@ -75,6 +77,7 @@ QBase 是一个本地知识库管理系统，核心特性：
 | 首页 | / | 三栏布局主界面 |
 | 设置页 | /settings | LLM、PDF解析、向量存储配置 |
 | 解析管理 | /parse-management | 解析队列、已解析文档、向量索引管理 |
+| 论文管理 | /papers | arXiv 论文搜索与本地保存 |
 
 ### 组件结构
 
@@ -82,46 +85,83 @@ QBase 是一个本地知识库管理系统，核心特性：
 src/
 ├── api/                          # API 客户端
 │   ├── backend.js               # FastAPI 后端通用客户端
-│   └── vectorBackend.js         # 向量搜索 API
+│   ├── vectorBackend.js         # 向量搜索 API
+│   ├── parseBackend.js        # 解析管理 API
+│   ├── audioBackend.js        # 音频处理 API
+│   ├── workspaceBackend.js     # 工作区 API
+│   ├── fileBackend.js          # 文件操作 API
+│   ├── derivativeBackend.js    # 衍生数据 API
+│   └── papers.js               # 论文管理 API
 ├── components/
 │   ├── Layout/
 │   │   ├── MainLayout.vue       # 主布局容器
 │   │   ├── Sidebar.vue          # 左侧文件夹树
 │   │   ├── ContentPane.vue      # 中间内容区
-│   │   └── AgentPanel.vue       # 右侧Agent面板
+│   │   ├── AgentPanel.vue       # 右侧Agent面板
+│   │   ├── PanelNavSidebar.vue
+│   │   ├── SettingsSidebar.vue
+│   │   └── ParseSidebar.vue
+│   ├── chat/                   # 对话相关
+│   │   ├── ChatModule.vue
+│   │   └── SessionSidebar.vue
 │   ├── parse/                   # 解析管理组件
-│   │   ├── ParseSidebar.vue
+│   │   ├── ParseDocumentsView.vue
 │   │   ├── ParseQueueView.vue
-│   │   ├── ParseDocumentsView.vue (双标签页)
 │   │   ├── ParseStatsView.vue
-│   │   └── ParseDetailsDrawer.vue
-│   ├── MarkdownViewer.vue       # Markdown渲染组件
-│   ├── PdfViewer.vue            # PDF查看器
-│   ├── MediaViewer.vue          # 音视频播放器
-│   └── SearchPanel.vue          # 搜索面板（三种模式）
+│   │   ├── ParseDetailsDrawer.vue
+│   │   ├── FileManagementView.vue
+│   │   ├── AudioParseView.vue
+│   │   ├── KanbanView.vue
+│   │   └── FileList.vue
+│   ├── settings/               # 设置组件
+│   │   ├── LlmSettings.vue
+│   │   ├── VectorSettings.vue
+│   │   ├── PdfParseSettings.vue
+│   │   └── AudioParseSettings.vue
+│   ├── flashcards/           # 闪卡组件
+│   │   ├── FlashcardGenerator.vue
+│   │   ├── FlashcardViewer.vue
+│   │   ├── FlashcardPanel.vue
+│   │   └── FlashcardSet.vue
+│   ├── mindmap/              # 思维导图
+│   │   └── MindmapGenerator.vue
+│   ├── summary/              # 摘要生成
+│   │   └── SummaryGenerator.vue
+│   ├── shared/               # 共享组件
+│   │   └── PanelHeader.vue
+│   ├── DocumentViewer.vue    # 文档查看器（统一分发）
+│   ├── MarkdownViewer.vue  # Markdown渲染组件
+│   ├── PdfViewer.vue       # PDF查看器
+│   ├── MediaViewer.vue     # 音视频播放器
+│   ├── SearchPanel.vue    # 搜索面板（三种模式）
+│   ├── WorkspaceCard.vue
+│   ├── PaperList.vue
+│   ├── PaperSearchDialog.vue
+│   └── FrontmatterCard.vue
 ├── processors/                  # 文档处理器
-│   ├── TextExtractor.js         # 文本提取器
-│   └── AudioTranscriber.js      # 音频转录器
+│   └── parse/
 ├── repositories/                # 数据存储抽象层
-│   ├── SessionRepository.js
-│   ├── FlashcardRepository.js
-│   └── IndexedDBRepository.js
 ├── router/                      # 路由配置
 ├── stores/                      # Pinia stores
 │   ├── workspace.js
 │   ├── document.js
 │   ├── agent.js
-│   ├── parse.js
-│   ├── vector.js
 │   ├── flashcard.js
+│   ├── parse.js
+│   ├── parseConfig.js
+│   ├── vector.js
 │   ├── search.js
-│   └── ui.js
+│   ├── ui.js
+│   ├── audio.js
+│   └── fileManagement.js
 ├── utils/                       # 工具函数
 ├── vector/                      # 向量搜索相关
 ├── views/                       # 页面组件
 │   ├── Home.vue
+│   ├── WorkspaceSelector.vue
 │   ├── Settings.vue
-│   └── ParseManagement.vue
+│   ├── ParseManagement.vue
+│   └── PapersView.vue
 └── __tests__/                   # Vitest 测试
 ```
 
@@ -193,9 +233,12 @@ src/
 | parse | parseIndex（解析索引） | Pinia persist + LocalStorage |
 | vector | indexedFiles（已索引文件列表） | Pinia persist + LocalStorage |
 | flashcard | flashcardSets（闪卡集） | Pinia persist + LocalStorage |
-| extractedTexts | 提取的文本内容 | IndexedDB (Dexie.js) |
 | document_chunks | 文档向量分块 | LanceDB |
 | parse_tasks | 解析任务记录 | SQLite (后端) |
+| files | 文件元数据（v1.2 新增） | SQLite (后端) |
+| derivatives | 衍生数据（v1.2 新增） | SQLite (后端) |
+| papers | 论文信息 | SQLite (后端) |
+| .qbase 目录 | 工作区元数据、缓存、生成文件 | 文件系统 |
 
 ## WebSocket 实时更新
 

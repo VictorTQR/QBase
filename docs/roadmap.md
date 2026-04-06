@@ -1,6 +1,6 @@
 # QBase 项目路线图
 
-**更新日期**: 2026-04-05
+**更新日期**: 2026-04-06
 
 ## 版本概览
 
@@ -17,7 +17,7 @@
 | v0.9 | ✅ 已完成 | 解析管理 UI 重构与增强 | 2026-03-02 |
 | v1.0 | ✅ 已完成 | 音频转录功能 | 2026-03-02 |
 | v1.1 | ✅ 已完成 | 向量搜索与索引集成 | 2026-03-07 |
-| v1.2 | 🔄 进行中 | 新文件管理架构（准备阶段） | 2026-04-05 |
+| v1.2 | ✅ 已完成 | 新文件管理架构准备与启动修复 | 2026-04-06 |
 
 ---
 
@@ -578,10 +578,10 @@
 
 ---
 
-## v1.2 - 新文件管理架构（准备阶段）🔄
+## v1.2 - 新文件管理架构准备与启动修复 ✅
 
-**状态**: 进行中（准备阶段已完成）
-**发布日期**: 2026-04-05
+**状态**: 已完成
+**发布日期**: 2026-04-06
 
 ### 功能列表
 
@@ -590,32 +590,28 @@
 | 清理 Dexie.js 依赖 | ✅ | 移除未使用的依赖 |
 | .qbase 目录规范 | ✅ | 创建标准目录结构和管理服务 |
 | SQLite Schema 扩展 | ✅ | 添加新架构所需的数据库表 |
-| 文件哈希计算工具 | ✅ | 实现 SHA-256 哈希计算 |
+| 文件哈希计算工具 | ✅ | 实现 SHA-256 哈希计算（同步/异步） |
+| 后端导入错误修复 | ✅ | 函数命名、导入路径等问题 |
+| Electron API 弃用修复 | ✅ | 移除 @electron/remote，改用 ContextBridge |
+| SQLAlchemy 表冲突修复 | ✅ | 添加 extend_existing 参数 |
 | 文件扫描器 | 📋 | 自动扫描工作区文件 |
 | 前端集成 | 📋 | 新架构与现有工作区管理集成 |
 | 迁移工具 | 📋 | 现有解析数据迁移到新 Schema |
 
-### 已完成部分（准备阶段）
+### 已完成部分
 
-**清理 Dexie.js (2026-04-05)**:
-- 从 package.json 移除未使用的 dexie 依赖
-- 精简项目依赖树
+**架构准备阶段 (2026-04-05)**:
+- 清理 Dexie.js 依赖，精简项目依赖树
+- 创建 .qbase 目录规范和 QBaseWorkspaceService
+- 扩展 SQLite Schema（DBFile、DBDerivative、DBTask 表）
+- 实现文件哈希计算工具和相关 API
 
-**.qbase 目录规范 (2026-04-05)**:
-- QBaseWorkspaceService 工作区管理服务
-- .qbase 目录结构：generated/, indexes/, cache/, config.json, metadata.db
-- workspace API：初始化、检查状态
-
-**SQLite Schema 扩展 (2026-04-05)**:
-- DBFile 表：基于内容哈希的文件索引
-- DBDerivative 表：AI 生成内容的元数据
-- DBTask 表：任务队列管理
-- FileRepository 和 DerivativeRepository 数据访问层
-
-**文件哈希计算工具 (2026-04-05)**:
-- compute_file_hash() - SHA-256 文件哈希计算
-- compute_short_hash() - 内容短哈希
-- files API：计算文件哈希端点
+**项目启动错误修复 (2026-04-06)**:
+- 修复后端导入错误（compute_bytes_hash 函数命名）
+- 提供同步/异步双版本文件哈希函数
+- 移除 @electron/remote，改用 ContextBridge + IPC
+- 修复 SQLAlchemy 表重复定义错误（添加 extend_existing）
+- 修复 Python 缩进错误和 async_session 导入问题
 
 ### 技术亮点
 
@@ -623,11 +619,14 @@
 - **向后兼容**: 现有 ParseTask 等表保持不变
 - **内容哈希**: 基于 SHA-256 的文件追踪，支持去重和变更检测
 - **标准化目录**: .qbase 目录结构为后续功能提供统一存储位置
+- **Electron 安全最佳实践**: 使用 ContextBridge 替代弃用的 @electron/remote
+- **SQLAlchemy 热重载兼容**: 通过 extend_existing 支持开发模式热重载
 
 ### 相关文档
 
 - [实施计划](./plans/2026-04-05-qbase-architecture-prep.md)
 - [实施报告](./implementation/2026-04-05-architecture-prep-complete.md)
+- [Bug 修复报告](./bugs/2026-04-06-startup-errors-fix.md)
 
 ---
 

@@ -20,7 +20,8 @@
 - [智能闪卡生成](./features/flashcard-generation.md) - 基于文档的闪卡生成
 - [智能生成功能](./features/ai-generation.md) - 闪卡、思维导图、摘要生成
 - [文档解析管理](./features/parse-management.md) - 文本提取、转录、向量化管理
-- [搜索增强](./features/search.md) - 全文搜索功能
+- [搜索增强](./features/search.md) - 全文搜索、向量搜索、混合搜索
+- [论文管理](./features/papers.md) - arXiv 论文搜索与本地保存
 
 ### 项目规划
 版本迭代计划和里程碑。
@@ -50,6 +51,8 @@
 - [解析功能修复报告](./implementation/2026-03-03-parse-features-bugfixes.md) - 解析功能 Bug 修复与增强（计数错误、错误处理、音频基础设施、右键菜单等）
 - [WebSocket实时更新报告](./implementation/2026-03-03-websocket-realtime-updates.md) - WebSocket 实时更新功能实现（后端管理器、前端客户端、任务状态广播）
 - [v1.2 架构准备报告](./implementation/2026-04-05-architecture-prep-complete.md) - 新文件管理架构准备阶段（依赖清理、.qbase 目录、SQLite Schema 扩展、文件哈希工具）
+- [论文管理功能](./features/papers.md) - arXiv 论文搜索与本地保存功能
+- [搜索增强功能](./features/search.md) - 向量搜索与混合搜索增强
 
 ### 问题记录
 Bug 修复记录和问题追踪。
