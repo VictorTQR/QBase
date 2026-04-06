@@ -6,15 +6,10 @@ from loguru import logger
 import aiofiles
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from src.config import settings
-from src.mineru.task_manager import task_manager
-from src.mineru.client import mineru_client
-from src.models.schemas import (
+from ..config import settings
+from ..mineru.task_manager import task_manager
+from ..mineru.client import mineru_client
+from ..models.schemas import (
     TaskResponse,
     ErrorResponse,
     DuplicateCheckRequest,
@@ -23,9 +18,9 @@ from src.models.schemas import (
     StatsResponse,
     OperationResponse,
 )
-from src.utils.zip_handler import extract_markdown_from_zip
-from src.database import get_db, AsyncSessionLocal
-from src.utils.file_hash import compute_bytes_hash
+from ..utils.zip_handler import extract_markdown_from_zip
+from ..database import get_db, AsyncSessionLocal
+from ..utils.file_hash import compute_bytes_hash
 
 router = APIRouter(prefix="/api/mineru", tags=["MinerU"])
 
@@ -41,7 +36,7 @@ async def check_duplicate(request: DuplicateCheckRequest):
         if request.file_hash:
             file_hash = request.file_hash
         elif request.file_path:
-            from utils.file_hash import compute_file_hash
+            from ..utils.file_hash import compute_file_hash
 
             file_hash = await compute_file_hash(request.file_path)
         else:
@@ -111,7 +106,7 @@ async def parse_local_document(
             raise HTTPException(status_code=404, detail="文件不存在")
 
         # 先检查去重
-        from utils.file_hash import compute_file_hash
+        from ..utils.file_hash import compute_file_hash
 
         file_hash = await compute_file_hash(file_path)
         existing = await task_manager.check_duplicate(file_hash)
@@ -232,8 +227,8 @@ async def get_parse_result(task_id: str):
                         break
 
                 if workspace_path:
-                    from src.services.workspace_service import QBaseWorkspaceService
-                    from src.services.derivative_service import DerivativeService
+                    from ..services.workspace_service import QBaseWorkspaceService
+                    from ..services.derivative_service import DerivativeService
 
                     async with AsyncSessionLocal() as session:
                         workspace_service = QBaseWorkspaceService(workspace_path)
