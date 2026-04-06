@@ -51,6 +51,7 @@
 - [解析功能修复报告](./implementation/2026-03-03-parse-features-bugfixes.md) - 解析功能 Bug 修复与增强（计数错误、错误处理、音频基础设施、右键菜单等）
 - [WebSocket实时更新报告](./implementation/2026-03-03-websocket-realtime-updates.md) - WebSocket 实时更新功能实现（后端管理器、前端客户端、任务状态广播）
 - [v1.2 架构准备报告](./implementation/2026-04-05-architecture-prep-complete.md) - 新文件管理架构准备阶段（依赖清理、.qbase 目录、SQLite Schema 扩展、文件哈希工具）
+- [v1.3 UI/UX 重塑报告](./implementation/2026-04-06-ui-ux-redesign-complete.md) - UI/UX 全面重塑（设计系统、三种布局模式、AI 上下文菜单、命令面板等）
 - [论文管理功能](./features/papers.md) - arXiv 论文搜索与本地保存功能
 - [搜索增强功能](./features/search.md) - 向量搜索与混合搜索增强
 
