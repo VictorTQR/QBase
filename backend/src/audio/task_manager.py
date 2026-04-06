@@ -1,17 +1,12 @@
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 import asyncio
 from typing import Dict, Optional
 from loguru import logger
 from datetime import datetime
 
-from database import AsyncSessionLocal
-from repositories.parse_task_repository import ParseTaskRepository
-from utils.websocket_manager import websocket_manager
-from models.audio_schemas import AudioTaskInfo, AudioTaskStatus, AudioChunkInfo
+from ..database import AsyncSessionLocal
+from ..repositories.parse_task_repository import ParseTaskRepository
+from ..utils.websocket_manager import websocket_manager
+from ..models.audio_schemas import AudioTaskInfo, AudioTaskStatus, AudioChunkInfo
 
 
 class AudioTaskManager:
@@ -78,7 +73,7 @@ class AudioTaskManager:
         for chunk_data in chunks:
             chunk_status_str = chunk_data.get("status", "pending")
             # 将字符串状态转换为 AudioTaskStatus 枚举
-            from models.audio_schemas import AudioTaskStatus
+            from ..models.audio_schemas import AudioTaskStatus
 
             chunk_status = AudioTaskStatus.PENDING
             for status in AudioTaskStatus:
@@ -256,7 +251,7 @@ class AudioTaskManager:
         repo, session = await self._get_repo()
         try:
             from sqlalchemy import delete
-            from models.db_models import ParseTask
+            from ..models.db_models import ParseTask
 
             await session.execute(delete(ParseTask).where(ParseTask.id == task_id))
             await session.commit()
