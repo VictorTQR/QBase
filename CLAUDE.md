@@ -26,54 +26,10 @@ You Ain't Gonna Need It（你以后用不着它的）。不要在当前版本中
 
 - 你只需要给出测试步骤，而不自动进行测试，测试由开发人员手动进行
 - 安装依赖时，你只需要给出命令，而不自动执行
-- 前端后端的测试文件分别在 `app/` 和 `backend/` 目录的合适位置
 
 ## 项目依赖管理
 
 - 项目使用 uv 管理 Python 虚拟环境
-
-## 文档维护
-
-### 文档目录
-
-项目根目录下的 `docs/` 文件夹：
-
-```
-docs/
-├── README.md               # 文档入口
-├── architecture/           # 架构设计（稳定层）
-├── features/               # 功能实现（动态层）
-├── plans/                  # 项目规划（演进层）
-├── security/               # 安全规范（问题驱动层）
-├── testing/                # 测试体系（策略层）
-├── deployment/             # 部署运维（运维层）
-├── api/                    # 接口文档（API层）
-├── roadmap.md              # 项目路线图（项目层）
-├── implementation/         # 实施报告（项目层）
-└── bugs/                   # 问题记录（项目层）
-```
-
-### 更新文档的时机
-
-1. **完成新功能时**：更新对应功能文档的状态
-2. **完成阶段时**：更新 roadmap.md 和 README.md
-3. **实施重大变更时**：创建实施报告
-
-### 文档命名规范
-
-```
-features/<feature-name>.md           # 功能文档
-plans/<plan-name>.md                 # 规划文档
-implementation/<version>-complete.md # 实施报告
-bugs/<date>-<bug-name>.md            # Bug 记录
-```
-
-### 状态标记
-
-- ✅ 已完成
-- 🔄 进行中
-- 📋 已规划
-- ⏳ 暂缓
 
 ## 相关文档
 
