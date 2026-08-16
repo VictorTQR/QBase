@@ -163,7 +163,7 @@ def incremental_vector_update() -> dict:
 
 ---
 
-## 向量状态卡片：实现规格（已确认纳入 M8）
+## 向量状态卡片：实现规格（已纳入 M8，已实现 commit 4328a5c）
 
 上面"推荐方案"是草稿，这里给出可直接实现的规格。改动很小（设置页加一个卡片 + `vector_service` 加一个统计函数 + config.toml 增加 `[vector] last_rebuilt`），但对用户决策"要不要花钱重建"很有帮助——尤其是"模型已变更 / 索引不一致 / 已过期"这类健康提示。
 
@@ -306,6 +306,8 @@ def get_vector_stats() -> dict:
 5. 按钮行：增量更新（outline）/ 全量重建（红 outline）/ 清空缓存（橙 outline）。
 
 与"全文索引状态"卡片并排在设置页索引管理区，符合 M8"状态可见"的体验优化目标。
+
+> **已实现（commit 4328a5c）**：设置页新增「向量索引状态」卡片；`config_service` 增加 `get/set_vector_last_rebuilt`（写 `config.toml [vector] last_rebuilt`）；`vector_service` 增加 `get_vector_stats`（聚合向量总数/磁盘占用/缓存条目/模型/维度/覆盖度/最后重建/健康状态）与 `clear_embedding_cache`；`rebuild_vector_index` 完成后自动写入 `last_rebuilt`。
 
 ---
 

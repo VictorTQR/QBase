@@ -4,7 +4,7 @@
 
 > 设计理念：文件就是数据，不把内容锁进私有数据库。所有元数据与索引都落在知识库目录下的 `.knowledge/` 中，换机器、换软件都能直接读到原文。
 
-## 功能现状（M0–M7 已完成）
+## 功能现状（M0–M8 已完成）
 
 - **知识库管理**：打开任意目录作为知识库，自动扫描并建立资产清单
 - **派生文件识别**：自动识别转录（`.transcript.txt`）、总结（`.summary.md`）、笔记（`.notes.md`）等 sidecar 文件并绑定到对应资产
@@ -13,12 +13,15 @@
 - **语义搜索**：LanceDB 向量索引，OpenAI 兼容 Embedding API，带 embedding 缓存（已嵌入片段不重复计费）
 - **AI 总结**：对文档或转录内容调用 LLM 生成总结，长文本自动分段合并，覆盖前自动备份
 - **设置页 + 任务中心**：配置总览（只读）、索引管理、任务详情与失败重试
+- **最近打开的 5 个知识库**：首页一键切换最近使用的知识库
+- **向量索引状态卡片**：设置页展示向量索引健康状态（模型 / 维度 / 覆盖度 / 最后重建），支持全量重建与清空缓存
+- **体验优化**：搜索高亮、状态徽章、大文本折叠、统一错误提示、排序分页、全站统一导航
 
-下一步：M8 体验优化（见 [docs/PRD.md](./docs/PRD.md) §28）。
+M8 体验优化已全部完成（搜索高亮 / 状态徽章 / 大文本折叠 / 错误提示 / 排序分页 / 统一导航 / 最近打开 / 向量状态卡片）。下一步规划见 [docs/讨论/qwen-prdv1/m8.md §15](./docs/讨论/qwen-prdv1/m8.md) 与 [vector-manage.md](./docs/讨论/qwen-prdv1/vector-manage.md)。
 
 ## 技术栈
 
-- Python 3.12 + [uv](https://github.com/astral-sh/uv)（虚拟环境管理）
+- Python 3.13 + [uv](https://github.com/astral-sh/uv)（虚拟环境管理）
 - [NiceGUI](https://nicegui.io/)（UI）+ FastAPI + uvicorn
 - SQLite（资产/任务/分块元数据 + FTS5）+ LanceDB（向量）
 - 日志：[loguru](https://github.com/Delgan/loguru)
