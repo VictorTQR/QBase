@@ -1,4 +1,4 @@
-# 本地知识管理应用 PRD v1.0
+# 本地知识管理应用 PRD v1.1
 
 ## 1. 产品名称与定位
 
@@ -75,7 +75,7 @@ AI 总结生成
 10. 支持全文搜索。
 11. 支持基于 LanceDB 的向量语义搜索。
 12. 支持笔记文件识别、只读预览和外部编辑器打开。
-13. 支持配置 API、CLI、扫描规则和索引重建。
+13. 支持通过 UI 表单修改核心 API 与模型配置（含环境变量状态检测与连通性测试），高级配置保留 TOML 直编，并支持索引重建。
 ```
 
 ---
@@ -100,6 +100,7 @@ TTS 朗读
 文档版本历史
 总结版本对比
 复杂权限管理
+在应用内明文存储和输入 API Key（坚持使用系统环境变量）
 ```
 
 其中文件监听、文档解析 CLI、sidecar 目录、笔记编辑放入后续阶段。
@@ -1979,6 +1980,18 @@ api_key_env 表示从环境变量读取 API Key。
 
 ---
 
+### 20.2 UI 与配置的交互原则（File as Source of Truth）
+
+坚守“不把数据锁进私有数据库”的原则，**严禁将配置持久化到 SQLite**。
+
+1. **读写链路**：`UI 表单保存` -> `后端校验 Dict` -> `序列化覆盖写入 .knowledge/config.toml` -> `触发热重载内存 State`。
+2. **渐进式部分支持**：
+   - **UI 表单层（高频、易错项）**：基础开关（enabled）、连接参数（base_url, model）、性能切片参数（batch_size, chunk_chars）。
+   - **极客直编层（低频、复杂项）**：CLI 转录命令数组、底层超时控制。UI 仅做只读展示，并提供 `[在编辑器中打开]` 按钮调用系统默认编辑器。
+3. **环境变量安全底线**：UI **绝不**提供明文输入 API Key 的输入框，防止密钥被意外提交或截屏泄露。
+
+---
+
 ## 21. 技术架构
 
 ### 21.1 总体架构
@@ -2231,17 +2244,29 @@ hash，可选
 
 ---
 
-### 22.6 设置页
+### 22.6 设置页（Config UI）
 
-```text
-API 设置
-CLI 设置
-扫描设置
-索引设置
-重建全文索引
-重建向量索引
-查看日志
-```
+设置页采用**渐进式分层设计**，作为 TOML 的可视化编辑器：
+
+1. **高频表单区（UI 强管控）**：
+   - **基础开关**：Toggle 开关控制 LLM / Embedding 启用状态。
+   - **连接参数**：Input 框输入 `base_url`，支持手动输入或下拉选择 `model`。
+   - **性能参数**：Number Input 限制 Min/Max（如 `chunk_chars`）。
+
+2. **极客直编区（UI 弱管控）**：
+   - 针对 `[cli]` 命令模板等复杂配置，UI 仅只读展示，并提供 `[在编辑器中打开]` 按钮，直接调用系统默认文本编辑器打开 `config.toml`。
+
+3. **环境变量状态指示（Env Inspector）**：
+   - 在 `api_key_env` 字段旁显示状态灯。
+   - 🟢 **就绪**：系统中存在该环境变量。
+   - 🔴 **缺失**：未找到变量，点击弹出“如何在 Windows / macOS 中配置环境变量”的指引。
+
+4. **连通性测试（Test Connection）**：
+   - 在 LLM / Embedding 卡片提供 `[测试 API]` 按钮。
+   - 后端结合表单数据与系统环境变量，发送极短 Ping 请求，直接在 UI 弹窗返回 HTTP 状态码及连通结果。
+
+5. **危险操作拦截**：
+   - 当用户修改 `dimension`（向量维度）或 `embedding.model` 时，触发阻断性警告：“修改维度 / 模型将导致现有向量索引失效，是否确认保存并清空当前知识库的向量数据？”
 
 ---
 
@@ -2298,8 +2323,9 @@ POST /api/tasks/{task_id}/retry
 ### 23.5 Settings API
 
 ```text
-GET /api/settings
-PUT /api/settings
+GET  /api/settings
+PUT  /api/settings
+POST /api/settings/test-connection
 POST /api/index/rebuild-fts
 POST /api/index/rebuild-vector
 ```
@@ -2682,18 +2708,20 @@ embedding cache
 目标：
 
 ```text
-设置页
+实现设置页的“渐进式 UI 表单化”
+环境变量状态检测
+API 连通性测试
 任务中心
-重建 FTS
-重建 LanceDB
+支持 FTS 和 LanceDB 索引重建
 ```
 
 完成标志：
 
 ```text
-可通过 UI 修改关键配置
-可重建索引
-可查看任务错误
+可通过 UI 表单修改核心 API 配置并成功写回 TOML
+环境变量缺失时 UI 有明确提示
+API 测试功能可用
+修改向量维度时能触发重建警告
 ```
 
 ---
@@ -2800,11 +2828,12 @@ AI 总结不会覆盖 notes.md
 验收：
 
 ```text
-可配置 LLM API
-可配置 Embedding API
-可关闭远程 API
-可配置转录 CLI
-可重建索引
+可通过 UI 表单修改 LLM / Embedding 的 base_url、model、分块参数，保存后 .knowledge/config.toml 文件内容正确更新
+高级 CLI 配置可通过“在编辑器中打开”按钮直接编辑
+界面能正确检测系统环境变量是否存在，并给出红绿灯提示
+点击“测试 API”能正确返回连通成功或 401 / 404 等错误信息
+在 UI 中修改 Embedding 维度并保存时，能弹出警告提示需要重建向量索引
+绝不在 UI 界面和 TOML 文件中出现明文的 API Key
 ```
 
 ---
