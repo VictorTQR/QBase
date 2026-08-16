@@ -27,6 +27,10 @@ def create_app(cfg: AppConfig | None = None) -> FastAPI:
     async def health() -> dict:
         return {"status": "ok", "version": __version__}
 
+    from app.api.library import router as library_router
+
+    fastapi_app.include_router(library_router)
+
     # 注册 NiceGUI 页面（导入即注册 @ui.page 路由）
     from nicegui import ui
 

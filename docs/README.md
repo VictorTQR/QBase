@@ -11,6 +11,14 @@
 
 - M0 项目骨架 - 已完成（2026-08-16），无偏差，见 PRD §28
   - 备注：NiceGUI `@ui.page` 注册要求包 `__init__.py` 显式导入子模块
+- M1 知识库与扫描 - 已完成（2026-08-16）
+  - 依据：讨论稿 qwen-prdv1/m1.md，已适配 M0 结构
+  - 偏差/补充（m1.md 未覆盖、由实施补齐）：
+    - `app/database.py`：sqlite3 连接（WAL + Row 工厂）+ assets 建表（DDL 取自 PRD §19.1）
+    - `app/services/library_service.py`：open_library / close_library / get_library_status；打开时写默认 `.knowledge/config.toml`（模板取自 PRD §20）
+    - `app/api/library.py`：REST 端点（open/close/status/scan/assets），替代 m1.md 的 register_library_api
+    - `app/main.py`：未按 m1.md 整体替换，保留 M0 的配置/日志/健康检查，仅追加 API 路由
+    - `app/state.py`、`app/rules.py`、`app/utils.py`、`app/repositories/asset_repository.py`、`app/services/scanner_service.py`、`app/ui/pages/assets.py` 按 m1.md 落地（资产页并入 page_frame 导航布局，新增类型过滤）
 
 ## 项目文档
 

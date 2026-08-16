@@ -1,16 +1,17 @@
-"""首页：M0 占位，显示应用状态与里程碑进度。"""
+"""首页：打开知识库 + 运行状态 + 里程碑进度。"""
 
 from __future__ import annotations
 
-from nicegui import ui
+from nicegui import run, ui
 
 from app import __version__
 from app.config import get_config
+from app.services.library_service import get_library_status, open_library
 from app.ui.layout import page_frame
 
 MILESTONES = [
     ("M0", "项目骨架", True),
-    ("M1", "知识库与扫描", False),
+    ("M1", "知识库与扫描", True),
     ("M2", "派生文件识别", False),
     ("M3", "转录任务", False),
     ("M4", "全文搜索", False),
@@ -24,10 +25,53 @@ MILESTONES = [
 @ui.page("/")
 def home_page() -> None:
     cfg = get_config()
+
     with page_frame("首页"):
         ui.label("本地知识管理中心").classes("text-2xl font-bold")
-        ui.label("管理播客、视频、文档，配套转录 / 总结 / 三层搜索。").classes("text-gray-500")
+        ui.label("管理播客、视频、文档，配套转录 / 总结 / 三层搜索。").classes(
+            "text-gray-500"
+        )
 
+        # 打开知识库
+        with ui.card().classes("w-full"):
+            ui.label("打开知识库").classes("font-semibold")
+            ui.label("输入一个本地目录，应用会在该目录下创建 .knowledge 文件夹。").classes(
+                "text-sm text-gray-500"
+            )
+
+            path_input = ui.input(
+                label="知识库目录",
+                placeholder="例如：D:/Knowledge",
+            ).classes("w-full mt-2")
+
+            status_label = ui.label("当前未打开知识库").classes(
+                "text-sm text-gray-600 mt-2"
+            )
+
+            def refresh_status():
+                status = get_library_status()
+                if status.get("opened"):
+                    status_label.text = f"当前知识库：{status['library_root']}"
+                else:
+                    status_label.text = "当前未打开知识库"
+
+            async def handle_open():
+                try:
+                    result = await run.io_bound(open_library, path_input.value)
+                    ui.notify(f"已打开：{result['library_root']}", type="positive")
+                    refresh_status()
+                except Exception as exc:
+                    ui.notify(str(exc), type="negative")
+
+            with ui.row().classes("mt-3 gap-3"):
+                ui.button("打开知识库", icon="folder_open", on_click=handle_open)
+                ui.link("进入资产列表 →", "/assets").classes(
+                    "flex items-center text-blue-600"
+                )
+
+            refresh_status()
+
+        # 运行状态
         with ui.card().classes("w-full"):
             ui.label("运行状态").classes("font-semibold")
             with ui.grid(columns=2).classes("gap-2 w-full"):
@@ -38,11 +82,11 @@ def home_page() -> None:
                 ui.label("日志级别").classes("text-gray-500")
                 ui.label(cfg.log_level)
 
+        # 里程碑
         with ui.card().classes("w-full"):
             ui.label("里程碑").classes("font-semibold")
             for tag, name, done in MILESTONES:
-                with ui.row().classes("items-center gap-2"):
-                    icon = "✅" if done else "⬜"
-                    ui.label(f"{icon} {tag} {name}").classes(
-                        "text-sm" + (" line-through text-gray-400" if done else "")
-                    )
+                icon = "✅" if done else "⬜"
+                ui.label(f"{icon} {tag} {name}").classes(
+                    "text-sm" + (" line-through text-gray-400" if done else "")
+                )

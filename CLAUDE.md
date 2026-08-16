@@ -44,6 +44,13 @@ app/
 ├── main.py          # 入口：create_app + uvicorn 启动
 ├── config.py        # 应用级配置（config.toml + 环境变量）
 ├── logging_conf.py  # loguru 日志
+├── state.py         # 运行时状态（当前知识库）
+├── database.py      # SQLite 连接与建表
+├── rules.py         # 文件类型/忽略规则
+├── utils.py         # 大小/时间格式化、打开文件/目录
+├── api/             # REST 路由
+├── repositories/    # 数据访问层
+├── services/        # 业务层（library/scanner/...）
 └── ui/              # NiceGUI 页面（layout.py 框架 + pages/ 各页面）
 config.toml          # 应用级默认配置
 docs/PRD.md          # 唯一权威 spec
@@ -57,8 +64,8 @@ docs/PRD.md          # 唯一权威 spec
 ## 当前进度
 
 - [x] M0 项目骨架（2026-08-16 完成）
-- [ ] M1 知识库与扫描 - 下一步
-- [ ] M2 派生文件识别
+- [x] M1 知识库与扫描（2026-08-16 完成）
+- [ ] M2 派生文件识别 - 下一步
 - [ ] M3 转录任务
 - [ ] M4 全文搜索
 - [ ] M5 LanceDB 向量搜索
