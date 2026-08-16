@@ -7,6 +7,7 @@ from pathlib import Path
 from loguru import logger
 
 from app.database import init_db
+from app.services.recent_library_service import add_recent_library
 from app.state import state
 
 DEFAULT_LIBRARY_CONFIG = """# 知识库级配置（打开知识库时生成，可在设置页修改）
@@ -104,6 +105,7 @@ def open_library(path_str: str) -> dict:
     init_db(db_path)
 
     state.library_root = root
+    add_recent_library(str(root))
     logger.info("已打开知识库：{}", root)
 
     return {

@@ -1,4 +1,4 @@
-"""首页：打开知识库 + 运行状态 + 里程碑进度。"""
+"""首页：打开知识库 + 最近打开 + 运行状态 + 里程碑进度。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from nicegui import run, ui
 
 from app import __version__
 from app.config import get_config
+from app.services import recent_library_service
 from app.services.library_service import get_library_status, open_library
 from app.ui.layout import page_frame
 from app.utils import notify_error
@@ -29,6 +30,8 @@ MILESTONES = [
 @ui.page("/")
 def home_page() -> None:
     cfg = get_config()
+    recents = recent_library_service.get_recent_libraries()
+    latest_recent = recents[0]["path"] if recents else ""
 
     with page_frame("首页", active_nav="/"):
         ui.label("本地知识管理中心").classes("text-2xl font-bold")
@@ -46,6 +49,7 @@ def home_page() -> None:
             path_input = ui.input(
                 label="知识库目录",
                 placeholder="例如：D:/Knowledge",
+                value=latest_recent,
             ).classes("w-full mt-2")
 
             status_label = ui.label("当前未打开知识库").classes(
@@ -59,8 +63,8 @@ def home_page() -> None:
                 else:
                     status_label.text = "当前未打开知识库"
 
-            async def handle_open():
-                raw_path = (path_input.value or "").strip()
+            async def do_open(raw_path: str):
+                raw_path = (raw_path or "").strip().strip('"').strip("'")
                 if not raw_path:
                     ui.notify("请输入知识库目录路径", type="warning")
                     return
@@ -94,13 +98,35 @@ def home_page() -> None:
                 except Exception as exc:
                     notify_error(exc)
 
+            def make_open_handler(path_str: str):
+                async def handler():
+                    await do_open(path_str)
+
+                return handler
+
             with ui.row().classes("mt-3 gap-3"):
-                ui.button("打开知识库", icon="folder_open", on_click=handle_open)
+                ui.button("打开知识库", icon="folder_open", on_click=lambda: do_open(path_input.value))
                 ui.link("进入资产列表 →", "/assets").classes(
                     "flex items-center text-blue-600"
                 )
 
             refresh_status()
+
+        # 最近打开
+        if recents:
+            with ui.card().classes("w-full"):
+                ui.label("最近打开").classes("font-semibold")
+                ui.label("点击可快速切换知识库。").classes("text-sm text-gray-500")
+                for item in recents[:5]:
+                    with ui.row().classes("items-center gap-2 w-full"):
+                        ui.label(item["path"]).classes(
+                            "flex-1 truncate text-sm"
+                        ).tooltip(item["path"])
+                        ui.button(
+                            "打开",
+                            icon="folder_open",
+                            on_click=make_open_handler(item["path"]),
+                        ).props("dense size=sm")
 
         # 运行状态
         with ui.card().classes("w-full"):

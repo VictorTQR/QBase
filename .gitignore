@@ -28,3 +28,6 @@ parse.backup/
 .knowledge/
 # Local secrets file inside a knowledge library (also covered by .knowledge/)
 .knowledge/secrets.toml
+
+# App-level local user data (recents, etc.)
+data/
