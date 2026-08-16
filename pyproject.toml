@@ -10,5 +10,6 @@ dependencies = [
     "lancedb>=0.37.1",
     "loguru>=0.7.3",
     "nicegui>=3.16.0",
+    "tomli-w>=1.2.0",
     "uvicorn[standard]>=0.52.3",
 ]
