@@ -65,6 +65,17 @@
     - 向量库位置 `<library_root>/.knowledge/vector/lancedb`，表名 chunks，全量重建（drop + create）
     - embedding 缓存 key = `chunk|query:{model}:{sha256(text)}`，存 embedding_cache 表（M2 已建），JSON 向量
     - 验收用本地 mock embeddings 服务（kb-test/.knowledge/mock_embeddings.py，字符频率向量，端口 8790）跑通：首次重建 7 片段全量嵌入 → 二次重建 7 缓存命中 0 新调用 → 「知识管理」语义命中 ep001 总结（distance 1.20 vs 其他 ≥1.79）→ enabled=false 时 HTTP 400 明确报错
+- M6 AI 总结生成 - 已完成（2026-08-16）
+  - 依据：讨论稿 qwen-prdv1/m6.md，已适配 M5 结构
+  - 偏差/补充（m6.md 未覆盖、由实施补齐）：
+    - `app/ui/pages/asset_detail.py`：AI 总结卡片并入 page_frame 版详情页（m6.md 版本丢了布局），按钮禁用态 + 覆盖确认对话框
+    - 新增 API：`POST /api/assets/{id}/summarize`（m6.md 未提供，与 transcribe 端点对齐）
+    - `backup_existing_summary` 简化：直接用 state.library_root 定位 `.knowledge/backups/`（m6.md 向上遍历目录的写法不必要）
+    - `DEFAULT_LIBRARY_CONFIG` 的 [llm.summary] 模板补 temperature/max_tokens/timeout/max_input_chars/chunk_chars（SiliconFlow Qwen2.5-72B 示例）；enabled 默认 false（与 [embedding] 一致，防误触发费用）
+  - 决策记录：
+    - 前置校验在 start_summarization 同步完成（无转录/不支持类型/空文本 → HTTP 400，不产生任务）；LLM 调用失败则在任务内标记 failed，错误信息任务中心可查
+    - 总结成功后自动 scan + rebuild_fulltext_index（失败仅记 warning，不影响任务 success）
+    - 验收用本地 mock LLM（kb-test/.knowledge/mock_llm.py，端口 8791，内容含「触发失败」时返回 500）：短文直出 / 长文分段合并（601 字原文 → 合并请求 1091 字符）/ 覆盖备份（.knowledge/backups/）/ 自动刷新索引（新总结立即可搜）全部通过
 
 ## 项目文档
 

@@ -69,8 +69,8 @@ docs/PRD.md          # 唯一权威 spec
 - [x] M3 转录任务（2026-08-16 完成，QVoice CLI 集成）
 - [x] M4 全文搜索（2026-08-16 完成，FTS5 + LIKE 兜底 + 文件名搜索 + 转录后自动重建索引）
 - [x] M5 LanceDB 向量搜索（2026-08-16 完成，OpenAI 兼容 Embedding API + 语义搜索 + embedding 缓存）
-- [ ] M6 AI 总结 - 下一步
-- [ ] M7 设置与任务中心
+- [x] M6 AI 总结（2026-08-16 完成，OpenAI 兼容 LLM + 长文分段摘要合并 + 覆盖备份 + 自动刷新索引）
+- [ ] M7 设置与任务中心 - 下一步
 - [ ] M8 体验优化
 
 里程碑详细目标见 [docs/PRD.md](./docs/PRD.md) §28。

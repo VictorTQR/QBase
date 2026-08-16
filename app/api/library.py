@@ -20,6 +20,7 @@ from app.services.library_service import (
 from app.services.index_service import rebuild_fulltext_index
 from app.services.scanner_service import scan_current_library
 from app.services.search_service import search
+from app.services.summarization_service import start_summarization
 from app.services.transcription_service import start_transcription
 from app.services.vector_service import rebuild_vector_index
 from app.state import get_db_path
@@ -103,6 +104,20 @@ def api_start_transcription(asset_id: str) -> dict:
 
     try:
         task_id = start_transcription(asset_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {"task_id": task_id, "status": "pending"}
+
+
+@router.post("/assets/{asset_id}/summarize")
+def api_start_summarization(asset_id: str) -> dict:
+    """触发生成总结任务。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    try:
+        task_id = start_summarization(asset_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

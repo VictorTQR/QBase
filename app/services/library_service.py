@@ -41,11 +41,18 @@ transcribe_timeout_seconds = 14400
 parse_command = []
 
 [llm.summary]
-enabled = true
+# AI 总结（m6）。使用前填好 base_url / model，再把 enabled 改为 true。
+# max_input_chars：超过则分段摘要后合并；chunk_chars：分段每段最大字符数。
+enabled = false
 provider = "openai_compatible"
-base_url = "https://api.example.com/v1"
-api_key_env = "OPENAI_API_KEY"
-model = "gpt-4o-mini"
+base_url = "https://api.siliconflow.cn/v1"
+api_key_env = "SILICONFLOW_API_KEY"
+model = "Qwen/Qwen2.5-72B-Instruct"
+temperature = 0.2
+max_tokens = 2000
+timeout = 180
+max_input_chars = 24000
+chunk_chars = 6000
 
 [embedding]
 # 向量语义搜索（m5）。使用前先填好 base_url / model / dimension，

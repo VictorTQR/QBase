@@ -101,3 +101,55 @@ def get_embedding_config() -> dict:
             )
 
     return result
+
+
+def get_summary_llm_config() -> dict:
+    """读取 LLM 总结配置（enabled=false 时返回未启用状态，不校验）。"""
+    config = load_config()
+    summary_config = config.get("llm", {}).get("summary", {})
+
+    enabled = bool(summary_config.get("enabled", False))
+
+    base_url = str(summary_config.get("base_url", "")).strip()
+    api_key_env = str(summary_config.get("api_key_env", "")).strip()
+    api_key = str(summary_config.get("api_key", "")).strip()
+
+    if api_key_env:
+        api_key = os.environ.get(api_key_env, api_key)
+
+    model = str(summary_config.get("model", "")).strip()
+    temperature = float(summary_config.get("temperature", 0.2))
+    max_tokens = int(summary_config.get("max_tokens", 2000) or 2000)
+    timeout = int(summary_config.get("timeout", 180) or 180)
+    max_input_chars = int(summary_config.get("max_input_chars", 24000) or 24000)
+    chunk_chars = int(summary_config.get("chunk_chars", 6000) or 6000)
+
+    result = {
+        "enabled": enabled,
+        "provider": str(summary_config.get("provider", "openai_compatible")),
+        "base_url": base_url,
+        "api_key_env": api_key_env,
+        "api_key": api_key,
+        "model": model,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "timeout": timeout,
+        "max_input_chars": max_input_chars,
+        "chunk_chars": chunk_chars,
+    }
+
+    if enabled:
+        if not base_url:
+            raise ValueError("LLM 总结配置缺少 base_url")
+
+        if not model:
+            raise ValueError("LLM 总结配置缺少 model")
+
+        if not api_key:
+            if api_key_env:
+                raise ValueError(
+                    f"未获取到 LLM API Key，请设置环境变量：{api_key_env}"
+                )
+            raise ValueError("未获取到 LLM API Key，请配置 api_key_env 或 api_key")
+
+    return result

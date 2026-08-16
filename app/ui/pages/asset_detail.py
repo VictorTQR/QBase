@@ -7,7 +7,7 @@ from nicegui import run, ui
 from app.database import get_conn
 from app.repositories.artifact_repository import list_artifacts_by_asset
 from app.repositories.asset_repository import get_asset_by_id
-from app.services import transcription_service
+from app.services import summarization_service, transcription_service
 from app.state import get_db_path, state
 from app.ui.layout import page_frame
 from app.utils import (
@@ -77,10 +77,11 @@ def asset_detail_page(asset_id: str) -> None:
 
             kinds = {artifact["kind"] for artifact in artifacts}
             has_transcript = "transcript" in kinds
+            has_summary = "summary" in kinds
 
-            if "transcript" in kinds:
+            if has_transcript:
                 ui.badge("转录", color="green")
-            if "summary" in kinds:
+            if has_summary:
                 ui.badge("总结", color="blue")
             if "note" in kinds:
                 ui.badge("笔记", color="purple")
@@ -142,6 +143,81 @@ def asset_detail_page(asset_id: str) -> None:
                     ui.link("任务中心", "/tasks").classes(
                         "flex items-center text-blue-600"
                     )
+
+        # AI 总结卡片（音视频基于转录；.md/.txt 基于原文）
+        async def start_summarization():
+            try:
+                task_id = await run.io_bound(
+                    summarization_service.start_summarization,
+                    asset["id"],
+                )
+
+                ui.notify(
+                    f"总结任务已创建：{task_id[:8]}。请查看任务中心。",
+                    type="positive",
+                )
+
+                summarize_button.disable()
+            except Exception as exc:
+                ui.notify(str(exc), type="negative")
+
+        with ui.dialog() as overwrite_summary_dialog:
+            with ui.card():
+                ui.label("已存在总结文件，是否覆盖？（旧文件会自动备份）")
+
+                with ui.row().classes("gap-2 mt-3"):
+                    ui.button("取消", on_click=overwrite_summary_dialog.close)
+
+                    async def confirm_overwrite_summary():
+                        overwrite_summary_dialog.close()
+                        await start_summarization()
+
+                    ui.button("覆盖并生成", on_click=confirm_overwrite_summary)
+
+        can_summarize = False
+        summarize_hint = ""
+
+        if asset["type"] in {"audio", "video"}:
+            if has_transcript:
+                can_summarize = True
+                summarize_hint = "将基于转录文本生成总结。"
+            else:
+                summarize_hint = "需要先生成转录，才能生成总结。"
+        elif asset["type"] == "document":
+            ext = asset["relative_path"].lower()
+            if ext.endswith(".md") or ext.endswith(".txt"):
+                can_summarize = True
+                summarize_hint = "将基于文档原文生成总结。"
+            else:
+                summarize_hint = "当前文档格式暂不支持总结，需要文档解析模块。"
+
+        with ui.card().classes("w-full p-4 mt-4"):
+            ui.label("AI 总结").classes("text-lg font-semibold")
+
+            ui.label(summarize_hint).classes("text-sm text-gray-600")
+
+            if has_summary:
+                ui.label(
+                    "当前已存在总结文件。重新生成会覆盖（旧文件自动备份）。"
+                ).classes("text-sm text-orange-600 mt-1")
+
+            with ui.row().classes("gap-3 mt-3"):
+                if can_summarize:
+                    summarize_button = ui.button(
+                        "重新生成总结" if has_summary else "生成总结",
+                        icon="auto_awesome",
+                        on_click=lambda: (
+                            overwrite_summary_dialog.open()
+                            if has_summary
+                            else start_summarization()
+                        ),
+                    )
+                else:
+                    ui.button("生成总结", icon="auto_awesome").props("disable")
+
+                ui.link("任务中心", "/tasks").classes(
+                    "flex items-center text-blue-600"
+                )
 
         with ui.card().classes("w-full p-4 mt-4"):
             ui.label("文件信息").classes("text-lg font-semibold")
