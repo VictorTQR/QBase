@@ -42,6 +42,18 @@
   - 决策记录：
     - 验收用 mock CLI（kb-test/.knowledge/mock_transcribe.py）跑通 success/failed/超时去重三条路径；真实 QVoice 配置已写入默认模板，用户改库级 config 即可切换
     - 并发去重：同资产同类型存在 pending/running 任务时拒绝（HTTP 400）
+- M4 全文搜索 + 文件名搜索 - 已完成（2026-08-16）
+  - 依据：讨论稿 qwen-prdv1/m4.md，已适配 M3 结构
+  - 偏差/补充（m4.md 未覆盖、由实施补齐）：
+    - `app/ui/pages/search.py`：搜索页包 page_frame（m4.md 版本无布局，手写导航链接已去除）
+    - 未按 m4.md 替换 main.py，页面经 `pages/__init__.py` 注册；/search 占位页移除
+    - 新增 API：`GET /api/search?q&mode`、`POST /api/search/rebuild`
+    - 采纳 m4.md §6 可选项：转录成功后自动 scan + rebuild_fulltext_index（已验证端到端）
+    - `utils.read_text_for_index`：与 read_text_preview 并列的索引用读取（max_chars=500K）
+  - 决策记录：
+    - 全文搜索 = FTS5 优先 + LIKE 兜底（FTS5 默认分词对中文子串不可靠，个人库规模 LIKE 可接受）
+    - 索引来源：active 状态的 transcript/summary/note/parsed 派生 + .md/.txt 文档资产（parse_status=not_required）
+    - 重建策略为全量清空重建；大库可优化为按资产增量索引
 
 ## 项目文档
 

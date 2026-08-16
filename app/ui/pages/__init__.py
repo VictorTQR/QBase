@@ -5,5 +5,6 @@ from app.ui.pages import (  # noqa: F401
     assets,
     home,
     placeholders,
+    search,
     tasks,
 )

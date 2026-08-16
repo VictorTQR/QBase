@@ -72,6 +72,26 @@ def open_folder(path_str: str) -> None:
         subprocess.Popen(["xdg-open", str(target_dir)])
 
 
+def read_text_for_index(path_str: str, max_chars: int = 500_000) -> str:
+    """读取文本文件用于建立索引。
+
+    依次尝试 UTF-8 / UTF-8-SIG / GBK。
+    """
+    path = Path(path_str)
+
+    if not path.exists():
+        raise FileNotFoundError(f"文件不存在：{path}")
+
+    for encoding in ("utf-8", "utf-8-sig", "gbk"):
+        try:
+            with open(path, "r", encoding=encoding) as f:
+                return f.read(max_chars)
+        except UnicodeDecodeError:
+            continue
+
+    raise ValueError(f"无法识别文本编码：{path}")
+
+
 def read_text_preview(path_str: str, max_chars: int = 3000) -> tuple[str, bool]:
     """读取文本文件预览，返回 (文本, 是否截断)。
 

@@ -13,6 +13,7 @@ from app.repositories import task_repository
 from app.repositories.asset_repository import get_asset_by_id
 from app.services.cli_runner import build_command, run_cli_command, tail
 from app.services.config_service import get_transcribe_cli_config
+from app.services.index_service import rebuild_fulltext_index
 from app.services.scanner_service import scan_current_library
 from app.state import get_db_path
 
@@ -137,6 +138,7 @@ def run_transcription_task(task_id: str) -> None:
 
                 try:
                     scan_current_library()
+                    rebuild_fulltext_index()
                 except Exception as scan_exc:
                     warning = f"转录成功，但刷新索引失败：{scan_exc}"
 

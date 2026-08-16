@@ -17,7 +17,9 @@ from app.services.library_service import (
     get_library_status,
     open_library,
 )
+from app.services.index_service import rebuild_fulltext_index
 from app.services.scanner_service import scan_current_library
+from app.services.search_service import search
 from app.services.transcription_service import start_transcription
 from app.state import get_db_path
 
@@ -135,3 +137,27 @@ def api_get_task(task_id: str) -> dict:
         return task
     finally:
         conn.close()
+
+
+@router.get("/search")
+def api_search(q: str, mode: str = "fulltext", limit: int = 50) -> dict:
+    """搜索：mode 为 filename / fulltext。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    if mode not in ("filename", "fulltext"):
+        raise HTTPException(status_code=400, detail="mode 仅支持 filename / fulltext")
+
+    return {"query": q, "mode": mode, "items": search(q, mode, limit=limit)}
+
+
+@router.post("/search/rebuild")
+def api_rebuild_index() -> dict:
+    """手动重建全文索引。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    try:
+        return rebuild_fulltext_index()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"索引重建失败：{exc}") from exc
