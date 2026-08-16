@@ -1,0 +1,10901 @@
+（model：qwen-3.8-max）
+
+user：
+现在我想开发一个自用的本地知识管理应用，其中涉及转录，tts，文档解析等多个功能模块，这些模块我平常也有单独使用的情况。现在开发知识管理应用时，应该如何做，是只做核心管理功能，其他的单独调用或做成接口，还是复用代码集成到一起？
+
+qwen：
+建议采用“**核心知识管理应用 + 独立可复用能力模块 + 适配层**”的中间路线。
+
+不要极端地二选一：
+
+- 不建议把所有转录、TTS、文档解析代码都硬塞进知识管理应用里，否则以后这些模块单独使用时会很别扭。
+- 也不建议一开始就拆成很多独立服务，否则自用项目会过度工程化，调用、部署、排错都会变复杂。
+- 更推荐：把知识管理应用做成“核心调度器 + 数据资产中心”，把转录、TTS、文档解析做成可复用模块，由知识管理应用按需调用。
+
+---
+
+## 一、总体结论
+
+你的知识管理应用应该主要负责：
+
+1. 知识资产管理  
+   - 文档、音频、视频、笔记、摘要、标签、收藏、链接、引用等。
+
+2. 元数据管理  
+   - 文件来源、创建时间、处理状态、模型版本、处理参数、标签、备注等。
+
+3. 搜索与索引  
+   - 全文搜索、标签搜索、向量检索、相似内容推荐等。
+
+4. 工作流编排  
+   - 例如：导入一篇 PDF，自动解析为 Markdown。
+   - 导入一段录音，自动转录为文本。
+   - 选中一段文字，调用 TTS 生成音频。
+   - 对一篇笔记生成摘要、关键词、待办事项。
+
+而转录、TTS、文档解析这些能力，应该作为独立能力模块存在：
+
+```text
+知识管理应用
+  ├── 核心管理功能
+  │   ├── 文档库
+  │   ├── 笔记
+  │   ├── 标签
+  │   ├── 搜索
+  │   ├── 任务记录
+  │   └── 资产关系
+  │
+  └── 能力调用层
+      ├── 文档解析模块
+      ├── 语音转录模块
+      ├── TTS 模块
+      ├── 摘要模块
+      └── 向量索引模块
+```
+
+---
+
+## 二、你真正要区分的是四层
+
+很多自用工具一开始混乱，是因为把下面几层混在一起了。
+
+### 1. 能力层
+
+这是“做事”的模块。
+
+例如：
+
+- 文档解析：PDF、Word、Markdown、HTML、图片 OCR。
+- 转录：音频转文字。
+- TTS：文字转语音。
+- 摘要：调用 LLM 或本地模型生成摘要。
+- 分块：把长文档切成适合检索的片段。
+- Embedding：生成向量。
+
+这些模块应该是可复用的。
+
+它们不应该知道自己是在给“知识管理应用”服务，还是单独被命令行调用。
+
+---
+
+### 2. 接口层
+
+能力模块要暴露统一、稳定的调用方式。
+
+常见形式有三种：
+
+#### 方式一：函数库
+
+适合轻量模块。
+
+例如 Python：
+
+```python
+from mytools.parsing import parse_document
+from mytools.asr import transcribe_audio
+from mytools.tts import synthesize_speech
+
+result = parse_document("input.pdf")
+text = transcribe_audio("meeting.m4a")
+audio = synthesize_speech("你好，世界")
+```
+
+优点：
+
+- 最简单。
+- 没有网络开销。
+- 调试方便。
+
+缺点：
+
+- 如果模型很重，每次调用都要加载。
+- 多个应用同时使用可能不方便。
+
+---
+
+#### 方式二：CLI 命令
+
+适合你平时也会单独使用这些功能。
+
+例如：
+
+```bash
+mytool parse input.pdf -o output.md
+mytool transcribe meeting.m4a -o result.json
+mytool tts "你好" --voice zh-CN -o output.wav
+```
+
+优点：
+
+- 非常适合自用。
+- 可以被知识管理应用调用。
+- 可以独立调试。
+- 可以写进脚本、快捷指令、Raycast、Alfred、Shell 别名等。
+
+缺点：
+
+- 每次调用可能重新启动进程。
+- 大模型加载可能慢。
+
+---
+
+#### 方式三：本地服务
+
+适合重模块，比如：
+
+- Whisper 转录。
+- 本地 TTS。
+- OCR。
+- Embedding 模型。
+- 本地 LLM。
+
+例如：
+
+```text
+http://127.0.0.1:8787/parse
+http://127.0.0.1:8787/transcribe
+http://127.0.0.1:8787/tts
+```
+
+或者本地 WebSocket、gRPC、Unix Socket、Named Pipe。
+
+优点：
+
+- 模型常驻内存或 GPU。
+- 响应快。
+- 多个客户端可以共用。
+- 可以做任务队列和进度通知。
+
+缺点：
+
+- 复杂度更高。
+- 需要管理进程启动、端口、日志、崩溃恢复。
+
+---
+
+### 3. 数据层
+
+知识管理应用最重要的是数据层。
+
+你需要保存的不是“调用了一次功能”，而是“这次调用产生了什么资产”。
+
+例如一次转录任务，应该记录：
+
+```json
+{
+  "task_id": "task_20260816_001",
+  "type": "transcription",
+  "source_file": "meetings/2026-08-16.m4a",
+  "source_hash": "sha256:xxxx",
+  "status": "success",
+  "created_at": "2026-08-16T10:20:00+08:00",
+  "model": "whisper-large-v3",
+  "language": "zh",
+  "duration": 3520,
+  "output_text": "assets/transcripts/task_20260816_001.txt",
+  "output_segments": "assets/transcripts/task_20260816_001.segments.json",
+  "error": null
+}
+```
+
+一次文档解析任务，应该记录：
+
+```json
+{
+  "task_id": "task_20260816_002",
+  "type": "document_parsing",
+  "source_file": "papers/attention.pdf",
+  "status": "success",
+  "parser": "marker",
+  "output_markdown": "assets/parsed/attention.md",
+  "output_meta": "assets/parsed/attention.meta.json",
+  "page_count": 15,
+  "has_ocr": false
+}
+```
+
+这样你的知识管理应用才不会只是一个“调用器”，而是真正的“知识资产中心”。
+
+---
+
+### 4. 展示层
+
+也就是你日常使用的界面。
+
+可以是：
+
+- Web 页面。
+- Tauri 桌面应用。
+- Electron 桌面应用。
+- Obsidian 插件。
+- VS Code 插件。
+- 命令行 TUI。
+- 本地 FastAPI + 浏览器页面。
+
+自用项目建议不要一开始做太重的界面，先保证数据结构和任务流程稳定。
+
+---
+
+## 三、推荐架构：核心应用调用能力模块
+
+我建议你采用这种结构：
+
+```text
+knowledge-app/
+├── app/
+│   ├── 前端界面
+│   ├── API 路由
+│   ├── 任务管理
+│   ├── 搜索服务
+│   ├── 标签系统
+│   ├── 笔记系统
+│   └── 资产管理系统
+│
+├── core/
+│   ├── database.py
+│   ├── storage.py
+│   ├── task_runner.py
+│   ├── config.py
+│   └── logging.py
+│
+├── adapters/
+│   ├── parsing_adapter.py
+│   ├── transcription_adapter.py
+│   ├── tts_adapter.py
+│   └── embedding_adapter.py
+│
+└── tools/
+    ├── parsing/
+    ├── transcription/
+    ├── tts/
+    ├── embedding/
+    └── cli.py
+```
+
+其中：
+
+- `app` 是知识管理应用本体。
+- `core` 是知识管理核心能力。
+- `adapters` 是知识管理应用调用外部能力模块的适配层。
+- `tools` 是可独立使用的能力模块。
+
+---
+
+## 四、关键设计：能力模块要输出标准结果
+
+你以后会越来越多地复用这些模块，所以一开始就要约定输出格式。
+
+不要每个模块随便返回一个字符串。
+
+建议统一成类似这样：
+
+```json
+{
+  "status": "success",
+  "module": "transcription",
+  "version": "0.3.1",
+  "model": "whisper-large-v3",
+  "input": {
+    "path": "/data/audio/meeting.m4a",
+    "hash": "sha256:xxxx"
+  },
+  "outputs": {
+    "text": "/data/results/meeting.txt",
+    "segments": "/data/results/meeting.segments.json"
+  },
+  "meta": {
+    "language": "zh",
+    "duration_seconds": 3520
+  },
+  "logs": [],
+  "error": null
+}
+```
+
+这样知识管理应用只需要理解一种标准结果。
+
+例如：
+
+```python
+result = run_tool(
+    tool="transcription",
+    input_path="audio/meeting.m4a",
+    options={
+        "language": "zh",
+        "model": "large-v3"
+    }
+)
+```
+
+然后知识管理应用把 `result` 存入数据库。
+
+---
+
+## 五、什么时候适合直接集成代码？
+
+如果满足下面条件，可以直接作为函数库集成到知识管理应用中：
+
+1. 模块很轻。
+2. 没有复杂依赖。
+3. 不需要常驻模型。
+4. 不需要被多个应用同时调用。
+5. 你只想快速完成功能。
+6. 调用频率不高。
+
+例如：
+
+- Markdown 清洗。
+- 文件名规范化。
+- 简单 HTML 转 Markdown。
+- 文本分块。
+- 本地文件哈希。
+- 简单正则提取。
+- 元数据读取。
+
+这些可以直接放进核心应用或公共包里。
+
+---
+
+## 六、什么时候适合做成 CLI？
+
+如果满足下面条件，建议做成 CLI：
+
+1. 你平时会单独使用。
+2. 可能被脚本调用。
+3. 可能被知识管理应用调用。
+4. 模块逻辑比较独立。
+5. 不需要长期常驻。
+6. 不想引入服务进程。
+
+例如：
+
+```bash
+kb parse document.pdf
+kb transcribe meeting.m4a
+kb tts "今天需要整理三篇论文"
+kb summarize note.md
+```
+
+对于自用系统，CLI 是非常好的中间形态。
+
+它既简单，又保留了独立性。
+
+知识管理应用可以通过子进程调用：
+
+```python
+subprocess.run([
+    "mytool",
+    "transcribe",
+    "meeting.m4a",
+    "--output",
+    "result.json"
+])
+```
+
+然后读取 JSON 结果。
+
+---
+
+## 七、什么时候适合做成本地服务？
+
+如果满足下面条件，再考虑本地服务：
+
+1. 模型加载很慢。
+2. 需要 GPU。
+3. 多个应用需要同时调用。
+4. 需要任务队列。
+5. 需要实时进度。
+6. 需要流式输出。
+7. 模块使用频率很高。
+8. 你希望知识管理应用只发请求，不管理模型生命周期。
+
+典型例子：
+
+- Whisper 转录服务。
+- 本地 TTS 服务。
+- OCR 服务。
+- Embedding 服务。
+- 本地 LLM 服务。
+- RAG 检索服务。
+
+例如：
+
+```text
+POST /transcribe
+{
+  "audio_path": "/data/audio/meeting.m4a",
+  "language": "zh"
+}
+```
+
+返回：
+
+```json
+{
+  "task_id": "abc123",
+  "status": "processing"
+}
+```
+
+然后知识管理应用轮询：
+
+```text
+GET /tasks/abc123
+```
+
+或者通过 WebSocket 接收进度。
+
+---
+
+## 八、不要一开始就过度微服务
+
+自用项目最常见的错误是：
+
+> 明明只是本地工具，却一开始拆成五六个服务，每个服务都有独立数据库、独立配置、独立部署流程。
+
+这会带来很多麻烦：
+
+- 端口冲突。
+- 服务没启动。
+- 路径不一致。
+- 日志分散。
+- 版本不兼容。
+- 配置混乱。
+- 数据难以追踪。
+
+所以建议你按这个顺序演进：
+
+```text
+脚本
+↓
+函数库
+↓
+CLI
+↓
+本地服务
+↓
+插件化平台
+```
+
+不要一开始直接跳到最后一步。
+
+---
+
+## 九、推荐你的知识管理应用这样设计
+
+### 1. 核心管理功能优先
+
+先做这些：
+
+- 导入文件。
+- 管理文件。
+- 添加标签。
+- 添加笔记。
+- 全文搜索。
+- 查看文档内容。
+- 记录处理任务。
+- 保存处理结果。
+- 建立源文件和处理结果之间的关系。
+
+例如：
+
+```text
+原始文件：meeting.m4a
+转录结果：meeting.txt
+摘要结果：meeting.summary.md
+关键词：meeting.keywords.json
+向量索引：meeting.embedding
+```
+
+它们都应该挂在同一个知识资产下面。
+
+---
+
+### 2. 能力模块作为可选扩展
+
+知识管理应用里可以有一个“处理动作”菜单：
+
+```text
+对当前文件执行：
+- 文档解析
+- 音频转录
+- 生成摘要
+- 提取关键词
+- 生成 TTS 音频
+- 建立向量索引
+```
+
+点击后，核心应用创建一个任务：
+
+```json
+{
+  "task_id": "task_001",
+  "asset_id": "asset_123",
+  "type": "transcription",
+  "status": "pending"
+}
+```
+
+然后交给任务执行器。
+
+任务执行器根据类型调用对应模块：
+
+```python
+if task.type == "transcription":
+    result = transcription_adapter.run(task)
+elif task.type == "document_parsing":
+    result = parsing_adapter.run(task)
+elif task.type == "tts":
+    result = tts_adapter.run(task)
+```
+
+---
+
+### 3. 统一任务状态
+
+你的知识管理应用最好有一个任务中心。
+
+例如：
+
+```text
+任务列表：
+1. 解析 paper.pdf —— 成功
+2. 转录 meeting.m4a —— 进行中 62%
+3. 生成摘要 note.md —— 失败：模型未加载
+4. TTS 朗读 draft.md —— 排队中
+```
+
+这非常重要，因为转录、解析、TTS 往往不是瞬间完成的。
+
+任务状态建议：
+
+```text
+pending
+running
+success
+failed
+cancelled
+```
+
+任务字段建议：
+
+```text
+task_id
+asset_id
+type
+status
+progress
+created_at
+started_at
+finished_at
+input_path
+output_paths
+params
+model_version
+error_message
+```
+
+---
+
+## 十、能力模块的接口可以这样定义
+
+### 文档解析
+
+```python
+def parse_document(path: str, options: dict) -> dict:
+    return {
+        "status": "success",
+        "markdown": "...",
+        "sections": [...],
+        "metadata": {
+            "page_count": 10,
+            "title": "...",
+            "author": "..."
+        }
+    }
+```
+
+### 转录
+
+```python
+def transcribe_audio(path: str, options: dict) -> dict:
+    return {
+        "status": "success",
+        "text": "...",
+        "segments": [
+            {
+                "start": 0.0,
+                "end": 5.2,
+                "text": "今天讨论知识管理架构"
+            }
+        ],
+        "language": "zh"
+    }
+```
+
+### TTS
+
+```python
+def synthesize_speech(text: str, options: dict) -> dict:
+    return {
+        "status": "success",
+        "audio_path": "/output/audio.wav",
+        "duration_seconds": 12.5,
+        "voice": "zh-CN-female",
+        "subtitle_path": "/output/audio.srt"
+    }
+```
+
+---
+
+## 十一、知识管理应用里要有一个 Adapter 层
+
+不要让知识管理核心代码直接依赖某个具体实现。
+
+例如不要这样：
+
+```python
+from whisper import transcribe
+from some_pdf_lib import extract_text
+from tts_engine import speak
+```
+
+而是这样：
+
+```python
+class TranscriptionAdapter:
+    def run(self, task):
+        raise NotImplementedError
+```
+
+然后具体实现可以是：
+
+```python
+class WhisperCliAdapter(TranscriptionAdapter):
+    def run(self, task):
+        # 调用 whisper CLI
+        ...
+
+class WhisperServerAdapter(TranscriptionAdapter):
+    def run(self, task):
+        # 调用本地 HTTP 服务
+        ...
+
+class CloudAsrAdapter(TranscriptionAdapter):
+    def run(self, task):
+        # 调用云端 ASR
+        ...
+```
+
+这样你以后可以随意替换：
+
+- 本地 Whisper。
+- Faster-Whisper。
+- mlx-whisper。
+- 云端 ASR。
+- 其他 TTS 引擎。
+- 不同 PDF 解析器。
+
+知识管理核心不用改。
+
+---
+
+## 十二、建议采用“结果文件 + 数据库记录”的方式
+
+本地知识管理应用最好把所有产物落盘。
+
+例如：
+
+```text
+storage/
+├── originals/
+│   ├── papers/
+│   ├── audio/
+│   └── web/
+│
+├── parsed/
+│   ├── paper_001.md
+│   └── paper_001.meta.json
+│
+├── transcripts/
+│   ├── meeting_001.txt
+│   ├── meeting_001.segments.json
+│   └── meeting_001.meta.json
+│
+├── tts/
+│   ├── note_001.wav
+│   └── note_001.srt
+│
+├── summaries/
+│   └── paper_001.summary.md
+│
+├── cache/
+│
+└── index/
+    ├── sqlite.db
+    ├── fts.index
+    └── vector.index
+```
+
+数据库里记录关系：
+
+```text
+asset
+asset_file
+task
+task_output
+tag
+note
+link
+embedding_chunk
+```
+
+这样即使未来界面重做，数据仍然稳定。
+
+---
+
+## 十三、知识管理核心应该重点设计的数据模型
+
+你可以从这几个实体开始。
+
+### Asset
+
+知识资产，可以是一个文档、音频、视频、网页、笔记。
+
+```text
+asset_id
+title
+type
+created_at
+updated_at
+source_type
+original_path
+hash
+status
+```
+
+### AssetFile
+
+一个资产可以有多个文件：原件、解析结果、音频、封面、缩略图。
+
+```text
+file_id
+asset_id
+kind
+path
+mime_type
+size
+hash
+```
+
+`kind` 可以是：
+
+```text
+original
+parsed_markdown
+transcript
+segments
+summary
+tts_audio
+tts_subtitle
+cover
+thumbnail
+embedding
+```
+
+### Task
+
+```text
+task_id
+asset_id
+type
+status
+params_json
+model
+progress
+error
+created_at
+started_at
+finished_at
+```
+
+### Note
+
+```text
+note_id
+asset_id
+content
+created_at
+updated_at
+```
+
+### Tag
+
+```text
+tag_id
+name
+color
+created_at
+```
+
+### AssetTag
+
+```text
+asset_id
+tag_id
+```
+
+### Link
+
+资产之间关系。
+
+```text
+link_id
+source_asset_id
+target_asset_id
+relation_type
+```
+
+例如：
+
+```text
+relation_type = "derived_from"
+```
+
+表示摘要来自原文。
+
+---
+
+## 十四、技术选型建议
+
+如果你主要用 Python：
+
+```text
+核心后端：FastAPI / Flask / Litestar
+数据库：SQLite
+全文搜索：SQLite FTS5
+向量搜索：sqlite-vec / LanceDB / Chroma / Qdrant 本地模式
+任务队列：简单数据库轮询 / ARQ / RQ / Celery
+文档解析：marker / docling / unstructured / pdfplumber / PyMuPDF
+转录：faster-whisper / whisper.cpp / mlx-whisper
+TTS：Piper / Kokoro / edge-tts / 本地模型
+前端：Web / Tauri / Gradio / Streamlit
+```
+
+如果你主要用 TypeScript：
+
+```text
+桌面端：Tauri / Electron
+后端：Node.js / Bun
+数据库：SQLite
+任务：BullMQ / 本地 worker
+文档解析：调用 Python CLI 或本地服务
+转录：调用 whisper.cpp / faster-whisper 服务
+TTS：调用本地 TTS 服务
+前端：React / Vue / Svelte
+```
+
+对于你的场景，我更建议：
+
+```text
+知识管理主应用：轻后端 + Web UI 或 Tauri
+AI/媒体处理模块：Python 工具包或本地服务
+调用方式：先 CLI/函数库，重模块再服务化
+```
+
+---
+
+## 十五、推荐的实际落地路线
+
+### 第一阶段：先做最小知识管理核心
+
+目标：
+
+```text
+能导入文件，能搜索，能打标签，能看内容。
+```
+
+功能：
+
+- 导入 PDF、Markdown、TXT、音频。
+- 计算文件 hash。
+- 存入 SQLite。
+- 生成缩略信息。
+- 全文搜索。
+- 标签管理。
+- 笔记管理。
+
+这个阶段不要急着接转录和 TTS。
+
+---
+
+### 第二阶段：把文档解析做成独立工具
+
+目标：
+
+```text
+任意文档都能变成 Markdown。
+```
+
+功能：
+
+```bash
+mytool parse input.pdf -o output.md
+```
+
+输出：
+
+```text
+output.md
+output.meta.json
+```
+
+然后知识管理应用调用它。
+
+解析后的 Markdown 进入全文索引。
+
+---
+
+### 第三阶段：把转录做成独立工具或服务
+
+目标：
+
+```text
+音频导入后能自动变成文本。
+```
+
+初期：
+
+```bash
+mytool transcribe meeting.m4a -o result.json
+```
+
+如果模型加载太慢，再做成本地服务：
+
+```text
+POST /transcribe
+GET /tasks/{id}
+```
+
+转录文本进入知识管理搜索索引。
+
+---
+
+### 第四阶段：把 TTS 做成独立工具或服务
+
+目标：
+
+```text
+笔记或文档可以朗读。
+```
+
+TTS 的输出不只是音频，最好还包括：
+
+- 字幕。
+- 时间轴。
+- 语音参数。
+- 文本分块记录。
+
+这样以后可以做：
+
+- 点击字幕跳转音频。
+- 点击音频高亮文本。
+- 倍速播放。
+- 跟读。
+- 复习。
+
+---
+
+### 第五阶段：做统一任务中心
+
+目标：
+
+```text
+所有 AI 处理任务都有状态、日志、结果、重试机制。
+```
+
+这样你可以：
+
+- 批量导入文件。
+- 后台自动解析。
+- 后台自动转录。
+- 失败重试。
+- 查看模型版本。
+- 对比不同模型结果。
+
+---
+
+## 十六、一个简单的调用流程示例
+
+### 场景：导入一个会议录音
+
+用户操作：
+
+```text
+拖入 meeting.m4a
+```
+
+知识管理应用：
+
+```text
+1. 创建 Asset
+2. 保存原始文件
+3. 计算 hash
+4. 创建转录任务
+5. 调用 transcription adapter
+6. 保存转录文本和时间轴
+7. 建立 AssetFile 关系
+8. 更新全文索引
+9. 界面显示转录完成
+```
+
+数据结果：
+
+```text
+Asset: meeting.m4a
+OriginalFile: storage/originals/meeting.m4a
+TranscriptFile: storage/transcripts/meeting.txt
+SegmentsFile: storage/transcripts/meeting.segments.json
+Task: transcription success
+```
+
+之后你可以搜索会议内容，也可以打开音频对照文本播放。
+
+---
+
+## 十七、一个简单的调用流程示例：文档解析
+
+用户操作：
+
+```text
+导入 paper.pdf
+```
+
+知识管理应用：
+
+```text
+1. 创建 Asset
+2. 保存 PDF
+3. 创建 document_parsing 任务
+4. 调用 parse_document
+5. 得到 Markdown
+6. 保存 Markdown
+7. 提取标题、作者、页数
+8. 分块
+9. 建立全文索引和向量索引
+```
+
+结果：
+
+```text
+Asset: paper.pdf
+OriginalFile: storage/originals/paper.pdf
+ParsedMarkdown: storage/parsed/paper.md
+ParsedMeta: storage/parsed/paper.meta.json
+Chunks: storage/index/chunks.jsonl
+Embeddings: storage/index/paper.embedding
+```
+
+---
+
+## 十八、如何决定某个模块是“集成”还是“独立”？
+
+可以用下面这个判断表。
+
+| 问题 | 是 | 否 |
+|---|---|---|
+| 这个模块是否经常单独使用？ | 独立 CLI/包 | 可以集成 |
+| 是否有重模型或 GPU？ | 服务化 | 可集成 |
+| 是否多个应用都要调用？ | 服务化或公共包 | 可集成 |
+| 是否启动慢？ | 服务化 | 可集成 |
+| 是否需要实时进度？ | 服务化或任务系统 | 简单调用即可 |
+| 是否依赖很多特殊库？ | 独立模块 | 可集成 |
+| 是否更新频繁？ | 独立模块 | 可集成 |
+| 是否只是简单文本处理？ | 可集成 | 独立意义不大 |
+
+---
+
+## 十九、对于你的情况，我的具体建议
+
+因为你说：
+
+> 这些模块我平常也有单独使用的情况。
+
+所以我建议你优先做成：
+
+```text
+独立工具包 + CLI + 标准 JSON 输出
+```
+
+然后知识管理应用通过 Adapter 调用。
+
+也就是：
+
+```text
+知识管理应用
+    ↓ Adapter
+独立工具包 / CLI / 本地服务
+```
+
+而不是把代码直接复制进知识管理应用。
+
+---
+
+## 二十、推荐的最终形态
+
+你可以把整个系统设计成：
+
+```text
+personal-ai-tools/
+├── packages/
+│   ├── parsing/
+│   ├── transcription/
+│   ├── tts/
+│   ├── summarization/
+│   ├── embedding/
+│   └── common/
+│
+├── cli/
+│   └── mytool.py
+│
+├── services/
+│   ├── parsing_server.py
+│   ├── transcription_server.py
+│   └── tts_server.py
+│
+└── apps/
+    └── knowledge-manager/
+        ├── backend/
+        ├── frontend/
+        ├── adapters/
+        └── database/
+```
+
+初期可以只保留：
+
+```text
+personal-ai-tools/
+├── packages/
+├── cli/
+└── apps/knowledge-manager/
+```
+
+等服务化需求出现后，再加 `services`。
+
+---
+
+## 二十一、最重要的原则
+
+### 原则一：知识管理应用不要变成大杂烩
+
+它应该负责“管理知识”，而不是亲自实现所有 AI 能力。
+
+---
+
+### 原则二：能力模块不要知道自己被谁使用
+
+文档解析模块不应该关心自己是在知识管理应用里被调用，还是被命令行调用。
+
+它只负责：
+
+```text
+输入文件 → 输出结构化结果
+```
+
+---
+
+### 原则三：所有处理结果必须资产化
+
+转录文本、解析 Markdown、TTS 音频、摘要、关键词，都应该成为可搜索、可引用、可关联的知识资产。
+
+---
+
+### 原则四：先本地简单，再逐步服务化
+
+不要一开始就上微服务。
+
+自用系统最重要的是：
+
+```text
+稳定、简单、可维护、可演进。
+```
+
+---
+
+## 二十二、最终答案
+
+你的问题可以这样回答：
+
+> 知识管理应用只做核心管理功能，其他能力做成可复用模块，通过适配层调用。
+
+更具体地说：
+
+```text
+知识管理应用核心负责：
+- 资产管理
+- 笔记标签
+- 搜索索引
+- 任务记录
+- 结果关联
+- 工作流编排
+
+转录、TTS、文档解析负责：
+- 独立能力实现
+- 可 CLI 单独使用
+- 可被知识管理应用调用
+- 输出标准化结果
+- 后期可升级为本地服务
+```
+
+推荐优先级：
+
+```text
+1. 先做知识管理核心。
+2. 文档解析、转录、TTS 做成独立工具包或 CLI。
+3. 知识管理应用通过 Adapter 调用。
+4. 重模块再拆成本地服务。
+5. 最后形成统一的个人工具箱。
+```
+
+一句话总结：
+
+> **不要把所有功能硬集成到一个应用里，也不要一开始就拆成复杂服务。最好的方式是：知识管理应用做核心数据和流程，转录、TTS、文档解析做成独立可复用模块，通过统一接口调用。**
+
+
+user：
+该应用管理的内容包括 播客音频文件，视频文件，各类文档文件。我的需求主要有易于查看和管理，能够基于文件名，内容，向量的搜索，自动生成总结和笔记。  功能模块目前我是做成了cli的形式，目前我已实现转录的cli，是无状态的，效果为生成和指定音视频文件同目录且同名的txt文件。
+我的想法是知识管理主应用新建或选定已有目录，在其中创建.文件夹存储应用数据。在管理上，能否既支持主应用出发的转录等动作，也支持我手动调用cli生成的文件。
+比如，音频文件在管理时会出现转录文本文件，ai总结文件。
+
+
+qwen：
+可以，而且你这个场景非常适合做成：
+
+> **文件系统是真实数据源，主应用负责索引、视图、任务和工作流，CLI 负责具体能力输出。**
+
+也就是说，无论文件是：
+
+- 主应用点击“生成转录”产生的；
+- 还是你手动运行 CLI 产生的；
+- 还是以后用其他工具生成的；
+
+只要它们符合约定，主应用都能识别、纳入管理、建立索引、参与搜索。
+
+你的转录 CLI 现在是无状态的，输出和音视频同目录同名的 `.txt`，这完全可以接入知识管理主应用。
+
+---
+
+# 一、推荐总体思路
+
+你的主应用不要把自己当成“文件唯一生产者”，而应该当成：
+
+```text
+文件库观察者 + 索引器 + 任务调度器 + 查看器
+```
+
+核心原则：
+
+1. **原始文件不动**
+   - 播客音频、视频、文档仍然按你现有目录结构存放。
+   - 主应用不强制移动、改名、转换格式。
+
+2. **派生文件按约定识别**
+   - 转录文本：`.txt` / `.transcript.txt` / `.transcript.json`
+   - AI 总结：`.summary.md`
+   - 笔记：`.notes.md`
+   - 文档解析结果：`.parsed.md`
+   - 元数据：`.meta.json`
+
+3. **隐藏目录存应用数据**
+   - 在你选定的库根目录下创建 `.knowledge/` 或 `.kb/`。
+   - 里面放 SQLite、向量索引、任务记录、缓存、配置。
+
+4. **主应用触发和手动 CLI 都只产生文件**
+   - 主应用触发转录：调用 CLI，然后扫描结果。
+   - 手动 CLI：生成文件后，主应用通过扫描或监听发现结果。
+
+5. **数据库只是缓存和索引**
+   - 删除 `.knowledge/` 后，应该可以重新扫描目录并恢复大部分管理能力。
+   - 这样系统会很稳，也不会被数据库绑死。
+
+---
+
+# 二、目录设计：推荐每个库一个隐藏配置目录
+
+比如你新建或选择一个库目录：
+
+```text
+MyKnowledge/
+```
+
+主应用首次打开时创建：
+
+```text
+MyKnowledge/
+├── .knowledge/
+│   ├── config.toml
+│   ├── db.sqlite
+│   ├── vector/
+│   ├── cache/
+│   ├── logs/
+│   └── tasks/
+│
+├── podcasts/
+│   ├── episode-001.mp3
+│   └── episode-001.txt
+│
+├── videos/
+│   ├── talk-001.mp4
+│   └── talk-001.txt
+│
+└── documents/
+    ├── paper.pdf
+    └── paper.summary.md
+```
+
+这里：
+
+- `MyKnowledge/` 是知识库根目录。
+- `.knowledge/` 是应用私有数据目录。
+- 其他文件仍然由你自由组织。
+- 主应用可以支持多个库，每个库有自己的 `.knowledge/`。
+
+---
+
+# 三、派生文件应该如何存放？
+
+你有两个主要选择。
+
+---
+
+## 方案 A：同目录同名 sidecar 文件
+
+这是你目前转录 CLI 的方式。
+
+例如：
+
+```text
+podcasts/
+├── episode-001.mp3
+├── episode-001.txt
+├── episode-001.summary.md
+└── episode-001.notes.md
+```
+
+识别规则可以是：
+
+```text
+episode-001.mp3          原始音频
+episode-001.txt          转录文本
+episode-001.summary.md   AI 总结
+episode-001.notes.md     用户笔记
+episode-001.meta.json    元数据，可选
+```
+
+优点：
+
+- 简单直观。
+- 兼容你现在的 CLI。
+- 在文件管理器里很容易看到。
+- 手动 CLI 生成后非常自然。
+
+缺点：
+
+- 文件多了以后目录会比较乱。
+- 一个原始文件可能有多个派生文件，命名规则要越来越严格。
+- 多个模型、多个版本的转录结果不好放。
+
+如果采用这个方案，建议后续把命名稍微规范化：
+
+```text
+episode-001.mp3
+episode-001.transcript.txt
+episode-001.transcript.json
+episode-001.summary.md
+episode-001.notes.md
+episode-001.meta.json
+```
+
+但为了兼容现有 CLI，可以同时识别：
+
+```text
+episode-001.txt
+episode-001.transcript.txt
+```
+
+---
+
+## 方案 B：每个原始文件一个隐藏 sidecar 文件夹
+
+例如：
+
+```text
+podcasts/
+├── episode-001.mp3
+└── episode-001.mp3.kb/
+    ├── transcript.txt
+    ├── transcript.json
+    ├── summary.md
+    ├── notes.md
+    └── meta.json
+```
+
+或者：
+
+```text
+episode-001.mp3
+episode-001.kb/
+```
+
+优点：
+
+- 派生文件集中管理。
+- 目录更干净。
+- 容易放多版本结果。
+- 不容易和普通文件混淆。
+- 删除原始文件时可以连同 `.kb/` 一起删除。
+
+缺点：
+
+- 你现有 CLI 默认输出同名 `.txt`，需要适配或迁移。
+- 某些文件管理器默认不显示隐藏目录。
+- 手动查看派生文件稍微多一步。
+
+---
+
+## 我的建议
+
+短期：
+
+> 兼容你现在的 CLI，使用同目录同名文件。
+
+长期：
+
+> 逐步迁移到每个资产一个 `.kb/` sidecar 目录，或者至少支持这种模式。
+
+最稳的方式是主应用同时支持两种：
+
+```text
+如果存在 episode-001.mp3.kb/transcript.txt，则优先使用它；
+否则尝试使用 episode-001.txt；
+否则尝试使用 episode-001.transcript.txt。
+```
+
+这样既不破坏你现在的 CLI，也能逐渐演进。
+
+---
+
+# 四、主应用和 CLI 的关系
+
+你可以把主应用和 CLI 的关系设计成这样：
+
+```text
+主应用
+  ├── 扫描文件库
+  ├── 建立资产记录
+  ├── 建立搜索索引
+  ├── 显示文件详情
+  ├── 创建任务
+  ├── 调用 CLI
+  ├── 监听/扫描 CLI 输出
+  └── 管理标签、笔记、总结、收藏
+
+CLI
+  ├── 接收输入文件
+  ├── 执行转录/总结/解析/TTS
+  └── 输出派生文件
+```
+
+CLI 不需要知道主应用是否存在。
+
+主应用也不需要假设所有文件都是自己生成的。
+
+这样你可以：
+
+```bash
+mytool transcribe podcasts/episode-001.mp3
+```
+
+然后主应用扫描到：
+
+```text
+podcasts/episode-001.txt
+```
+
+自动识别为：
+
+```text
+episode-001.mp3 的转录文本
+```
+
+并加入索引。
+
+---
+
+# 五、核心概念：Asset 和 Artifact
+
+建议你在主应用内部明确区分两个概念。
+
+---
+
+## Asset：原始知识资产
+
+例如：
+
+```text
+podcasts/episode-001.mp3
+videos/talk-001.mp4
+documents/paper.pdf
+```
+
+Asset 是被管理的主体。
+
+字段可以包括：
+
+```text
+asset_id
+title
+type: audio / video / document
+path
+relative_path
+file_hash
+size
+mtime
+created_at
+updated_at
+status
+```
+
+---
+
+## Artifact：派生产物
+
+例如：
+
+```text
+episode-001.txt
+episode-001.summary.md
+episode-001.notes.md
+paper.parsed.md
+talk-001.transcript.json
+```
+
+Artifact 是围绕 Asset 产生的文件。
+
+字段可以包括：
+
+```text
+artifact_id
+asset_id
+kind: transcript / summary / note / parsed / meta / embedding_cache
+path
+relative_path
+file_hash
+mtime
+source: app / cli / external
+generator: whisper / llm / user
+model
+created_at
+```
+
+例如：
+
+```text
+Asset:
+  path = podcasts/episode-001.mp3
+  type = audio
+
+Artifact 1:
+  kind = transcript
+  path = podcasts/episode-001.txt
+
+Artifact 2:
+  kind = summary
+  path = podcasts/episode-001.summary.md
+
+Artifact 3:
+  kind = note
+  path = podcasts/episode-001.notes.md
+```
+
+这样无论谁生成了 `episode-001.txt`，主应用都知道它是某个 Asset 的 transcript。
+
+---
+
+# 六、文件命名约定建议
+
+为了让主应用稳定识别手动 CLI 生成的文件，最好有一套命名规则。
+
+## 原始文件
+
+```text
+*.mp3
+*.m4a
+*.wav
+*.flac
+*.mp4
+*.mkv
+*.mov
+*.pdf
+*.epub
+*.docx
+*.md
+*.txt
+*.html
+```
+
+---
+
+## 转录文本
+
+兼容现有：
+
+```text
+{stem}.txt
+```
+
+更明确：
+
+```text
+{stem}.transcript.txt
+```
+
+带时间戳或模型版本：
+
+```text
+{stem}.transcript.whisper-large-v3.20260816.txt
+```
+
+如果只有一个“当前版本”，可以用：
+
+```text
+{stem}.transcript.txt
+```
+
+如果保留历史版本：
+
+```text
+artifacts/
+├── transcript.whisper-large-v3.20260816-1030.txt
+├── transcript.whisper-medium.20260810-0910.txt
+└── transcript.latest.txt
+```
+
+---
+
+## AI 总结
+
+```text
+{stem}.summary.md
+```
+
+也可以按模型：
+
+```text
+{stem}.summary.qwen.md
+{stem}.summary.local-llm.md
+```
+
+---
+
+## 用户笔记
+
+```text
+{stem}.notes.md
+```
+
+注意：
+
+> 用户笔记不能被 AI 总结覆盖。
+
+所以建议明确区分：
+
+```text
+{stem}.summary.md   AI 生成，可重新生成
+{stem}.notes.md     用户手写，不应覆盖
+```
+
+---
+
+## 文档解析结果
+
+例如 PDF 解析成 Markdown：
+
+```text
+{stem}.parsed.md
+```
+
+不建议简单叫：
+
+```text
+{stem}.md
+```
+
+因为用户可能本来就有同名 Markdown 文件，容易混淆。
+
+---
+
+## 元数据
+
+```text
+{stem}.meta.json
+```
+
+或者未来放到 sidecar 目录：
+
+```text
+{stem}.kb/meta.json
+```
+
+---
+
+# 七、如何同时支持主应用触发和手动 CLI？
+
+关键在于：
+
+> 主应用不要把“任务记录”作为唯一依据，而要把“磁盘上的文件”作为事实来源。
+
+任务记录只是辅助。
+
+---
+
+## 场景 1：主应用触发转录
+
+流程：
+
+```text
+1. 用户选中 episode-001.mp3
+2. 点击“生成转录”
+3. 主应用创建任务 task_001
+4. 主应用调用 CLI：
+   mytool transcribe podcasts/episode-001.mp3
+5. CLI 生成 podcasts/episode-001.txt
+6. 主应用检测到文件生成
+7. 主应用导入 artifact
+8. 主应用更新全文索引和向量索引
+9. 任务标记成功
+```
+
+数据库里可以有：
+
+```text
+Task:
+  task_id = task_001
+  asset_id = asset_episode_001
+  type = transcription
+  source = app
+  status = success
+  output = podcasts/episode-001.txt
+```
+
+---
+
+## 场景 2：你手动运行 CLI
+
+流程：
+
+```text
+1. 你在终端运行：
+   mytool transcribe podcasts/episode-001.mp3
+2. CLI 生成 podcasts/episode-001.txt
+3. 主应用通过文件监听或定期扫描发现新文件
+4. 主应用识别它是 episode-001.mp3 的 transcript
+5. 主应用导入 artifact
+6. 主应用更新索引
+```
+
+数据库里可以有：
+
+```text
+Artifact:
+  artifact_id = artifact_002
+  asset_id = asset_episode_001
+  kind = transcript
+  path = podcasts/episode-001.txt
+  source = external_cli
+```
+
+即使没有 Task，也没关系。
+
+---
+
+# 八、主应用如何发现外部 CLI 生成的文件？
+
+有三种方式，可以组合使用。
+
+---
+
+## 1. 启动时全量扫描
+
+主应用启动时扫描整个库：
+
+```text
+遍历所有文件
+  ├── 识别原始文件
+  ├── 识别派生文件
+  ├── 对比数据库
+  ├── 新增缺失记录
+  ├── 更新变化文件
+  └── 删除已不存在记录
+```
+
+优点：
+
+- 最稳。
+- 不依赖监听。
+- 可以恢复数据库损坏或漏掉的文件。
+
+缺点：
+
+- 大库首次扫描较慢。
+
+建议一定要有这个功能。
+
+---
+
+## 2. 文件监听
+
+使用文件系统监听：
+
+```text
+新建文件
+修改文件
+删除文件
+重命名文件
+```
+
+常见库：
+
+- Python：`watchdog`
+- Node.js：`chokidar`
+- Rust/Tauri：`notify`
+
+监听事件：
+
+```text
+created: podcasts/episode-002.txt
+modified: podcasts/episode-001.summary.md
+deleted: podcasts/episode-003.txt
+```
+
+然后增量更新数据库。
+
+优点：
+
+- 实时。
+- 手动 CLI 生成文件后，主应用马上显示。
+
+缺点：
+
+- 监听可能漏事件。
+- 网络盘、同步盘可能不稳定。
+
+所以最好配合定期扫描。
+
+---
+
+## 3. CLI 主动通知主应用，可选
+
+如果以后你希望更可靠，可以让 CLI 输出后写一个通知文件：
+
+```text
+.knowledge/inbox/
+```
+
+例如：
+
+```text
+.knowledge/inbox/artifact-20260816-103000.json
+```
+
+内容：
+
+```json
+{
+  "schema": "kb.artifact.v1",
+  "source_path": "podcasts/episode-001.mp3",
+  "artifact_path": "podcasts/episode-001.txt",
+  "kind": "transcript",
+  "generator": "mytool-asr",
+  "model": "whisper-large-v3",
+  "created_at": "2026-08-16T10:30:00+08:00"
+}
+```
+
+主应用监听 `inbox` 目录，发现后导入。
+
+优点：
+
+- 比纯文件命名更明确。
+- 可以带模型、参数、时间、hash。
+- 适合以后多个工具共用。
+
+缺点：
+
+- CLI 需要稍微改造。
+- 初期不是必须。
+
+---
+
+# 九、推荐你采用“扫描 + 监听 + 命名规则”的组合
+
+对于你当前状态，最实用的是：
+
+```text
+主应用启动时全量扫描
+运行中文件监听
+CLI 继续输出同目录同名 txt
+主应用根据命名规则识别 artifact
+```
+
+先不要急着做复杂通知机制。
+
+等你的 CLI 越来越多、参数越来越复杂，再考虑：
+
+```text
+CLI 写 manifest
+主应用读 manifest
+```
+
+---
+
+# 十、主应用数据库应该怎么设计？
+
+建议用 SQLite。
+
+最小表结构可以这样。
+
+---
+
+## assets 表
+
+```sql
+CREATE TABLE assets (
+  asset_id TEXT PRIMARY KEY,
+  title TEXT,
+  type TEXT,
+  relative_path TEXT UNIQUE,
+  absolute_path TEXT,
+  file_hash TEXT,
+  size INTEGER,
+  mtime INTEGER,
+  created_at TEXT,
+  updated_at TEXT
+);
+```
+
+例如：
+
+```text
+asset_id = a1
+title = episode-001
+type = audio
+relative_path = podcasts/episode-001.mp3
+```
+
+---
+
+## artifacts 表
+
+```sql
+CREATE TABLE artifacts (
+  artifact_id TEXT PRIMARY KEY,
+  asset_id TEXT,
+  kind TEXT,
+  relative_path TEXT UNIQUE,
+  file_hash TEXT,
+  source TEXT,
+  generator TEXT,
+  model TEXT,
+  mtime INTEGER,
+  created_at TEXT,
+  updated_at TEXT
+);
+```
+
+例如：
+
+```text
+artifact_id = ar1
+asset_id = a1
+kind = transcript
+relative_path = podcasts/episode-001.txt
+source = cli
+generator = mytool-asr
+model = whisper-large-v3
+```
+
+---
+
+## tasks 表
+
+```sql
+CREATE TABLE tasks (
+  task_id TEXT PRIMARY KEY,
+  asset_id TEXT,
+  type TEXT,
+  status TEXT,
+  source TEXT,
+  params_json TEXT,
+  output_path TEXT,
+  error TEXT,
+  created_at TEXT,
+  started_at TEXT,
+  finished_at TEXT
+);
+```
+
+例如：
+
+```text
+task_id = t1
+asset_id = a1
+type = transcription
+status = success
+source = app
+output_path = podcasts/episode-001.txt
+```
+
+---
+
+## notes 表，可选
+
+如果你把笔记存数据库：
+
+```sql
+CREATE TABLE notes (
+  note_id TEXT PRIMARY KEY,
+  asset_id TEXT,
+  content TEXT,
+  created_at TEXT,
+  updated_at TEXT
+);
+```
+
+但我更建议初期把笔记存成 Markdown 文件：
+
+```text
+episode-001.notes.md
+```
+
+原因：
+
+- 方便外部编辑器打开。
+- 方便 Git 管理。
+- 方便 Obsidian、VS Code、普通文本编辑器使用。
+- 主应用数据库损坏也不丢笔记。
+
+---
+
+## chunks 表，用于全文和向量
+
+```sql
+CREATE TABLE chunks (
+  chunk_id TEXT PRIMARY KEY,
+  artifact_id TEXT,
+  asset_id TEXT,
+  chunk_index INTEGER,
+  content TEXT,
+  content_hash TEXT
+);
+```
+
+向量索引可以单独用：
+
+- sqlite-vec
+- LanceDB
+- Chroma
+- Qdrant 本地模式
+- DuckDB + vector 扩展
+
+---
+
+# 十一、搜索应该怎么实现？
+
+你的需求是：
+
+> 基于文件名、内容、向量搜索。
+
+可以拆成三类。
+
+---
+
+## 1. 文件名搜索
+
+直接查 assets 和 artifacts：
+
+```sql
+SELECT * FROM assets
+WHERE title LIKE '%keyword%'
+   OR relative_path LIKE '%keyword%';
+```
+
+例如搜索：
+
+```text
+episode
+```
+
+命中：
+
+```text
+podcasts/episode-001.mp3
+```
+
+---
+
+## 2. 内容全文搜索
+
+建议用 SQLite FTS5。
+
+对以下内容建立全文索引：
+
+```text
+转录文本
+文档解析文本
+AI 总结
+用户笔记
+Markdown 文档
+```
+
+例如：
+
+```sql
+CREATE VIRTUAL TABLE chunks_fts USING fts5(
+  content,
+  content='chunks',
+  content_rowid='rowid'
+);
+```
+
+搜索：
+
+```sql
+SELECT * FROM chunks_fts
+WHERE chunks_fts MATCH '知识管理';
+```
+
+优点：
+
+- 本地。
+- 简单。
+- 对文本管理很够用。
+
+---
+
+## 3. 向量搜索
+
+对 chunk 做 embedding：
+
+```text
+chunk -> embedding vector
+```
+
+存储：
+
+```text
+chunk_id
+asset_id
+artifact_id
+vector
+```
+
+搜索时：
+
+```text
+用户 query -> query embedding
+查询最相似的 chunks
+返回对应 asset 和 artifact
+```
+
+适合：
+
+```text
+“那个讲本地知识管理架构的播客”
+“关于 CLI 模块化的讨论”
+“提到 sidecar 文件的文档”
+```
+
+---
+
+# 十二、原始文件变化后如何处理？
+
+这是一个很关键的问题。
+
+例如：
+
+```text
+episode-001.mp3 被替换了
+```
+
+那么旧的转录文本可能已经失效。
+
+建议主应用记录原始文件 hash：
+
+```text
+sha256
+```
+
+当扫描发现：
+
+```text
+path 没变，但 hash 变了
+```
+
+则：
+
+```text
+1. 更新 asset 记录
+2. 标记相关 artifacts 为 stale
+3. 提示用户重新转录 / 重新总结
+4. 不自动删除旧结果，除非用户确认
+```
+
+例如：
+
+```text
+episode-001.mp3 hash changed
+episode-001.txt marked stale
+```
+
+界面上可以显示：
+
+```text
+原始文件已变化，转录可能过期。
+```
+
+---
+
+# 十三、派生文件变化后如何处理？
+
+例如：
+
+```text
+episode-001.txt 被手动修改
+```
+
+主应用应该：
+
+```text
+1. 更新 artifact hash/mtime
+2. 重新分块
+3. 重建全文索引
+4. 重建向量索引
+```
+
+如果是：
+
+```text
+episode-001.summary.md 被手动修改
+```
+
+同样重新索引。
+
+但如果是 AI 重新生成总结，要注意：
+
+> 不要覆盖用户手动改过的总结，除非用户明确选择覆盖。
+
+---
+
+# 十四、AI 总结和用户笔记要严格区分
+
+你提到：
+
+> 自动生成总结和笔记。
+
+这里建议不要把它们混成一个东西。
+
+---
+
+## AI 总结
+
+```text
+episode-001.summary.md
+```
+
+特点：
+
+- 可重新生成。
+- 可多版本。
+- 可以被覆盖或生成新版本。
+- 内容来自原始文件或转录文本。
+
+示例：
+
+```markdown
+---
+type: summary
+source: podcasts/episode-001.mp3
+source_hash: sha256:xxxx
+generator: mytool-summarize
+model: qwen-local
+created_at: 2026-08-16T10:40:00+08:00
+---
+
+# Episode 001 总结
+
+本集主要讨论了本地知识管理系统的架构设计……
+```
+
+---
+
+## 用户笔记
+
+```text
+episode-001.notes.md
+```
+
+特点：
+
+- 用户手写。
+- 不能被 AI 自动覆盖。
+- 可以增量追加。
+- 可以参与搜索。
+
+示例：
+
+```markdown
+# 我的笔记
+
+- 这个 episode 里提到的 sidecar 思路值得借鉴。
+- 转录 CLI 后续需要支持输出 JSON segments。
+```
+
+---
+
+## 如果 AI 要生成“笔记草稿”
+
+不要直接写：
+
+```text
+episode-001.notes.md
+```
+
+可以写：
+
+```text
+episode-001.notes.draft.md
+```
+
+或者：
+
+```text
+episode-001.ai-notes.md
+```
+
+这样不会污染用户笔记。
+
+推荐命名：
+
+```text
+{stem}.summary.md      AI 总结
+{stem}.ai-notes.md     AI 生成笔记草稿
+{stem}.notes.md        用户笔记
+```
+
+---
+
+# 十五、主应用触发 CLI 时，建议增加任务记录
+
+虽然 CLI 可以无状态，但主应用最好有状态。
+
+也就是说：
+
+```text
+CLI 无状态没问题。
+主应用必须有任务状态。
+```
+
+主应用点击“转录”时：
+
+```text
+创建任务
+```
+
+任务状态：
+
+```text
+pending
+running
+success
+failed
+cancelled
+```
+
+例如：
+
+```json
+{
+  "task_id": "task_20260816_001",
+  "asset_id": "asset_001",
+  "type": "transcription",
+  "status": "running",
+  "command": [
+    "mytool",
+    "transcribe",
+    "podcasts/episode-001.mp3"
+  ],
+  "expected_output": "podcasts/episode-001.txt",
+  "created_at": "2026-08-16T10:20:00+08:00"
+}
+```
+
+CLI 完成后，主应用检查：
+
+```text
+expected_output 是否存在？
+文件是否非空？
+hash 是否变化？
+```
+
+然后更新任务。
+
+这样即使 CLI 很简单，主应用也能有完整体验。
+
+---
+
+# 十六、主应用调用现有转录 CLI 的具体方式
+
+你现在 CLI 的行为是：
+
+```bash
+mytool transcribe input.mp3
+```
+
+输出：
+
+```text
+input.txt
+```
+
+主应用可以这样调用：
+
+```python
+import subprocess
+
+def run_transcribe(file_path):
+    subprocess.run([
+        "mytool",
+        "transcribe",
+        file_path
+    ], check=True)
+```
+
+然后主应用检查同目录同名 txt：
+
+```python
+from pathlib import Path
+
+def expected_transcript_path(audio_path: Path) -> Path:
+    return audio_path.with_suffix(".txt")
+```
+
+例如：
+
+```text
+podcasts/episode-001.mp3
+```
+
+对应：
+
+```text
+podcasts/episode-001.txt
+```
+
+主应用发现该文件后：
+
+```text
+导入为 transcript artifact
+```
+
+---
+
+# 十七、建议你的 CLI 后续增加 `--output`
+
+虽然现在同名 txt 很方便，但长期建议你给 CLI 加几个参数：
+
+```bash
+mytool transcribe input.mp3 --output output.txt
+mytool transcribe input.mp3 --output-json output.json
+mytool transcribe input.mp3 --force
+mytool transcribe input.mp3 --model large-v3
+```
+
+原因：
+
+1. 主应用可以指定输出路径。
+2. 可以避免覆盖已有文件。
+3. 可以保留多版本。
+4. 可以输出结构化 segments。
+5. 便于未来 sidecar 目录。
+
+例如未来可以：
+
+```bash
+mytool transcribe episode-001.mp3 \
+  --output episode-001.kb/transcript.txt \
+  --json episode-001.kb/transcript.json \
+  --meta episode-001.kb/transcript.meta.json
+```
+
+但你不必一开始就改。
+
+---
+
+# 十八、推荐产物结构：从简单到完整
+
+---
+
+## 阶段 1：兼容当前 CLI
+
+```text
+episode-001.mp3
+episode-001.txt
+```
+
+主应用识别：
+
+```text
+episode-001.txt = transcript
+```
+
+这个阶段最简单。
+
+---
+
+## 阶段 2：增加总结和笔记
+
+```text
+episode-001.mp3
+episode-001.txt
+episode-001.summary.md
+episode-001.notes.md
+```
+
+主应用识别：
+
+```text
+txt = transcript
+summary.md = AI summary
+notes.md = user note
+```
+
+---
+
+## 阶段 3：增加结构化元数据
+
+```text
+episode-001.mp3
+episode-001.txt
+episode-001.transcript.json
+episode-001.summary.md
+episode-001.notes.md
+episode-001.meta.json
+```
+
+`episode-001.transcript.json` 可以包含：
+
+```json
+{
+  "schema": "kb.transcript.v1",
+  "source": "episode-001.mp3",
+  "source_hash": "sha256:xxxx",
+  "language": "zh",
+  "duration_seconds": 3600,
+  "engine": "whisper",
+  "model": "large-v3",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 6.5,
+      "text": "今天聊本地知识管理。"
+    }
+  ]
+}
+```
+
+这对以后做字幕、跳转、精确定位非常有用。
+
+---
+
+## 阶段 4：sidecar 目录
+
+```text
+episode-001.mp3
+episode-001.mp3.kb/
+├── transcript.txt
+├── transcript.json
+├── summary.md
+├── notes.md
+└── meta.json
+```
+
+这是长期比较干净的形态。
+
+---
+
+# 十九、主应用如何识别一个文件是原始文件还是派生文件？
+
+你需要一个规则引擎。
+
+例如：
+
+```python
+def classify_file(path):
+    name = path.name
+
+    if name.endswith(".summary.md"):
+        return "artifact", "summary"
+
+    if name.endswith(".notes.md"):
+        return "artifact", "note"
+
+    if name.endswith(".transcript.txt"):
+        return "artifact", "transcript"
+
+    if name.endswith(".transcript.json"):
+        return "artifact", "transcript_meta"
+
+    if path.suffix in AUDIO_EXTENSIONS or path.suffix in VIDEO_EXTENSIONS:
+        return "asset", "media"
+
+    if path.suffix in DOCUMENT_EXTENSIONS:
+        return "asset", "document"
+
+    if path.suffix == ".txt":
+        # 需要进一步判断是否存在同名音视频
+        return "maybe_transcript"
+
+    return "unknown"
+```
+
+对于 `episode-001.txt`：
+
+```text
+检查同目录是否存在 episode-001.mp3 / m4a / wav / mp4 等
+如果存在，则认为是 transcript
+如果不存在，可以作为普通文档资产
+```
+
+例如：
+
+```text
+发现 podcasts/episode-001.txt
+寻找同目录同 stem 的原始文件：
+  episode-001.mp3 ✅
+因此归类为 transcript artifact
+```
+
+如果找不到原始文件，可以有几种策略：
+
+1. 当作普通文本文档管理。
+2. 标记为“孤立派生文件”。
+3. 不索引，等待用户处理。
+
+我建议：
+
+> 找不到原始文件时，先作为普通文档资产，同时标记 `orphan_artifact_candidate`。
+
+---
+
+# 二十、如何处理视频文件？
+
+视频和音频类似。
+
+例如：
+
+```text
+videos/talk-001.mp4
+videos/talk-001.txt
+videos/talk-001.summary.md
+```
+
+主应用可以把视频和音频都归为：
+
+```text
+media asset
+```
+
+转录对象可以是：
+
+```text
+视频音轨
+```
+
+CLI 内部可以：
+
+```text
+提取音频 -> 转录 -> 输出 txt
+```
+
+但主应用只需要知道：
+
+```text
+talk-001.mp4 有 transcript talk-001.txt
+```
+
+以后还可以加：
+
+```text
+talk-001.thumbnail.jpg
+talk-001.keyframes/
+talk-001.subtitle.srt
+```
+
+所以视频更需要 sidecar 目录。
+
+长期推荐：
+
+```text
+talk-001.mp4
+talk-001.mp4.kb/
+├── transcript.txt
+├── transcript.json
+├── subtitle.srt
+├── summary.md
+├── notes.md
+└── thumbnail.jpg
+```
+
+---
+
+# 二十一、如何处理文档文件？
+
+文档包括：
+
+```text
+PDF
+Word
+Markdown
+TXT
+HTML
+EPUB
+```
+
+文档可以有：
+
+```text
+原始文件
+解析文本
+摘要
+笔记
+```
+
+例如：
+
+```text
+documents/paper.pdf
+documents/paper.parsed.md
+documents/paper.summary.md
+documents/paper.notes.md
+```
+
+主应用索引：
+
+```text
+文件名：paper.pdf
+解析内容：paper.parsed.md
+AI 总结：paper.summary.md
+用户笔记：paper.notes.md
+```
+
+如果文档本身就是 Markdown：
+
+```text
+documents/note.md
+```
+
+则它既是原始 Asset，也可以直接参与全文搜索。
+
+是否给它生成 parsed 文件？不一定。
+
+可以：
+
+```text
+Markdown / TXT 直接作为原始内容索引。
+PDF / DOCX / HTML 需要 parsed 文件。
+```
+
+---
+
+# 二十二、自动生成总结和笔记的流程
+
+以播客为例。
+
+---
+
+## 完整流程
+
+```text
+1. 导入 episode-001.mp3
+2. 主应用创建 Asset
+3. 检查是否存在 episode-001.txt
+4. 如果不存在：
+   - 用户手动触发转录
+   - 或自动后台转录
+5. 转录完成后，主应用索引 transcript
+6. 用户点击“生成总结”
+7. 主应用调用总结 CLI 或本地模型
+8. 生成 episode-001.summary.md
+9. 主应用索引 summary
+10. 可选生成 episode-001.ai-notes.md
+11. 用户可在应用内编辑 episode-001.notes.md
+```
+
+---
+
+## 自动策略
+
+你可以设置规则：
+
+```text
+新增音频后：
+  自动生成转录
+  转录完成后自动生成总结
+  不自动生成用户笔记
+```
+
+或者：
+
+```text
+新增 PDF 后：
+  自动解析
+  自动生成摘要
+  不自动向量化，等空闲时执行
+```
+
+注意任务优先级：
+
+```text
+用户主动操作 > 后台自动任务
+```
+
+---
+
+# 二十三、任务、文件、索引三者如何同步？
+
+建议你采用这个逻辑：
+
+```text
+文件变化
+  -> 更新 Asset/Artifact 记录
+  -> 更新索引
+  -> 更新相关任务状态
+```
+
+而不是：
+
+```text
+任务完成
+  -> 直接写数据库
+  -> 不管文件是否真的存在
+```
+
+因为你有手动 CLI 场景，所以必须以文件为准。
+
+---
+
+## 同步器伪代码
+
+```python
+def sync_library(root):
+    disk_files = scan_files(root)
+    db_files = load_db_files()
+
+    added = disk_files - db_files
+    modified = find_modified(disk_files, db_files)
+    deleted = db_files - disk_files
+
+    for path in added:
+        import_new_file(path)
+
+    for path in modified:
+        update_file(path)
+
+    for path in deleted:
+        mark_deleted(path)
+```
+
+---
+
+## 导入新文件
+
+```python
+def import_new_file(path):
+    if is_asset(path):
+        asset = upsert_asset(path)
+
+    elif is_artifact(path):
+        asset = find_related_asset(path)
+        if asset:
+            upsert_artifact(path, asset)
+            index_artifact(path)
+        else:
+            mark_orphan(path)
+```
+
+---
+
+# 二十四、如何处理重复生成？
+
+例如：
+
+```text
+episode-001.txt 已经存在
+用户又点击“生成转录”
+```
+
+可以有几种策略。
+
+---
+
+## 策略 1：跳过
+
+如果文件存在且原始文件 hash 没变：
+
+```text
+提示：转录已存在
+```
+
+适合节省资源。
+
+---
+
+## 策略 2：覆盖
+
+直接重新运行 CLI，覆盖同名 txt。
+
+适合你当前 CLI。
+
+但要注意：
+
+```text
+如果用户手动编辑过 txt，覆盖会丢失。
+```
+
+所以主应用可以提示：
+
+```text
+检测到已有转录文件，是否覆盖？
+```
+
+---
+
+## 策略 3：生成新版本
+
+输出：
+
+```text
+episode-001.transcript.20260816-1040.txt
+```
+
+然后更新 latest：
+
+```text
+episode-001.transcript.txt
+```
+
+这个更稳，但需要 CLI 支持。
+
+---
+
+## 我的建议
+
+当前阶段：
+
+```text
+如果转录存在且原始文件未变，默认跳过。
+如果用户强制重新生成，则覆盖。
+```
+
+后续：
+
+```text
+支持版本目录。
+```
+
+---
+
+# 二十五、推荐一个实际可用的目录规范
+
+你可以先用这套。
+
+---
+
+## 原始文件
+
+```text
+podcasts/episode-001.mp3
+videos/talk-001.mp4
+documents/paper.pdf
+```
+
+---
+
+## 派生文件
+
+```text
+episode-001.txt                  兼容现有 CLI 的转录
+episode-001.transcript.json      可选结构化转录
+episode-001.summary.md           AI 总结
+episode-001.notes.md             用户笔记
+episode-001.meta.json            可选元数据
+
+talk-001.txt
+talk-001.summary.md
+talk-001.notes.md
+
+paper.parsed.md                  PDF 解析结果
+paper.summary.md
+paper.notes.md
+```
+
+---
+
+## 主应用隐藏目录
+
+```text
+.knowledge/
+├── config.toml
+├── db.sqlite
+├── fts.sqlite
+├── vector.lance/
+├── tasks/
+├── cache/
+└── logs/
+```
+
+---
+
+# 二十六、配置文件可以放什么？
+
+`.knowledge/config.toml` 示例：
+
+```toml
+[library]
+name = "MyKnowledge"
+created_at = "2026-08-16T10:00:00+08:00"
+
+[scan]
+watch = true
+scan_interval_minutes = 30
+ignore = [
+  ".git",
+  ".obsidian",
+  ".trash",
+  "node_modules"
+]
+
+[artifacts]
+transcript_patterns = [
+  "{stem}.txt",
+  "{stem}.transcript.txt"
+]
+summary_patterns = [
+  "{stem}.summary.md"
+]
+note_patterns = [
+  "{stem}.notes.md"
+]
+
+[tools]
+transcribe = "mytool transcribe {input}"
+summarize = "mytool summarize {input} --output {output}"
+
+[index]
+full_text = true
+vector = true
+embedding_model = "bge-m3"
+```
+
+---
+
+# 二十七、主应用界面应该怎么展示？
+
+对于一个音频资产，详情页可以显示：
+
+```text
+标题：episode-001.mp3
+类型：音频
+大小：58 MB
+时长：01:02:10
+标签：播客 / AI / 知识管理
+状态：已转录，已总结
+```
+
+右侧或下方显示：
+
+```text
+转录文本
+AI 总结
+我的笔记
+文件信息
+任务记录
+相似内容
+```
+
+如果缺少转录：
+
+```text
+未检测到转录文本
+[生成转录]
+```
+
+如果检测到外部 CLI 生成的转录：
+
+```text
+已检测到转录文本：episode-001.txt
+来源：外部 CLI / 手动生成
+[重新索引] [重新转录]
+```
+
+如果总结过期：
+
+```text
+原始文件已修改，AI 总结可能过期。
+[重新生成总结]
+```
+
+---
+
+# 二十八、推荐的最小实现顺序
+
+你可以按这个顺序做。
+
+---
+
+## 第一步：支持选定目录和隐藏数据目录
+
+功能：
+
+```text
+打开目录
+创建 .knowledge/
+初始化 SQLite
+```
+
+---
+
+## 第二步：扫描原始文件
+
+识别：
+
+```text
+音频
+视频
+文档
+```
+
+写入 assets 表。
+
+---
+
+## 第三步：识别已有同名 txt
+
+规则：
+
+```text
+如果存在 audio.mp3 和 audio.txt
+则把 audio.txt 识别为 transcript artifact
+```
+
+写入 artifacts 表。
+
+---
+
+## 第四步：建立全文索引
+
+索引：
+
+```text
+文件名
+transcript txt
+summary md
+notes md
+文档文本
+```
+
+先不急着做向量。
+
+---
+
+## 第五步：主应用调用转录 CLI
+
+点击按钮：
+
+```text
+调用 mytool transcribe
+```
+
+完成后刷新当前 asset。
+
+---
+
+## 第六步：文件监听
+
+监听：
+
+```text
+新增 txt
+修改 txt
+删除 txt
+新增 summary.md
+修改 notes.md
+```
+
+自动更新 UI 和索引。
+
+---
+
+## 第七步：AI 总结
+
+生成：
+
+```text
+{stem}.summary.md
+```
+
+并索引。
+
+---
+
+## 第八步：向量搜索
+
+对 chunks 做 embedding。
+
+---
+
+# 二十九、你这个场景最需要注意的问题
+
+---
+
+## 1. 不要覆盖用户编辑过的文件
+
+尤其是：
+
+```text
+notes.md
+summary.md
+```
+
+如果用户改过，重新生成时要提示。
+
+建议：
+
+```text
+AI summary 可覆盖，但先备份旧版本。
+user notes 永不覆盖。
+```
+
+---
+
+## 2. 不要假设所有文件都由主应用生成
+
+一定要支持：
+
+```text
+外部 CLI 生成
+手动编辑
+其他工具生成
+同步盘同步过来
+```
+
+---
+
+## 3. 数据库要能重建
+
+如果 `.knowledge/db.sqlite` 损坏，最好可以：
+
+```text
+重新扫描目录
+重建 assets
+重建 artifacts
+重建全文索引
+重建向量索引
+```
+
+---
+
+## 4. 大文件转录要有任务状态
+
+转录视频或长播客可能很慢。
+
+主应用必须显示：
+
+```text
+排队中
+进行中
+成功
+失败
+```
+
+否则体验会很差。
+
+---
+
+## 5. 派生产物最好记录来源
+
+例如：
+
+```json
+{
+  "kind": "transcript",
+  "source": "cli",
+  "generator": "mytool-asr",
+  "model": "whisper-large-v3",
+  "created_at": "2026-08-16T10:30:00+08:00"
+}
+```
+
+如果没有元数据，至少记录：
+
+```text
+文件路径
+hash
+mtime
+```
+
+---
+
+# 三十、针对你现在已有 CLI 的具体建议
+
+你现在的转录 CLI 是：
+
+```text
+输入音视频文件
+输出同目录同名 txt
+无状态
+```
+
+这完全可以接入。
+
+建议主应用先这样处理：
+
+```text
+1. 扫描音视频文件。
+2. 对每个音视频文件，检查同目录同名 txt。
+3. 如果存在，标记为已转录。
+4. 如果不存在，显示“可转录”。
+5. 点击转录时调用 CLI。
+6. CLI 完成后重新扫描该文件。
+7. 手动 CLI 生成 txt 后，也由扫描/监听识别。
+```
+
+这是最省事、最稳定的第一版。
+
+之后你可以逐步增强：
+
+```text
+同名 txt
+→ 支持 {stem}.transcript.txt
+→ 支持 {stem}.transcript.json
+→ 支持 sidecar 目录
+→ 支持 manifest 通知
+→ 支持多版本产物
+```
+
+---
+
+# 三十一、最终推荐方案
+
+你的应用可以采用下面这个模型：
+
+```text
+知识库目录
+├── 原始文件：音频、视频、文档
+├── 派生文件：转录、总结、笔记、解析结果
+└── .knowledge/
+    ├── SQLite 数据库
+    ├── 全文索引
+    ├── 向量索引
+    ├── 任务记录
+    └── 配置
+```
+
+工作原则：
+
+```text
+1. 原始文件自由存放。
+2. CLI 可以独立生成派生文件。
+3. 主应用可以调用 CLI 生成派生文件。
+4. 主应用通过扫描和监听发现所有文件。
+5. 主应用根据命名规则关联原始文件和派生文件。
+6. 数据库只是索引缓存，可随时重建。
+7. AI 生成内容和用户笔记分开。
+8. 搜索基于文件名、全文、向量三层。
+```
+
+一句话总结：
+
+> **可以做，而且应该支持。最佳方式是把主应用做成“本地知识库索引和管理中心”，把 CLI 做成“无状态能力工具”。两者通过文件系统和命名约定连接，主应用既能触发 CLI，也能自动识别手动 CLI 生成的结果。**
+
+user：
+主应用我需要有个界面以便于查看，我使用python技术栈，应该做成gui还是electron
+
+qwen：
+如果你的主应用是 **Python 技术栈**，而且核心目标是：
+
+- 查看和管理播客、视频、文档；
+- 做文件名、全文、向量搜索；
+- 查看转录、总结、笔记；
+- 触发转录、总结等任务；
+- 主要自用，不追求商业级跨平台桌面发行；
+
+我的建议是：
+
+> **不要首选 Electron。**
+>
+> 更推荐：**Python 后端 FastAPI + 本地 Web UI**。
+>
+> 如果你特别想要原生桌面窗口，再考虑 **PySide6** 或 **Tauri 包一层 Web UI**。
+
+---
+
+# 一、先给结论
+
+按你的情况，优先级可以这样排：
+
+```text
+第一推荐：FastAPI + 本地 Web UI
+第二推荐：NiceGUI / Reflex / Streamlit 快速做 Python 界面
+第三推荐：PySide6 原生 GUI
+谨慎选择：Tauri + Python 后端
+不推荐首选：Electron
+```
+
+更具体一点：
+
+```text
+如果你想最快做出来：NiceGUI / Streamlit / Gradio
+如果你想长期做成一个舒服的知识管理应用：FastAPI + React/Vue/Svelte
+如果你非常需要桌面原生体验：PySide6
+如果你熟悉前端且不在乎体积：Electron
+```
+
+对于你这个项目，我最推荐：
+
+```text
+FastAPI 后端 + 浏览器访问 localhost:xxxx
+```
+
+后续可以再用 Tauri、pywebview 或 Electron 包壳。
+
+---
+
+# 二、为什么不太推荐 Electron？
+
+Electron 当然能做，而且很多知识管理应用都用 Electron，比如 Obsidian、Notion 桌面端、Logseq 等。
+
+但对你的场景来说，Electron 有几个问题。
+
+---
+
+## 1. 你是 Python 技术栈，Electron 会引入第二套技术栈
+
+Electron 本质上是：
+
+```text
+Node.js + Chromium + 前端
+```
+
+如果你用 Electron，通常会变成：
+
+```text
+Electron 前端
+  ↓
+调用本地 Python 服务 / Python CLI
+```
+
+也就是：
+
+```text
+TypeScript / JavaScript
++
+Python
+```
+
+你会同时维护：
+
+```text
+Electron 主进程
+渲染进程
+前端框架
+打包配置
+Python 后端
+Python CLI
+两者通信
+```
+
+对自用工具来说，这个复杂度有点高。
+
+---
+
+## 2. Electron 体积和内存开销比较大
+
+Electron 应用通常包含一个 Chromium。
+
+即使只是一个小工具，打包后也可能：
+
+```text
+100MB 起步
+```
+
+运行时内存也比较高。
+
+如果你只是本地自用，这不一定值得。
+
+---
+
+## 3. 你的核心能力已经在 Python 里了
+
+你的转录、文档解析、TTS、向量、搜索，大概率都会用 Python：
+
+```text
+FastAPI
+SQLite
+Whisper
+PyTorch / ONNX
+llama.cpp / transformers
+embedding 模型
+LangChain / LlamaIndex
+```
+
+如果主应用再用 Electron，相当于：
+
+```text
+界面在 Node/JS
+逻辑在 Python
+```
+
+通信成本会增加。
+
+---
+
+## 4. Electron 的优势你未必强烈需要
+
+Electron 强在：
+
+```text
+复杂桌面交互
+丰富前端生态
+跨平台一致 UI
+系统托盘
+全局快捷键
+自动更新
+```
+
+如果你只是自用：
+
+```text
+浏览器打开 localhost
+```
+
+其实已经足够。
+
+---
+
+# 三、为什么推荐 FastAPI + 本地 Web UI？
+
+你的应用本质上是一个本地知识管理服务：
+
+```text
+扫描文件
+管理数据库
+建立索引
+调用 CLI
+展示结果
+搜索
+笔记编辑
+任务管理
+```
+
+这些非常适合做成：
+
+```text
+本地后端服务 + Web 界面
+```
+
+例如：
+
+```text
+Python FastAPI 后端
+  ├── 文件扫描
+  ├── SQLite 数据库
+  ├── 全文索引
+  ├── 向量搜索
+  ├── 任务队列
+  ├── 调用转录 CLI
+  ├── 调用总结 CLI
+  └── 提供 REST API
+
+浏览器前端
+  ├── 文件列表
+  ├── 搜索框
+  ├── 资产详情页
+  ├── Markdown 预览
+  ├── 笔记编辑
+  ├── 音频播放
+  ├── 视频播放
+  ├── 任务中心
+  └── 标签管理
+```
+
+启动后访问：
+
+```text
+http://127.0.0.1:8765
+```
+
+---
+
+## 优点
+
+### 1. Python 后端非常自然
+
+你的主应用可以直接：
+
+```python
+import subprocess
+from pathlib import Path
+```
+
+调用已有 CLI：
+
+```python
+subprocess.run([
+    "mytool",
+    "transcribe",
+    str(audio_path)
+])
+```
+
+也可以调用 Python 库：
+
+```python
+from mytools.parsing import parse_document
+```
+
+---
+
+### 2. Web UI 很适合知识管理界面
+
+知识管理界面通常需要：
+
+```text
+列表
+搜索
+标签
+Markdown 渲染
+富文本编辑
+代码高亮
+音频播放器
+视频播放器
+侧边栏
+详情页
+任务状态
+```
+
+这些 Web 前端生态非常成熟。
+
+例如：
+
+```text
+Markdown 渲染：markdown-it / marked / remark
+编辑器：CodeMirror / Monaco / Milkdown / Tiptap
+样式：Tailwind CSS / shadcn/ui
+列表：虚拟列表
+播放器：HTML5 audio/video
+```
+
+比原生 GUI 做 Markdown 和富文本通常更轻松。
+
+---
+
+### 3. 本地 Web UI 不影响隐私
+
+只要绑定：
+
+```text
+127.0.0.1
+```
+
+就只允许本机访问。
+
+例如 FastAPI/Uvicorn：
+
+```bash
+uvicorn app.main:app --host 127.0.0.1 --port 8765
+```
+
+不要默认绑：
+
+```text
+0.0.0.0
+```
+
+这样就仍然是本地应用。
+
+---
+
+### 4. 后续可以桌面化
+
+一开始你可以直接用浏览器访问。
+
+后面如果想有桌面窗口，可以：
+
+```text
+方案 A：pywebview
+方案 B：Tauri 包一层
+方案 C：Electron 包一层
+方案 D：PySide6 QWebEngineView
+```
+
+也就是说：
+
+```text
+先做 Web UI，不等于永远只能用浏览器。
+```
+
+---
+
+# 四、如果你不想写前端，可以考虑 Python Web GUI
+
+如果你不想马上写 React/Vue/Svelte，可以用 Python 直接写界面。
+
+---
+
+## 1. NiceGUI
+
+我比较推荐你先看看：
+
+```text
+NiceGUI
+```
+
+它适合 Python 开发者快速做本地应用界面。
+
+特点：
+
+```text
+Python 写 UI
+组件比较现代
+支持按钮、表格、输入框、Markdown、通知、对话框
+可以本地运行
+开发速度快
+```
+
+适合做：
+
+```text
+文件列表
+搜索框
+详情页
+任务状态
+Markdown 展示
+触发转录按钮
+```
+
+示例感觉大概是：
+
+```python
+from nicegui import ui
+
+ui.label('知识管理')
+ui.button('生成转录', on_click=lambda: ui.notify('开始转录'))
+
+ui.run(port=8765)
+```
+
+优点：
+
+```text
+快
+Python 一把梭
+适合自用工具
+```
+
+缺点：
+
+```text
+复杂交互和高度定制不如 React/Vue
+大数据量列表需要自己优化
+长期产品化可能还是要转前端框架
+```
+
+如果你想快速验证产品形态，NiceGUI 是很好的选择。
+
+---
+
+## 2. Streamlit
+
+Streamlit 适合做：
+
+```text
+演示
+原型
+AI 工具面板
+```
+
+例如：
+
+```text
+上传文件
+点击转录
+显示总结
+搜索
+```
+
+优点：
+
+```text
+极快
+简单
+Python 友好
+```
+
+缺点：
+
+```text
+状态管理弱
+页面交互受限
+不太适合复杂文件管理应用
+多页面复杂应用会比较别扭
+```
+
+所以：
+
+> Streamlit 适合原型，不太适合长期知识管理主应用。
+
+---
+
+## 3. Gradio
+
+Gradio 更适合：
+
+```text
+模型 Demo
+输入 -> 处理 -> 输出
+```
+
+例如：
+
+```text
+上传音频 -> 转录 -> 显示文本
+输入文本 -> TTS -> 播放音频
+```
+
+但不适合做复杂知识管理：
+
+```text
+目录浏览
+多文件管理
+标签
+搜索
+笔记
+详情页
+任务中心
+```
+
+所以 Gradio 可以作为单功能 Demo，不适合主应用。
+
+---
+
+## 4. Reflex / Flet / Textual
+
+也有一些选择：
+
+```text
+Reflex：Python 写 Web 应用
+Flet：Flutter 风格 UI
+Textual：终端 UI
+```
+
+但它们各有局限：
+
+```text
+Reflex：相对新，生态和稳定性需要评估
+Flet：适合简单桌面/移动 UI，但知识管理复杂界面不一定顺手
+Textual：终端 UI 很酷，但不适合富文本、音视频、Markdown 复杂查看
+```
+
+---
+
+# 五、Python 原生 GUI：PySide6 / Qt 怎么样？
+
+如果你说的 GUI 是 Python 原生桌面 GUI，那么主要选择是：
+
+```text
+PySide6
+PyQt6
+Tkinter
+```
+
+其中更推荐：
+
+```text
+PySide6
+```
+
+---
+
+## PySide6 适合你的情况吗？
+
+适合一部分需求：
+
+```text
+本地桌面应用
+文件树
+列表
+右键菜单
+系统托盘
+拖拽文件
+本地文件操作
+快捷键
+多窗口
+```
+
+如果你非常想要：
+
+```text
+像本地文件管理器一样的应用
+不需要浏览器
+原生窗口
+离线桌面体验
+```
+
+PySide6 是合理选择。
+
+---
+
+## PySide6 的优点
+
+### 1. Python 技术栈统一
+
+后端、界面、任务调度都可以是 Python。
+
+```text
+PySide6 UI
++
+SQLite
++
+watchdog
++
+subprocess
++
+Python CLI
+```
+
+非常统一。
+
+---
+
+### 2. 原生桌面体验
+
+例如：
+
+```text
+拖拽音频进窗口
+右键菜单生成转录
+系统托盘后台运行
+全局快捷键
+文件树导航
+```
+
+这些 Qt 比较擅长。
+
+---
+
+### 3. 适合文件管理类工具
+
+Qt 的：
+
+```text
+QTreeView
+QTableView
+QListView
+QFileSystemModel
+```
+
+很适合做文件管理器。
+
+---
+
+## PySide6 的缺点
+
+### 1. 界面现代感不如 Web 前端
+
+如果你想要：
+
+```text
+漂亮卡片
+Markdown 美观渲染
+富文本编辑器
+现代搜索框
+标签 UI
+暗色主题
+响应式布局
+```
+
+Web 前端更容易做漂亮。
+
+Qt 也能做，但通常需要更多 UI 细节工作。
+
+---
+
+### 2. Markdown、富文本、编辑器生态不如 Web
+
+知识管理应用很依赖：
+
+```text
+Markdown 预览
+笔记编辑
+代码块
+数学公式
+表格
+图片
+链接跳转
+双链
+```
+
+Web 生态明显更丰富。
+
+Qt 也能显示 Markdown，但复杂编辑体验通常不如 Web。
+
+---
+
+### 3. 打包体积也不小
+
+PySide6 打包后也可能比较大：
+
+```text
+几十 MB 到上百 MB
+```
+
+不过通常还是比 Electron 轻一些。
+
+---
+
+# 六、Tkinter 不推荐作为主应用界面
+
+Tkinter 优点是简单、Python 自带。
+
+但它不太适合这种应用：
+
+```text
+复杂列表
+现代搜索
+Markdown 渲染
+音视频播放
+美观 UI
+富文本编辑
+```
+
+除非你只想做一个非常简单的控制台/小窗口工具，否则不推荐 Tkinter。
+
+---
+
+# 七、Tauri 怎么样？
+
+Tauri 是 Electron 的轻量替代：
+
+```text
+前端 UI
++
+系统 WebView
++
+Rust 后端壳
+```
+
+如果你最终想要桌面应用，但又不想 Electron 那么重，可以考虑 Tauri。
+
+但对 Python 技术栈来说，Tauri 也不是最直接的选择。
+
+你通常会变成：
+
+```text
+Tauri 前端
+  ↓
+调用本地 Python FastAPI 服务
+```
+
+或者：
+
+```text
+Tauri sidecar 启动 Python 后端
+```
+
+优点是：
+
+```text
+比 Electron 轻
+界面仍然可以用 Web 技术
+```
+
+缺点是：
+
+```text
+引入 Rust/Node 构建链
+Python 后端打包和启动管理更复杂
+```
+
+所以我的建议是：
+
+> 可以先做本地 Web UI，以后真的需要桌面壳，再考虑 Tauri。
+
+---
+
+# 八、pywebview 是一个轻量的中间方案
+
+如果你想要：
+
+```text
+Python 启动一个桌面窗口
+窗口里显示你的 Web UI
+```
+
+可以考虑：
+
+```text
+pywebview
+```
+
+结构：
+
+```text
+Python FastAPI 后端
++
+pywebview 打开本地页面
+```
+
+优点：
+
+```text
+比 Electron 轻
+Python 技术栈为主
+有桌面窗口感
+```
+
+缺点：
+
+```text
+依赖系统 WebView
+不同平台体验可能有差异
+复杂桌面能力不如 Electron/Tauri
+```
+
+对于自用工具，pywebview 是一个不错的过渡方案。
+
+---
+
+# 九、Electron 什么时候适合？
+
+虽然我不推荐你首选 Electron，但它并不是不能用。
+
+如果你满足下面多个条件，可以选择 Electron：
+
+```text
+你很熟悉 TypeScript / React / Vue
+你想做非常复杂的 UI
+你未来可能发布跨平台桌面应用
+你需要成熟的自动更新
+你需要系统托盘、全局快捷键、菜单、通知等完整桌面能力
+你不介意体积和内存
+你愿意维护 Node + Python 两套东西
+```
+
+那 Electron 可以做。
+
+例如：
+
+```text
+Electron 前端
+  ↓ HTTP/WebSocket
+FastAPI 本地服务
+  ↓ subprocess
+转录 CLI / 总结 CLI / 解析 CLI
+```
+
+但对你当前“Python 技术栈 + 自用 + 知识管理”的目标来说，Electron 有点重。
+
+---
+
+# 十、最适合你的推荐方案
+
+我建议你采用：
+
+```text
+Python FastAPI 后端
++
+本地 Web UI
+```
+
+---
+
+## 后端
+
+```text
+FastAPI
+SQLite
+SQLAlchemy 或 sqlite3
+watchdog
+asyncio subprocess
+```
+
+负责：
+
+```text
+扫描库
+管理 assets/artifacts
+全文搜索
+向量搜索
+调用 CLI
+任务状态
+文件监听
+生成总结
+管理笔记
+```
+
+---
+
+## 前端
+
+分两种路线。
+
+---
+
+### 路线 A：快速自用，不想写前端
+
+用：
+
+```text
+NiceGUI
+```
+
+或者：
+
+```text
+FastAPI + Jinja2 + HTMX
+```
+
+适合快速做出：
+
+```text
+文件列表
+搜索
+详情页
+按钮触发转录
+任务状态
+Markdown 显示
+```
+
+优点：
+
+```text
+开发快
+Python 为主
+适合个人项目
+```
+
+缺点：
+
+```text
+高度定制稍弱
+```
+
+---
+
+### 路线 B：长期做成完整知识管理应用
+
+用：
+
+```text
+FastAPI 提供 REST API
++
+React / Vue / Svelte 前端
+```
+
+我个人觉得对于知识管理应用，Svelte 或 Vue 会比较舒服。
+
+例如：
+
+```text
+SvelteKit / Vite + Svelte
+或
+Vue 3 + Vite
+```
+
+UI 库可以用：
+
+```text
+Tailwind CSS
+shadcn-svelte / shadcn-vue
+Naive UI
+Element Plus
+PrimeVue
+```
+
+优点：
+
+```text
+界面自由度高
+适合复杂搜索、列表、详情、笔记编辑
+长期可维护
+```
+
+缺点：
+
+```text
+需要写前端
+```
+
+---
+
+# 十一、推荐架构
+
+```text
+浏览器 / Tauri / pywebview
+        ↓
+FastAPI 应用
+        ↓
+服务层
+  ├── library scanner
+  ├── artifact recognizer
+  ├── task runner
+  ├── search service
+  ├── vector service
+  └── note service
+        ↓
+数据层
+  ├── SQLite
+  ├── FTS5
+  ├── vector index
+  └── 文件系统
+        ↓
+工具层
+  ├── mytool transcribe
+  ├── mytool summarize
+  ├── mytool parse
+  └── mytool tts
+```
+
+---
+
+# 十二、一个简单后端示例
+
+FastAPI 可以提供这些接口：
+
+```text
+GET  /api/assets
+GET  /api/assets/{asset_id}
+POST /api/assets/{asset_id}/transcribe
+POST /api/assets/{asset_id}/summarize
+GET  /api/search?q=keyword
+GET  /api/tasks
+POST /api/library/scan
+```
+
+示例：
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/api/assets")
+def list_assets():
+    return [
+        {
+            "asset_id": "a1",
+            "title": "episode-001",
+            "type": "audio",
+            "path": "podcasts/episode-001.mp3",
+            "has_transcript": True,
+            "has_summary": False
+        }
+    ]
+
+@app.post("/api/assets/{asset_id}/transcribe")
+def transcribe_asset(asset_id: str):
+    return {
+        "task_id": "task_001",
+        "status": "pending"
+    }
+```
+
+前端访问：
+
+```text
+http://127.0.0.1:8765
+```
+
+---
+
+# 十三、任务调用 CLI 示例
+
+主应用触发转录时：
+
+```python
+import asyncio
+from pathlib import Path
+
+async def run_transcribe(file_path: Path):
+    process = await asyncio.create_subprocess_exec(
+        "mytool",
+        "transcribe",
+        str(file_path),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+
+    stdout, stderr = await process.communicate()
+
+    if process.returncode == 0:
+        return True
+    else:
+        return False
+```
+
+FastAPI 里可以创建后台任务：
+
+```python
+from fastapi import BackgroundTasks
+
+@app.post("/api/assets/{asset_id}/transcribe")
+def transcribe_asset(asset_id: str, background_tasks: BackgroundTasks):
+    background_tasks.add_task(run_transcribe_task, asset_id)
+    return {"status": "accepted"}
+```
+
+---
+
+# 十四、文件监听
+
+你可以用：
+
+```text
+watchdog
+```
+
+监听：
+
+```text
+新增 episode.txt
+修改 summary.md
+删除 notes.md
+```
+
+然后更新数据库。
+
+结构：
+
+```text
+watchdog observer
+  ↓
+事件进入队列
+  ↓
+sync worker
+  ↓
+更新 SQLite / FTS / vector
+  ↓
+通过 WebSocket 通知前端刷新
+```
+
+前端可以用：
+
+```text
+WebSocket
+```
+
+或者简单一点：
+
+```text
+轮询 /api/events
+```
+
+---
+
+# 十五、界面应该做成什么样？
+
+对于知识管理主应用，我建议有这几个页面。
+
+---
+
+## 1. 库列表页
+
+```text
+打开最近知识库
+新建知识库
+选择目录
+```
+
+---
+
+## 2. 资产列表页
+
+```text
+全部
+音频
+视频
+文档
+收藏
+最近
+未转录
+未总结
+标签
+```
+
+列表项显示：
+
+```text
+标题
+类型图标
+标签
+时长/页数/大小
+是否有转录
+是否有总结
+更新时间
+```
+
+---
+
+## 3. 搜索结果页
+
+```text
+关键词搜索
+语义搜索
+混合搜索
+过滤类型
+过滤标签
+高亮命中内容
+```
+
+---
+
+## 4. 资产详情页
+
+以播客为例：
+
+```text
+左侧：
+  音频播放器
+  文件信息
+  标签
+  操作按钮：
+    生成转录
+    生成总结
+    重新索引
+
+右侧：
+  转录文本
+  AI 总结
+  我的笔记
+  任务记录
+```
+
+---
+
+## 5. 任务中心
+
+```text
+待处理
+进行中
+成功
+失败
+重试
+取消
+查看日志
+```
+
+---
+
+## 6. 设置页
+
+```text
+库目录
+CLI 路径
+模型配置
+扫描间隔
+监听开关
+向量模型
+总结模板
+```
+
+---
+
+# 十六、如果你希望最快做出可用版本
+
+我建议你第一版不要纠结 Electron 还是原生 GUI。
+
+直接做：
+
+```text
+FastAPI + NiceGUI
+```
+
+或者：
+
+```text
+FastAPI + Jinja2 + HTMX
+```
+
+目标：
+
+```text
+能选库
+能扫描
+能列出音频/视频/文档
+能识别同名 txt
+能点击按钮调用转录 CLI
+能查看转录 txt
+能搜索文件名和文本内容
+```
+
+这一版做出来，你就知道后续该往哪个方向优化。
+
+---
+
+# 十七、如果你希望长期做得比较好
+
+推荐最终形态：
+
+```text
+FastAPI 后端
++
+Svelte/Vue 前端
++
+SQLite
++
+FTS5
++
+本地向量库
++
+可选 Tauri/pywebview 桌面壳
+```
+
+这个组合比较适合你的项目。
+
+---
+
+# 十八、方案对比表
+
+| 方案 | 适合程度 | 优点 | 缺点 |
+|---|---:|---|---|
+| FastAPI + 浏览器 Web UI | 非常推荐 | Python 友好，开发效率高，界面现代，容易扩展 | 默认不是桌面窗口 |
+| NiceGUI | 推荐快速原型 | Python 写 UI，速度快，适合自用 | 复杂定制不如前端框架 |
+| Streamlit | 适合原型 | 极快 | 不适合复杂文件管理 |
+| Gradio | 适合单功能 Demo | 适合模型演示 | 不适合知识管理主界面 |
+| PySide6 | 可选 | 原生桌面，文件管理强 | UI 现代感和 Markdown 生态不如 Web |
+| Tkinter | 不推荐 | 简单 | 界面弱，不适合复杂应用 |
+| Tauri + Python 后端 | 后期可选 | 比 Electron 轻，桌面体验好 | 构建链复杂 |
+| pywebview | 可选 | 轻桌面化，Python 友好 | 依赖系统 WebView |
+| Electron | 不推荐首选 | 生态强，桌面能力完整 | 重，双技术栈，Python 场景复杂 |
+
+---
+
+# 十九、最终建议
+
+你的情况我建议这样选：
+
+```text
+如果你现在想快速看到效果：
+    用 NiceGUI 或 FastAPI + HTMX
+
+如果你想长期做成一个舒服的知识管理应用：
+    用 FastAPI + React/Vue/Svelte
+
+如果你特别想要原生桌面应用，并且不想写前端：
+    用 PySide6
+
+如果你非常熟悉前端，而且以后可能发布桌面应用：
+    可以用 Electron，但不是首选
+```
+
+最推荐路线：
+
+```text
+第一阶段：
+FastAPI + NiceGUI / HTMX
+做出能扫描、能搜索、能查看、能调用 CLI 的版本
+
+第二阶段：
+把后端 API 稳定下来
+
+第三阶段：
+换成或增加 React/Vue/Svelte 前端
+
+第四阶段：
+如果需要桌面窗口，再用 Tauri 或 pywebview 包一层
+```
+
+一句话总结：
+
+> **你是 Python 技术栈，主应用建议先做成本地 Web 应用：FastAPI 后端 + 浏览器界面。不要一开始上 Electron。等应用形态稳定后，再决定是否需要 Tauri、pywebview 或 PySide6 桌面壳。**
+
+
+user：
+就按你的建议来，第一阶段先用FastAPI + NiceGUI。然后向量数据库使用lancedb。 帮我写一份prd，如果有需要问我的可以先问我。
+
+qwen：
+可以先给一版 **PRD v0.1 草案**。下面是基于你当前已经明确的信息写的：
+
+- 技术栈：Python
+- 后端：FastAPI
+- 界面：NiceGUI
+- 向量库：LanceDB
+- 数据形态：本地文件库
+- 管理对象：播客音频、视频、文档
+- 已有能力：转录 CLI，无状态，输出同目录同名 `.txt`
+- 关键需求：易于查看管理、文件名/内容/向量搜索、自动生成总结和笔记、支持主应用触发和手动 CLI 产物
+
+我在最后列了一些需要你确认的问题。你确认后，我可以把它整理成更正式的 **PRD v1.0**。
+
+---
+
+# 本地知识管理应用 PRD v0.1
+
+## 1. 产品概述
+
+### 1.1 产品名称
+
+暂定：
+
+```text
+Local Knowledge Hub
+```
+
+中文名暂定：
+
+```text
+本地知识管理中心
+```
+
+---
+
+### 1.2 产品定位
+
+一个面向个人用户的本地知识管理应用，用于统一管理：
+
+```text
+播客音频
+视频文件
+各类文档
+```
+
+并围绕这些文件提供：
+
+```text
+查看
+管理
+转录
+AI 总结
+笔记
+全文搜索
+向量语义搜索
+```
+
+应用以本地文件系统为真实数据源，不强制改变用户原有目录结构。
+
+---
+
+### 1.3 核心目标
+
+第一阶段要实现：
+
+1. 用户可以新建或打开一个本地目录作为知识库。
+2. 应用在该目录下创建隐藏目录 `.knowledge/` 存储应用数据。
+3. 应用可以扫描并管理音频、视频、文档。
+4. 应用可以识别已有 CLI 生成的派生文件，例如转录文本。
+5. 应用可以触发已有转录 CLI。
+6. 应用支持手动 CLI 生成的文件自动进入管理索引。
+7. 应用支持文件名搜索。
+8. 应用支持全文内容搜索。
+9. 应用支持基于 LanceDB 的向量语义搜索。
+10. 应用支持查看和编辑笔记。
+11. 应用支持 AI 总结文件的查看、生成和索引。
+
+---
+
+### 1.4 第一阶段不做的事情
+
+以下功能不在第一阶段范围内，或仅做最低支持：
+
+```text
+多用户系统
+登录认证
+云端同步
+移动端
+团队协作
+双链知识图谱
+复杂标签体系
+版本历史管理
+TTS 播放学习
+字幕级音频跳转
+自动备份
+插件系统
+复杂权限管理
+```
+
+---
+
+## 2. 用户角色
+
+本应用为自用工具，只有一个角色：
+
+```text
+个人用户
+```
+
+该用户拥有全部权限：
+
+```text
+打开知识库
+扫描文件
+触发转录
+生成总结
+编辑笔记
+删除索引
+修改配置
+```
+
+---
+
+## 3. 核心概念
+
+### 3.1 Library，知识库
+
+一个本地目录作为知识库根目录。
+
+例如：
+
+```text
+~/Knowledge/
+```
+
+应用在该目录下创建：
+
+```text
+~/Knowledge/.knowledge/
+```
+
+用于存储：
+
+```text
+配置
+SQLite 数据库
+全文索引
+LanceDB 向量索引
+任务记录
+缓存
+日志
+```
+
+---
+
+### 3.2 Asset，原始知识资产
+
+知识库中的原始文件。
+
+例如：
+
+```text
+podcasts/episode-001.mp3
+videos/talk-001.mp4
+documents/paper.pdf
+```
+
+Asset 是知识管理的基本对象。
+
+---
+
+### 3.3 Artifact，派生产物
+
+围绕 Asset 产生的文件。
+
+例如：
+
+```text
+episode-001.txt
+episode-001.summary.md
+episode-001.notes.md
+paper.parsed.md
+```
+
+常见 Artifact 类型：
+
+```text
+transcript       转录文本
+transcript_meta  转录结构化信息
+summary          AI 总结
+note             用户笔记
+parsed           文档解析结果
+meta             元数据
+```
+
+---
+
+### 3.4 Task，任务
+
+主应用触发的后台处理任务。
+
+例如：
+
+```text
+转录任务
+总结任务
+文档解析任务
+重建索引任务
+```
+
+任务状态：
+
+```text
+pending
+running
+success
+failed
+cancelled
+```
+
+---
+
+### 3.5 Search Index，搜索索引
+
+搜索索引分为三层：
+
+```text
+文件名搜索
+全文搜索
+向量搜索
+```
+
+第一阶段技术选择：
+
+```text
+文件名搜索：SQLite
+全文搜索：SQLite FTS5
+向量搜索：LanceDB
+```
+
+---
+
+## 4. 目标用户场景
+
+### 场景 1：打开本地知识库
+
+用户选择一个目录：
+
+```text
+~/Knowledge/
+```
+
+应用检测到没有 `.knowledge/`，自动创建：
+
+```text
+~/Knowledge/.knowledge/
+```
+
+然后开始扫描目录。
+
+---
+
+### 场景 2：导入播客音频
+
+用户将播客文件放入目录：
+
+```text
+podcasts/episode-001.mp3
+```
+
+应用扫描后在界面显示：
+
+```text
+episode-001.mp3
+类型：音频
+状态：未转录
+```
+
+---
+
+### 场景 3：主应用触发转录
+
+用户在应用内点击：
+
+```text
+生成转录
+```
+
+应用调用转录 CLI：
+
+```bash
+mytool transcribe podcasts/episode-001.mp3
+```
+
+CLI 生成：
+
+```text
+podcasts/episode-001.txt
+```
+
+应用识别该文件，更新状态：
+
+```text
+已转录
+```
+
+并将转录文本加入全文索引和向量索引。
+
+---
+
+### 场景 4：手动 CLI 生成转录
+
+用户在终端运行：
+
+```bash
+mytool transcribe podcasts/episode-001.mp3
+```
+
+生成：
+
+```text
+podcasts/episode-001.txt
+```
+
+应用通过文件监听或下次扫描发现该文件，自动识别为：
+
+```text
+episode-001.mp3 的转录文本
+```
+
+并建立索引。
+
+---
+
+### 场景 5：搜索内容
+
+用户搜索：
+
+```text
+本地知识管理
+```
+
+应用返回：
+
+```text
+文件名命中
+转录文本命中
+总结命中
+笔记命中
+语义相似结果
+```
+
+---
+
+### 场景 6：查看和编辑笔记
+
+用户打开某个播客详情页，编辑：
+
+```text
+episode-001.notes.md
+```
+
+保存后，应用自动更新索引。
+
+---
+
+### 场景 7：生成 AI 总结
+
+用户点击：
+
+```text
+生成总结
+```
+
+应用基于转录文本或文档内容调用总结模块，生成：
+
+```text
+episode-001.summary.md
+```
+
+并加入索引。
+
+---
+
+## 5. 第一阶段功能范围
+
+### 5.1 功能优先级说明
+
+```text
+P0：第一阶段必须完成
+P1：第一阶段尽量完成
+P2：可延后到第二阶段
+```
+
+---
+
+## 6. 功能需求
+
+---
+
+# 6.1 知识库管理
+
+## FR-01 新建知识库
+
+优先级：P0
+
+用户可以选择一个目录作为知识库。
+
+如果目录下没有 `.knowledge/`，应用应创建：
+
+```text
+.knowledge/
+├── config.toml
+├── db.sqlite
+├── fts.sqlite
+├── vector/
+├── cache/
+├── logs/
+└── tasks/
+```
+
+要求：
+
+```text
+只允许本地目录
+需要可写权限
+不能选择系统敏感目录时要有提示
+```
+
+---
+
+## FR-02 打开已有知识库
+
+优先级：P0
+
+用户可以选择已有目录。
+
+如果目录中存在：
+
+```text
+.knowledge/
+```
+
+则认为是已有知识库。
+
+应用加载：
+
+```text
+配置
+数据库
+索引状态
+```
+
+---
+
+## FR-03 最近知识库
+
+优先级：P1
+
+记录最近打开的知识库路径。
+
+下次启动时展示：
+
+```text
+最近打开的知识库
+```
+
+---
+
+## FR-04 多知识库
+
+优先级：P2
+
+第一阶段可以只支持当前激活的一个知识库。
+
+后续可支持多个知识库切换。
+
+---
+
+# 6.2 文件扫描与同步
+
+## FR-05 全量扫描
+
+优先级：P0
+
+应用启动或用户手动刷新时，应扫描知识库目录。
+
+扫描目标：
+
+```text
+识别原始文件 Asset
+识别派生文件 Artifact
+更新数据库
+更新索引
+```
+
+扫描时应忽略：
+
+```text
+.knowledge/
+.git/
+__pycache__/
+node_modules/
+.trash/
+隐藏目录，可配置
+临时文件
+```
+
+---
+
+## FR-06 增量扫描
+
+优先级：P0
+
+应用应支持基于文件变化进行增量更新。
+
+判断依据可包括：
+
+```text
+文件路径
+文件名
+文件大小
+mtime
+文件 hash，可选
+```
+
+第一阶段建议：
+
+```text
+默认使用 path + size + mtime
+可选开启 hash
+```
+
+---
+
+## FR-07 文件监听
+
+优先级：P0
+
+应用应监听知识库目录变化。
+
+需要处理：
+
+```text
+新增文件
+修改文件
+删除文件
+重命名文件
+移动文件
+```
+
+建议使用：
+
+```text
+watchdog
+```
+
+需要做防抖：
+
+```text
+短时间内连续变化只处理一次
+```
+
+---
+
+## FR-08 文件删除处理
+
+优先级：P0
+
+当原始文件被删除：
+
+```text
+删除或标记失效对应 Asset
+删除或标记失效关联 Artifact
+删除全文索引
+删除向量索引
+```
+
+第一阶段建议：
+
+```text
+数据库记录删除
+磁盘文件不恢复
+任务历史可保留
+```
+
+---
+
+## FR-09 文件移动/重命名
+
+优先级：P1
+
+如果文件移动或重命名：
+
+```text
+若能通过 hash 识别为同一文件，则更新路径
+否则视为删除旧资产，新增新资产
+```
+
+---
+
+# 6.3 资产管理
+
+## FR-10 支持的文件类型
+
+优先级：P0
+
+第一阶段至少支持：
+
+### 音频
+
+```text
+.mp3
+.m4a
+.wav
+.flac
+.aac
+.ogg
+.opus
+```
+
+### 视频
+
+```text
+.mp4
+.mkv
+.mov
+.webm
+.avi
+```
+
+### 文档
+
+```text
+.pdf
+.md
+.txt
+.docx
+.doc
+.html
+.htm
+.epub
+```
+
+后续可扩展：
+
+```text
+.pptx
+.xlsx
+.csv
+图片 OCR
+网页快照
+```
+
+---
+
+## FR-11 资产列表
+
+优先级：P0
+
+应用应提供资产列表页。
+
+显示字段：
+
+```text
+标题
+类型
+路径
+大小
+修改时间
+是否有转录
+是否有总结
+是否有笔记
+任务状态
+```
+
+支持：
+
+```text
+按类型过滤
+按目录过滤
+按名称排序
+按时间排序
+搜索过滤
+```
+
+---
+
+## FR-12 资产详情页
+
+优先级：P0
+
+每个 Asset 有详情页。
+
+音频/视频详情页包括：
+
+```text
+播放器
+文件信息
+转录文本
+AI 总结
+用户笔记
+操作按钮
+任务状态
+```
+
+文档详情页包括：
+
+```text
+文档信息
+解析文本
+AI 总结
+用户笔记
+操作按钮
+```
+
+---
+
+## FR-13 文件状态标记
+
+优先级：P0
+
+应用应显示派生文件状态：
+
+```text
+未转录
+已转录
+转录过期
+未总结
+已总结
+总结过期
+有笔记
+无笔记
+```
+
+---
+
+# 6.4 派生文件识别
+
+## FR-14 派生文件命名规则
+
+优先级：P0
+
+第一阶段采用同目录同名 sidecar 文件规则。
+
+假设原始文件：
+
+```text
+episode-001.mp3
+```
+
+可识别：
+
+```text
+episode-001.txt                  转录文本，兼容现有 CLI
+episode-001.transcript.txt       转录文本，更明确命名
+episode-001.transcript.json      转录结构化结果，可选
+episode-001.summary.md           AI 总结
+episode-001.notes.md             用户笔记
+episode-001.parsed.md            文档解析结果
+episode-001.meta.json            元数据，可选
+```
+
+---
+
+## FR-15 同名 txt 识别
+
+优先级：P0
+
+如果存在：
+
+```text
+episode-001.mp3
+episode-001.txt
+```
+
+应用应将：
+
+```text
+episode-001.txt
+```
+
+识别为：
+
+```text
+episode-001.mp3 的转录文本
+```
+
+如果同目录存在多个同 stem 原始文件，例如：
+
+```text
+episode-001.mp3
+episode-001.mp4
+episode-001.txt
+```
+
+第一阶段可标记为：
+
+```text
+歧义派生文件
+```
+
+并在界面提示用户。
+
+后续可通过 sidecar 目录解决。
+
+---
+
+## FR-16 外部生成文件识别
+
+优先级：P0
+
+无论文件是：
+
+```text
+主应用生成
+手动 CLI 生成
+其他工具生成
+同步盘同步进来
+```
+
+只要符合规则，应用都应识别并索引。
+
+---
+
+## FR-17 sidecar 目录支持
+
+优先级：P2
+
+后续支持：
+
+```text
+episode-001.mp3.kb/
+├── transcript.txt
+├── transcript.json
+├── summary.md
+├── notes.md
+└── meta.json
+```
+
+第一阶段可不做，但命名规则要预留扩展。
+
+---
+
+# 6.5 转录功能
+
+## FR-18 手动触发转录
+
+优先级：P0
+
+用户在音频或视频详情页点击：
+
+```text
+生成转录
+```
+
+应用创建转录任务，并调用配置的 CLI。
+
+默认命令模板可为：
+
+```text
+mytool transcribe {input}
+```
+
+其中：
+
+```text
+{input} 为原始音视频文件绝对路径
+```
+
+---
+
+## FR-19 转录任务状态
+
+优先级：P0
+
+应用需要记录任务状态：
+
+```text
+pending
+running
+success
+failed
+cancelled
+```
+
+任务字段：
+
+```text
+task_id
+asset_id
+type
+status
+command
+params
+output_path
+error
+created_at
+started_at
+finished_at
+```
+
+---
+
+## FR-20 转录结果校验
+
+优先级：P0
+
+CLI 结束后，应用检查输出文件是否存在。
+
+如果存在：
+
+```text
+episode-001.txt
+```
+
+并且文件非空，则任务成功。
+
+然后：
+
+```text
+更新 Artifact
+更新 Asset 状态
+建立全文索引
+建立向量索引
+```
+
+---
+
+## FR-21 已有转录文件处理
+
+优先级：P0
+
+如果已有转录文件：
+
+```text
+episode-001.txt
+```
+
+点击转录时，应用应提示：
+
+```text
+已存在转录文件，是否覆盖？
+```
+
+第一阶段策略：
+
+```text
+默认跳过
+用户强制运行时覆盖
+```
+
+---
+
+## FR-22 CLI 输出路径支持
+
+优先级：P1
+
+当前 CLI 输出同目录同名 txt。
+
+后续建议 CLI 支持：
+
+```bash
+mytool transcribe input.mp3 --output output.txt
+```
+
+主应用命令模板可配置：
+
+```text
+mytool transcribe {input}
+mytool transcribe {input} --output {output}
+```
+
+---
+
+## FR-23 自动转录
+
+优先级：P1
+
+可选配置：
+
+```text
+新增音视频后是否自动转录
+```
+
+默认建议关闭，避免大量后台任务。
+
+---
+
+# 6.6 AI 总结功能
+
+## FR-24 总结文件格式
+
+优先级：P0
+
+AI 总结统一使用 Markdown：
+
+```text
+{stem}.summary.md
+```
+
+例如：
+
+```text
+episode-001.summary.md
+```
+
+总结文件建议包含 frontmatter：
+
+```markdown
+---
+type: summary
+source: episode-001.mp3
+source_hash: sha256:xxxx
+generator: mytool-summarize
+model: local-llm
+created_at: 2026-08-16T12:00:00+08:00
+---
+
+# episode-001 总结
+
+……
+```
+
+第一阶段即使没有 frontmatter，也应支持普通 Markdown。
+
+---
+
+## FR-25 总结生成入口
+
+优先级：P0，如果总结 CLI 已存在；否则 P1
+
+用户在资产详情页点击：
+
+```text
+生成总结
+```
+
+应用根据输入内容调用总结模块。
+
+输入优先级：
+
+```text
+1. 转录文本，适用于音视频
+2. 文档解析文本，适用于文档
+3. 原始 Markdown/TXT 文本
+```
+
+---
+
+## FR-26 总结命令模板
+
+优先级：P0，如果总结 CLI 已存在
+
+总结模块可配置命令模板：
+
+```text
+mytool summarize {input} --output {output}
+```
+
+或：
+
+```text
+mytool summarize --transcript {input} --output {output}
+```
+
+应用需要支持变量：
+
+```text
+{input}
+{output}
+{asset_title}
+{asset_type}
+```
+
+---
+
+## FR-27 总结覆盖策略
+
+优先级：P0
+
+如果已有总结文件：
+
+```text
+episode-001.summary.md
+```
+
+重新生成时应提示：
+
+```text
+已存在总结，是否覆盖？
+```
+
+第一阶段策略：
+
+```text
+默认不覆盖
+可选择覆盖
+覆盖前可备份到 .knowledge/backups/
+```
+
+---
+
+## FR-28 AI 笔记草稿
+
+优先级：P2
+
+AI 可以生成笔记草稿，但不应直接覆盖用户笔记。
+
+推荐文件：
+
+```text
+{stem}.ai-notes.md
+```
+
+而不是：
+
+```text
+{stem}.notes.md
+```
+
+---
+
+# 6.7 笔记功能
+
+## FR-29 用户笔记文件
+
+优先级：P0
+
+用户笔记文件为：
+
+```text
+{stem}.notes.md
+```
+
+例如：
+
+```text
+episode-001.notes.md
+```
+
+---
+
+## FR-30 笔记查看和编辑
+
+优先级：P0
+
+应用详情页应支持：
+
+```text
+查看笔记
+编辑笔记
+保存笔记
+```
+
+第一阶段可以使用简单 Markdown 文本框。
+
+后续可升级为更好的 Markdown 编辑器。
+
+---
+
+## FR-31 笔记保存
+
+优先级：P0
+
+保存笔记时直接写入文件：
+
+```text
+episode-001.notes.md
+```
+
+保持文件系统可见。
+
+保存后：
+
+```text
+更新 Artifact
+更新全文索引
+更新向量索引
+```
+
+---
+
+## FR-32 笔记保护
+
+优先级：P0
+
+AI 总结、转录、解析等任务不得覆盖用户笔记。
+
+任何自动化流程都不能写入：
+
+```text
+{stem}.notes.md
+```
+
+除非用户明确编辑。
+
+---
+
+# 6.8 搜索功能
+
+## FR-33 文件名搜索
+
+优先级：P0
+
+支持根据文件名和路径搜索。
+
+例如：
+
+```text
+episode
+paper
+知识管理
+```
+
+搜索范围：
+
+```text
+assets.title
+assets.relative_path
+artifacts.relative_path
+```
+
+---
+
+## FR-34 全文搜索
+
+优先级：P0
+
+使用 SQLite FTS5。
+
+全文索引范围：
+
+```text
+转录文本
+文档解析文本
+AI 总结
+用户笔记
+Markdown 文档
+TXT 文档
+```
+
+搜索结果应返回：
+
+```text
+资产标题
+文件路径
+命中片段
+匹配来源：transcript / summary / note / document
+```
+
+---
+
+## FR-35 向量搜索
+
+优先级：P0
+
+使用 LanceDB 存储向量。
+
+向量索引范围：
+
+```text
+转录文本
+AI 总结
+用户笔记
+文档解析文本
+Markdown/TXT 文档内容
+```
+
+搜索时支持：
+
+```text
+语义相似查询
+```
+
+例如：
+
+```text
+那期讲本地知识管理的播客
+关于文件监听的设计
+提到 CLI 模块化的内容
+```
+
+---
+
+## FR-36 搜索结果页
+
+优先级：P0
+
+搜索页提供三种模式：
+
+```text
+综合
+全文
+语义
+```
+
+第一阶段可以先做：
+
+```text
+全文 tab
+向量 tab
+文件名 tab
+```
+
+综合排序可放到 P2。
+
+---
+
+## FR-37 搜索过滤
+
+优先级：P1
+
+支持按类型过滤：
+
+```text
+音频
+视频
+文档
+```
+
+支持按是否有转录、总结、笔记过滤。
+
+---
+
+## FR-38 混合搜索
+
+优先级：P2
+
+后续可以做：
+
+```text
+关键词搜索 + 向量搜索融合排序
+```
+
+例如：
+
+```text
+Reciprocal Rank Fusion
+```
+
+第一阶段不强制。
+
+---
+
+# 6.9 向量索引
+
+## FR-39 LanceDB 存储位置
+
+优先级：P0
+
+LanceDB 数据存放在：
+
+```text
+.knowledge/vector/
+```
+
+例如：
+
+```text
+.knowledge/vector/lancedb/
+```
+
+---
+
+## FR-40 向量表设计
+
+优先级：P0
+
+建议表名：
+
+```text
+chunks
+```
+
+字段：
+
+```text
+id
+asset_id
+artifact_id
+artifact_kind
+asset_type
+relative_path
+chunk_index
+content
+content_hash
+embedding_model
+updated_at
+vector
+```
+
+示例：
+
+```json
+{
+  "id": "chunk_001",
+  "asset_id": "asset_001",
+  "artifact_id": "artifact_001",
+  "artifact_kind": "transcript",
+  "asset_type": "audio",
+  "relative_path": "podcasts/episode-001.mp3",
+  "chunk_index": 3,
+  "content": "这一段讨论了本地知识管理应用的架构……",
+  "content_hash": "sha256:xxxx",
+  "embedding_model": "bge-m3",
+  "updated_at": "2026-08-16T12:00:00+08:00",
+  "vector": [0.012, -0.034, "..."]
+}
+```
+
+---
+
+## FR-41 文本分块
+
+优先级：P0
+
+对长文本进行分块。
+
+建议参数：
+
+```text
+chunk_size: 500 - 1000 字符
+chunk_overlap: 50 - 150 字符
+```
+
+第一阶段可以按段落优先切分：
+
+```text
+优先按段落
+段落过长再按句子
+句子过长再按字符
+```
+
+---
+
+## FR-42 向量增量更新
+
+优先级：P0
+
+当 Artifact 变化时：
+
+```text
+删除该 artifact 旧向量
+重新分块
+重新 embedding
+写入 LanceDB
+```
+
+更新条件：
+
+```text
+artifact file_hash 变化
+artifact mtime 变化
+embedding model 变化
+chunk 策略变化
+```
+
+---
+
+## FR-43 向量删除
+
+优先级：P0
+
+以下情况需要删除向量：
+
+```text
+Asset 删除
+Artifact 删除
+Artifact 失效
+重建索引
+```
+
+---
+
+## FR-44 Embedding 模型配置
+
+优先级：P0
+
+应用应支持配置 embedding 模型。
+
+第一阶段可以实现一个抽象接口：
+
+```python
+class Embedder:
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        raise NotImplementedError
+```
+
+具体实现可以是：
+
+```text
+本地 sentence-transformers
+本地 ONNX 模型
+Ollama embedding API
+OpenAI 兼容 embedding API
+```
+
+需要记录：
+
+```text
+模型名称
+向量维度
+设备
+```
+
+如果模型变化，需要重建向量库。
+
+---
+
+# 6.10 任务中心
+
+## FR-45 任务列表
+
+优先级：P0
+
+应用应提供任务中心页面。
+
+显示：
+
+```text
+任务类型
+关联资产
+状态
+创建时间
+开始时间
+结束时间
+错误信息
+输出文件
+```
+
+---
+
+## FR-46 任务操作
+
+优先级：P1
+
+支持：
+
+```text
+重试失败任务
+取消运行中任务
+查看日志
+打开输出文件
+```
+
+取消任务第一阶段可通过终止子进程实现。
+
+---
+
+## FR-47 后台任务执行
+
+优先级：P0
+
+长任务必须后台执行，不能阻塞 UI。
+
+建议使用：
+
+```text
+asyncio subprocess
+或
+线程池 worker
+```
+
+第一阶段建议：
+
+```text
+一个默认 worker
+可配置最大并发数
+```
+
+---
+
+# 6.11 设置功能
+
+## FR-48 基础设置
+
+优先级：P0
+
+设置项包括：
+
+```text
+当前知识库路径
+扫描忽略目录
+是否启用文件监听
+debounce 时间
+是否启动时自动扫描
+最大任务并发数
+```
+
+---
+
+## FR-49 CLI 配置
+
+优先级：P0
+
+支持配置命令模板：
+
+```text
+transcribe_command
+summarize_command
+parse_command
+```
+
+示例：
+
+```text
+mytool transcribe {input}
+mytool summarize {input} --output {output}
+mytool parse {input} --output {output}
+```
+
+---
+
+## FR-50 Embedding 配置
+
+优先级：P0
+
+支持配置：
+
+```text
+embedding provider
+model name
+dimension
+device
+batch size
+```
+
+例如：
+
+```toml
+[embedding]
+provider = "sentence-transformers"
+model = "BAAI/bge-m3"
+device = "cpu"
+dimension = 1024
+batch_size = 32
+```
+
+---
+
+## FR-51 索引重建
+
+优先级：P0
+
+提供操作：
+
+```text
+重建全文索引
+重建向量索引
+清空缓存
+```
+
+---
+
+# 7. 非功能需求
+
+## NFR-01 本地优先
+
+应用默认只在本机运行。
+
+服务只监听：
+
+```text
+127.0.0.1
+```
+
+不暴露到局域网。
+
+---
+
+## NFR-02 隐私
+
+默认不上传用户文件。
+
+如果用户配置了远程 LLM 或远程 embedding API，需要明确提示。
+
+---
+
+## NFR-03 可重建性
+
+删除：
+
+```text
+.knowledge/db.sqlite
+.knowledge/vector/
+```
+
+后，应用应能通过重新扫描恢复：
+
+```text
+Asset
+Artifact
+全文索引
+向量索引
+```
+
+但任务历史可以丢失。
+
+用户手写笔记因为保存在文件中，不应丢失。
+
+---
+
+## NFR-04 性能目标
+
+以下为初步目标，需根据实际文件规模调整。
+
+### 扫描
+
+```text
+1,000 个文件：全量扫描 < 5 秒
+10,000 个文件：全量扫描 < 30 秒
+增量扫描：通常 < 2 秒
+```
+
+### 搜索
+
+```text
+文件名搜索 < 0.5 秒
+全文搜索 < 1 秒
+向量搜索 < 2 秒，5 万 chunk 内
+```
+
+### UI
+
+```text
+列表页打开 < 1 秒
+详情页打开 < 1 秒，不含大文件渲染
+```
+
+转录和总结性能取决于 CLI 和模型。
+
+---
+
+## NFR-05 稳定性
+
+要求：
+
+```text
+CLI 失败不影响 UI
+文件监听事件需要防抖
+大文件不能一次性读入内存做索引
+SQLite 写入需要事务
+长时间任务需要日志
+```
+
+---
+
+## NFR-06 可维护性
+
+代码结构要区分：
+
+```text
+UI 层
+服务层
+数据层
+工具调用层
+```
+
+NiceGUI 页面不直接操作数据库和 CLI，应通过 service 调用。
+
+---
+
+# 8. 技术架构
+
+## 8.1 技术选型
+
+```text
+语言：Python 3.11+
+后端框架：FastAPI
+界面：NiceGUI
+数据库：SQLite
+全文搜索：SQLite FTS5
+向量数据库：LanceDB
+文件监听：watchdog
+CLI 调用：asyncio.subprocess / subprocess
+配置：TOML
+日志：logging / loguru
+打包：后续可用 PyInstaller / pywebview / Tauri
+```
+
+---
+
+## 8.2 系统结构
+
+```text
+NiceGUI UI
+    ↓
+Service Layer
+    ↓
+Repository / Index Layer
+    ↓
+SQLite / LanceDB / File System
+    ↓
+CLI Runner
+    ↓
+mytool transcribe / summarize / parse
+```
+
+---
+
+## 8.3 推荐目录结构
+
+```text
+local-knowledge-hub/
+├── app/
+│   ├── main.py
+│   ├── config.py
+│   ├── dependencies.py
+│   │
+│   ├── domain/
+│   │   ├── models.py
+│   │   ├── enums.py
+│   │   └── rules.py
+│   │
+│   ├── services/
+│   │   ├── library_service.py
+│   │   ├── scanner_service.py
+│   │   ├── artifact_service.py
+│   │   ├── sync_service.py
+│   │   ├── task_service.py
+│   │   ├── transcription_service.py
+│   │   ├── summarization_service.py
+│   │   ├── note_service.py
+│   │   ├── search_service.py
+│   │   ├── fts_service.py
+│   │   ├── vector_service.py
+│   │   └── cli_runner.py
+│   │
+│   ├── repositories/
+│   │   ├── sqlite_repository.py
+│   │   ├── asset_repository.py
+│   │   ├── artifact_repository.py
+│   │   ├── task_repository.py
+│   │   └── lancedb_repository.py
+│   │
+│   ├── api/
+│   │   ├── router.py
+│   │   ├── assets.py
+│   │   ├── search.py
+│   │   ├── tasks.py
+│   │   └── library.py
+│   │
+│   ├── ui/
+│   │   ├── layout.py
+│   │   ├── pages/
+│   │   │   ├── home.py
+│   │   │   ├── library.py
+│   │   │   ├── assets.py
+│   │   │   ├── asset_detail.py
+│   │   │   ├── search.py
+│   │   │   ├── tasks.py
+│   │   │   └── settings.py
+│   │   └── components/
+│   │       ├── asset_table.py
+│   │       ├── search_box.py
+│   │       ├── task_status.py
+│   │       └── markdown_viewer.py
+│   │
+│   └── workers/
+│       ├── watcher.py
+│       └── task_worker.py
+│
+├── tests/
+├── pyproject.toml
+└── README.md
+```
+
+---
+
+# 9. 数据模型设计
+
+## 9.1 assets 表
+
+```sql
+CREATE TABLE assets (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  type TEXT NOT NULL,
+  relative_path TEXT NOT NULL UNIQUE,
+  absolute_path TEXT NOT NULL,
+  mime_type TEXT,
+  size INTEGER,
+  mtime INTEGER,
+  file_hash TEXT,
+  duration_seconds REAL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+```
+
+字段说明：
+
+```text
+type: audio / video / document
+relative_path: 相对知识库根目录路径
+file_hash: 可选，默认可为空
+duration_seconds: 可选，后续可从媒体元数据读取
+```
+
+---
+
+## 9.2 artifacts 表
+
+```sql
+CREATE TABLE artifacts (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  relative_path TEXT NOT NULL UNIQUE,
+  absolute_path TEXT NOT NULL,
+  file_hash TEXT,
+  mtime INTEGER,
+  source TEXT,
+  generator TEXT,
+  model TEXT,
+  status TEXT DEFAULT 'active',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+```
+
+字段说明：
+
+```text
+kind: transcript / transcript_meta / summary / note / parsed / meta
+source: app / cli / external
+status: active / stale / ambiguous / orphan
+```
+
+---
+
+## 9.3 tasks 表
+
+```sql
+CREATE TABLE tasks (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT,
+  type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  command TEXT,
+  params_json TEXT,
+  output_path TEXT,
+  error TEXT,
+  pid INTEGER,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT
+);
+```
+
+字段说明：
+
+```text
+type: transcription / summarization / parsing / rebuild_fts / rebuild_vector
+status: pending / running / success / failed / cancelled
+```
+
+---
+
+## 9.4 chunks 表，用于全文搜索
+
+```sql
+CREATE TABLE chunks (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT NOT NULL,
+  artifact_id TEXT,
+  kind TEXT NOT NULL,
+  relative_path TEXT NOT NULL,
+  chunk_index INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  content_hash TEXT,
+  created_at TEXT NOT NULL
+);
+```
+
+为 FTS5 提供内容。
+
+---
+
+## 9.5 FTS5 表
+
+```sql
+CREATE VIRTUAL TABLE chunks_fts USING fts5(
+  content,
+  content='chunks',
+  content_rowid='rowid'
+);
+```
+
+---
+
+# 10. LanceDB 设计
+
+## 10.1 存储路径
+
+```text
+.knowledge/vector/lancedb/
+```
+
+---
+
+## 10.2 表名
+
+```text
+chunks
+```
+
+---
+
+## 10.3 数据字段
+
+```python
+{
+    "id": "chunk_id",
+    "asset_id": "asset_id",
+    "artifact_id": "artifact_id",
+    "artifact_kind": "transcript",
+    "asset_type": "audio",
+    "relative_path": "podcasts/episode-001.mp3",
+    "chunk_index": 1,
+    "content": "chunk text",
+    "content_hash": "sha256:xxxx",
+    "embedding_model": "bge-m3",
+    "updated_at": "2026-08-16T12:00:00+08:00",
+    "vector": [0.1, 0.2, 0.3]
+}
+```
+
+---
+
+## 10.4 查询能力
+
+第一阶段支持：
+
+```text
+按 vector 相似查询
+按 asset_id 过滤
+按 artifact_kind 过滤
+按 asset_type 过滤
+```
+
+例如：
+
+```python
+table.search(query_vector)
+    .where("asset_type = 'audio'")
+    .limit(20)
+```
+
+---
+
+# 11. 文件识别规则
+
+## 11.1 原始文件识别
+
+```text
+音频扩展名 -> Asset(type=audio)
+视频扩展名 -> Asset(type=video)
+文档扩展名 -> Asset(type=document)
+```
+
+---
+
+## 11.2 派生文件识别
+
+```text
+{stem}.txt                  如果存在同 stem 音视频，则为 transcript
+{stem}.transcript.txt       transcript
+{stem}.transcript.json      transcript_meta
+{stem}.summary.md           summary
+{stem}.notes.md             note
+{stem}.parsed.md            parsed
+{stem}.meta.json            meta
+```
+
+---
+
+## 11.3 歧义处理
+
+如果：
+
+```text
+episode-001.mp3
+episode-001.mp4
+episode-001.txt
+```
+
+同时存在，则：
+
+```text
+episode-001.txt 不自动绑定
+标记为 ambiguous
+在 UI 中提示
+```
+
+后续可通过：
+
+```text
+sidecar 目录
+或 CLI 输出指定路径
+```
+
+解决。
+
+---
+
+# 12. 核心流程
+
+## 12.1 首次打开知识库
+
+```text
+1. 用户选择目录
+2. 检查 .knowledge 是否存在
+3. 不存在则创建
+4. 初始化 config.toml
+5. 初始化 SQLite
+6. 初始化 LanceDB
+7. 全量扫描
+8. 建立 Asset / Artifact
+9. 建立全文索引
+10. 建立向量索引
+```
+
+---
+
+## 12.2 主应用触发转录
+
+```text
+1. 用户点击生成转录
+2. 创建 Task(status=pending)
+3. 检查是否已有转录文件
+4. 若无冲突，启动 CLI
+5. Task(status=running)
+6. 等待 CLI 结束
+7. 检查输出文件
+8. 写入 Artifact
+9. 更新全文索引
+10. 更新向量索引
+11. Task(status=success)
+```
+
+---
+
+## 12.3 手动 CLI 生成转录
+
+```text
+1. 用户终端运行 CLI
+2. CLI 生成 txt
+3. watchdog 发现新文件
+4. 进入同步队列
+5. 识别为 transcript artifact
+6. 关联 asset
+7. 更新数据库
+8. 更新全文索引
+9. 更新向量索引
+10. UI 刷新状态
+```
+
+---
+
+## 12.4 生成总结
+
+```text
+1. 用户点击生成总结
+2. 创建 Task
+3. 读取输入内容：
+   - 音视频读取 transcript
+   - 文档读取 parsed 或原文
+4. 调用总结 CLI / LLM
+5. 输出 summary.md
+6. 识别为 summary artifact
+7. 建立索引
+8. Task 成功
+```
+
+---
+
+## 12.5 搜索
+
+```text
+1. 用户输入关键词
+2. 判断搜索模式
+3. 文件名搜索：查询 assets/artifacts
+4. 全文搜索：查询 FTS5
+5. 向量搜索：
+   - query embedding
+   - LanceDB search
+   - 返回 chunks
+6. 根据 chunk 关联 asset/artifact
+7. 展示结果
+```
+
+---
+
+# 13. UI 页面设计
+
+## 13.1 首页 / 知识库选择页
+
+功能：
+
+```text
+新建知识库
+打开已有知识库
+最近知识库
+```
+
+---
+
+## 13.2 资产列表页
+
+布局：
+
+```text
+顶部：搜索框、类型过滤、刷新按钮
+左侧：目录树或过滤器
+中间：资产列表
+```
+
+列表列：
+
+```text
+标题
+类型
+路径
+大小
+修改时间
+转录状态
+总结状态
+笔记状态
+```
+
+操作：
+
+```text
+打开详情
+触发转录
+触发总结
+重新索引
+打开文件位置
+```
+
+---
+
+## 13.3 资产详情页
+
+音频/视频：
+
+```text
+顶部：标题、标签、操作按钮
+中间：播放器
+下方 tabs：
+  转录
+  总结
+  笔记
+  文件信息
+  任务记录
+```
+
+文档：
+
+```text
+顶部：标题、操作按钮
+下方 tabs：
+  原文/解析文本
+  总结
+  笔记
+  文件信息
+```
+
+---
+
+## 13.4 搜索页
+
+```text
+搜索框
+模式切换：
+  文件名
+  全文
+  语义
+过滤器：
+  类型
+  是否有转录
+  是否有总结
+  是否有笔记
+结果列表：
+  标题
+  命中片段
+  来源
+  路径
+```
+
+---
+
+## 13.5 任务中心页
+
+```text
+任务列表
+状态过滤
+重试
+取消
+查看错误
+打开输出文件
+```
+
+---
+
+## 13.6 设置页
+
+```text
+库设置
+扫描设置
+CLI 命令
+Embedding 设置
+索引管理
+日志
+```
+
+---
+
+# 14. API 设计
+
+虽然第一阶段 NiceGUI 可以直接调用 service，但建议提前定义 API，方便以后换前端。
+
+## 14.1 Library API
+
+```text
+POST /api/library/open
+POST /api/library/create
+POST /api/library/scan
+GET  /api/library/status
+```
+
+---
+
+## 14.2 Assets API
+
+```text
+GET /api/assets
+GET /api/assets/{asset_id}
+GET /api/assets/{asset_id}/artifacts
+DELETE /api/assets/{asset_id}/index
+```
+
+---
+
+## 14.3 Tasks API
+
+```text
+GET /api/tasks
+GET /api/tasks/{task_id}
+POST /api/assets/{asset_id}/transcribe
+POST /api/assets/{asset_id}/summarize
+POST /api/tasks/{task_id}/cancel
+POST /api/tasks/{task_id}/retry
+```
+
+---
+
+## 14.4 Search API
+
+```text
+GET /api/search?q=keyword&mode=fulltext
+GET /api/search?q=keyword&mode=vector
+GET /api/search?q=keyword&mode=filename
+```
+
+---
+
+## 14.5 Settings API
+
+```text
+GET /api/settings
+PUT /api/settings
+POST /api/index/rebuild-fts
+POST /api/index/rebuild-vector
+```
+
+---
+
+# 15. 里程碑规划
+
+## M0：项目初始化
+
+目标：
+
+```text
+FastAPI + NiceGUI 能启动
+能显示首页
+能选择目录
+能创建 .knowledge
+```
+
+产出：
+
+```text
+项目骨架
+配置读取
+日志系统
+```
+
+---
+
+## M1：扫描和资产列表
+
+目标：
+
+```text
+能扫描目录
+能显示音频、视频、文档列表
+能查看详情
+```
+
+产出：
+
+```text
+assets 表
+扫描服务
+资产列表 UI
+详情页基础 UI
+```
+
+---
+
+## M2：派生文件识别和转录任务
+
+目标：
+
+```text
+能识别同名 txt
+能点击按钮调用转录 CLI
+能显示任务状态
+能识别外部 CLI 生成的 txt
+```
+
+产出：
+
+```text
+artifacts 表
+tasks 表
+CLI Runner
+任务 worker
+转录流程
+```
+
+---
+
+## M3：文件监听和同步
+
+目标：
+
+```text
+新增/修改/删除文件后自动同步
+```
+
+产出：
+
+```text
+watchdog watcher
+同步队列
+防抖机制
+UI 刷新
+```
+
+---
+
+## M4：全文搜索
+
+目标：
+
+```text
+能搜索文件名
+能全文搜索转录、总结、笔记、文档
+```
+
+产出：
+
+```text
+chunks 表
+FTS5 索引
+搜索页
+结果高亮
+```
+
+---
+
+## M5：LanceDB 向量搜索
+
+目标：
+
+```text
+能建立向量索引
+能进行语义搜索
+```
+
+产出：
+
+```text
+LanceDB 表
+Embedder 抽象
+文本分块
+向量搜索 UI
+```
+
+---
+
+## M6：总结与笔记
+
+目标：
+
+```text
+能生成总结
+能编辑笔记
+能索引总结和笔记
+```
+
+产出：
+
+```text
+summary 流程
+notes 编辑
+summary/notes 索引
+```
+
+---
+
+## M7：设置与索引重建
+
+目标：
+
+```text
+能配置 CLI
+能配置 embedding
+能重建索引
+```
+
+产出：
+
+```text
+设置页
+索引管理
+配置持久化
+```
+
+---
+
+# 16. 验收标准
+
+## 16.1 知识库
+
+验收：
+
+```text
+可以选择目录并创建 .knowledge
+可以再次打开该目录并加载状态
+删除 .knowledge 后重新扫描可以恢复 Asset 和 Artifact
+```
+
+---
+
+## 16.2 扫描
+
+验收：
+
+```text
+放入 mp3 / mp4 / pdf / md 后，应用能识别
+删除文件后，应用列表和索引能更新
+手动刷新能重新同步
+```
+
+---
+
+## 16.3 转录
+
+验收：
+
+```text
+已有 episode.mp3 和 episode.txt 时，应用显示已转录
+点击转录能调用 CLI 并生成 txt
+手动 CLI 生成 txt 后，应用能识别并索引
+```
+
+---
+
+## 16.4 搜索
+
+验收：
+
+```text
+文件名搜索能命中
+转录文本中的关键词能全文搜索命中
+语义相近的查询能通过 LanceDB 搜索命中
+```
+
+---
+
+## 16.5 总结和笔记
+
+验收：
+
+```text
+能查看 summary.md
+能生成或更新 summary.md，具体取决于总结模块是否可用
+能编辑 notes.md
+保存后搜索能命中新内容
+```
+
+---
+
+# 17. 风险与注意事项
+
+## 17.1 同名派生文件歧义
+
+风险：
+
+```text
+episode.mp3 和 episode.mp4 同时存在
+episode.txt 无法确定属于谁
+```
+
+解决：
+
+```text
+标记歧义
+后续支持 sidecar 目录
+CLI 支持指定输出路径
+```
+
+---
+
+## 17.2 大文件索引性能
+
+风险：
+
+```text
+大型转录文本或文档导致分块和 embedding 慢
+```
+
+解决：
+
+```text
+异步任务
+分块缓存
+按 artifact hash 增量更新
+限制单文件大小
+```
+
+---
+
+## 17.3 Embedding 模型变化
+
+风险：
+
+```text
+更换模型后向量维度不同，旧向量不可用
+```
+
+解决：
+
+```text
+记录 embedding_model 和 dimension
+模型变化时提示重建 LanceDB
+```
+
+---
+
+## 17.4 CLI 不稳定
+
+风险：
+
+```text
+CLI 失败、卡住、输出异常
+```
+
+解决：
+
+```text
+任务超时
+错误日志
+重试机制
+输出文件校验
+```
+
+---
+
+## 17.5 用户编辑文件被覆盖
+
+风险：
+
+```text
+AI 总结覆盖用户修改过的内容
+```
+
+解决：
+
+```text
+覆盖前提示
+自动备份
+用户笔记永不自动覆盖
+```
+
+---
+
+# 18. 待确认问题
+
+为了让 PRD 变成可执行版本，我需要你确认下面这些问题。
+
+---
+
+## 18.1 运行环境
+
+1. 你主要运行在什么系统？
+
+```text
+A. Windows
+B. macOS
+C. Linux
+D. 多个平台
+```
+
+2. 是否需要打包成可执行文件？
+
+```text
+A. 第一阶段不需要，源码运行即可
+B. 需要打包成命令
+C. 需要桌面图标应用
+```
+
+---
+
+## 18.2 知识库规模
+
+3. 你的知识库大概会有多少文件？
+
+```text
+A. 小于 1,000
+B. 1,000 - 10,000
+C. 10,000 - 50,000
+D. 大于 50,000
+```
+
+4. 音视频文件大概多长？
+
+```text
+A. 大多数小于 30 分钟
+B. 30 分钟 - 2 小时
+C. 大于 2 小时
+D. 混合
+```
+
+---
+
+## 18.3 已有 CLI
+
+5. 你的转录 CLI 命令格式是什么？
+
+例如：
+
+```bash
+mytool transcribe input.mp3
+```
+
+还是：
+
+```bash
+python -m mytools.asr input.mp3
+```
+
+6. 转录 CLI 是否支持指定输出路径？
+
+```text
+A. 不支持，只能同目录同名 txt
+B. 支持 --output
+C. 可以改
+```
+
+7. 转录 CLI 是否会输出 JSON segments？
+
+```text
+A. 没有
+B. 已有
+C. 计划做
+```
+
+8. 总结 CLI 是否已经存在？
+
+```text
+A. 已有
+B. 没有，需要主应用调用 LLM
+C. 计划做
+```
+
+9. 文档解析 CLI 是否已经存在？
+
+```text
+A. 已有
+B. 没有
+C. 计划做
+```
+
+---
+
+## 18.4 AI 模型
+
+10. 总结功能准备用什么？
+
+```text
+A. 本地 LLM
+B. OpenAI 兼容 API
+C. Ollama
+D. 还没定
+```
+
+11. Embedding 准备用什么？
+
+```text
+A. 本地 sentence-transformers
+B. Ollama embedding
+C. OpenAI 兼容 API
+D. 还没定
+```
+
+12. 是否允许应用联网？
+
+```text
+A. 完全不允许，必须本地
+B. 允许调用可信 API
+C. 可配置
+```
+
+---
+
+## 18.5 文件组织
+
+13. 你是否接受派生文件和原始文件放在同一目录？
+
+```text
+A. 接受，现在就想这样
+B. 接受，但后续可以迁移到 sidecar 目录
+C. 不希望，希望统一放到 .kb 或 .knowledge 下
+```
+
+14. 是否允许应用移动或重命名文件？
+
+```text
+A. 不允许，只读取和索引
+B. 允许用户手动触发整理
+C. 允许自动整理，但需要确认
+```
+
+---
+
+## 18.6 第一阶段范围
+
+15. 第一阶段是否必须包含 AI 总结？
+
+```text
+A. 必须
+B. 可以先只做转录和搜索
+C. 看开发成本
+```
+
+16. 第一阶段是否需要编辑笔记？
+
+```text
+A. 必须能编辑
+B. 能查看即可
+C. 可以第二阶段做
+```
+
+17. 第一阶段是否需要文件监听自动更新？
+
+```text
+A. 必须
+B. 手动刷新即可
+C. 可以第二阶段做
+```
+
+18. 第一阶段是否需要自动后台转录？
+
+```text
+A. 新增音频自动转录
+B. 手动点击转录即可
+C. 可配置
+```
+
+---
+
+## 18.7 UI 期望
+
+19. 你更在意哪一点？
+
+```text
+A. 开发快，能用就行
+B. 界面清晰，长期维护
+C. 接近桌面应用体验
+D. 未来方便换成 Web 前端
+```
+
+20. 你是否接受先用浏览器打开：
+
+```text
+http://127.0.0.1:8765
+```
+
+作为主界面？
+
+```text
+A. 接受
+B. 希望有独立窗口
+C. 必须原生桌面应用
+```
+
+---
+
+# 19. 基于当前信息的默认假设
+
+如果你暂时不回答，我会按下面假设继续细化：
+
+```text
+1. 单用户本地使用。
+2. 第一阶段只打开一个知识库。
+3. 服务只监听 127.0.0.1。
+4. 不自动移动或重命名用户文件。
+5. 派生文件优先放在原始文件同目录。
+6. 兼容现有 CLI：同目录同名 txt。
+7. 主应用支持手动触发转录。
+8. 手动 CLI 生成的文件通过扫描/监听识别。
+9. 全文搜索使用 SQLite FTS5。
+10. 向量搜索使用 LanceDB。
+11. Embedding 模型可配置，第一阶段需要一个本地或 API 实现。
+12. 总结功能先按 CLI/命令模板设计，如果没有 CLI，则后续接入 LLM service。
+13. 用户笔记保存为 {stem}.notes.md，AI 不得覆盖。
+14. 第一阶段不做 TTS。
+15. 第一阶段不做复杂标签和双链。
+```
+
+---
+
+# 20. 下一步
+
+你可以直接回答上面的 **待确认问题编号**，例如：
+
+```text
+18.1：1=B，2=A
+18.3：5=mytool transcribe input.mp3，6=A，7=A，8=B，9=B
+18.4：10=C，11=A，12=A
+18.5：13=B，14=A
+18.6：15=A，16=A，17=A，18=B
+18.7：19=B，20=A
+```
+
+你确认后，我可以把这份 PRD 收敛成：
+
+```text
+PRD v1.0
++
+第一阶段开发任务拆解
++
+数据库表结构定稿
++
+LanceDB schema 定稿
++
+NiceGUI 页面清单
++
+MVP 开发顺序
+```
+
+
+user：
+18.1：1=A，2=A
+18.3：4=B，5=mytool transcribe input.mp3，6=B，7=A，8=B，9=BC
+18.4：10=B，11=C，12=C
+18.5：13=B，14=A
+18.6：15=A，16=C 主要是管理，编辑可延后，预览可使用外部应用，17=C，18=B
+18.7：19=B，20=A
+项目只是个人使用，不会多用户，也不需要云端同步、移动端、团队协作。
+
+qwen：
+下面按你的回答整理成 **PRD v1.0**。这一版已经可以作为第一阶段开发依据。
+
+我先概括一下关键约束：
+
+```text
+运行环境：Windows 优先，源码运行即可，第一阶段不打包
+使用方式：个人本地使用，无多用户、无云同步、无移动端
+技术栈：Python + FastAPI + NiceGUI + SQLite + LanceDB
+文件管理：不移动、不重命名用户文件
+派生文件：当前接受同目录 sidecar，后续可迁移到 .kb sidecar
+转录：已有 CLI，命令类似 mytool transcribe input.mp3，支持 --output
+转录产物：第一阶段纯文本 txt，不做 JSON segments / 字幕跳转
+总结：无 CLI，由主应用调用 OpenAI 兼容 API 生成
+Embedding：OpenAI 兼容 API
+联网：可配置，允许调用 API，但需要可关闭
+文档解析：当前没有，计划做；第一阶段先做接口预留和纯文本文档支持
+笔记：第一阶段以管理、预览、外部编辑为主，不做复杂应用内编辑
+文件监听：第一阶段可不做，手动刷新/扫描即可
+自动转录：第一阶段不做，手动触发
+UI：浏览器访问 127.0.0.1 可接受，重视界面清晰和长期维护
+```
+
+---
+
+# 本地知识管理应用 PRD v1.0
+
+## 1. 产品名称与定位
+
+### 1.1 产品名称
+
+暂定：
+
+```text
+Local Knowledge Hub
+```
+
+中文名暂定：
+
+```text
+本地知识管理中心
+```
+
+---
+
+### 1.2 产品定位
+
+一个面向个人用户的本地知识管理应用，用于管理：
+
+```text
+播客音频
+视频文件
+文档文件
+```
+
+并围绕这些内容提供：
+
+```text
+统一查看
+文件管理状态展示
+转录任务触发
+AI 总结生成
+笔记文件管理
+文件名搜索
+全文搜索
+向量语义搜索
+```
+
+系统以本地文件系统为真实数据源，不改变用户原有文件组织方式。
+
+---
+
+### 1.3 核心原则
+
+```text
+1. 本地文件优先，应用不移动、不重命名、不删除用户原始文件。
+2. 派生文件落盘可见，可被外部 CLI 或手动编辑产生。
+3. 应用数据库只是索引和缓存，可重建。
+4. CLI 能力可独立使用，不依赖主应用。
+5. 主应用负责查看、管理、任务调度和搜索。
+6. 第一阶段只服务个人本地使用，不做多用户和云端能力。
+```
+
+---
+
+## 2. 第一阶段目标
+
+第一阶段要实现一个可自用的本地知识管理 MVP：
+
+```text
+1. 打开或新建本地知识库目录。
+2. 在库目录下创建 .knowledge/ 应用数据目录。
+3. 扫描音频、视频、文档文件。
+4. 展示资产列表和详情页。
+5. 识别已有转录 txt 文件。
+6. 支持手动触发转录 CLI。
+7. 支持手动刷新后识别外部 CLI 生成的文件。
+8. 支持 AI 总结生成，调用 OpenAI 兼容 API。
+9. 支持文件名搜索。
+10. 支持全文搜索。
+11. 支持基于 LanceDB 的向量语义搜索。
+12. 支持笔记文件识别、只读预览和外部编辑器打开。
+13. 支持配置 API、CLI、扫描规则和索引重建。
+```
+
+---
+
+## 3. 第一阶段明确不做
+
+```text
+多用户系统
+登录认证
+云端同步
+移动端
+团队协作
+插件系统
+复杂标签体系
+双链关系图
+应用内富文本笔记编辑器
+TTS 朗读
+字幕级音频跳转
+自动批量转录
+文件监听自动更新
+自动整理/移动/重命名文件
+文档版本历史
+总结版本对比
+复杂权限管理
+```
+
+其中文件监听、文档解析 CLI、sidecar 目录、笔记编辑放入后续阶段。
+
+---
+
+## 4. 用户角色
+
+只有一个角色：
+
+```text
+个人用户
+```
+
+拥有所有权限：
+
+```text
+打开知识库
+扫描文件
+触发转录
+生成总结
+查看笔记
+打开外部编辑器
+搜索
+修改配置
+重建索引
+```
+
+---
+
+## 5. 核心概念
+
+### 5.1 Library，知识库
+
+一个本地目录作为知识库根目录。
+
+例如：
+
+```text
+D:\Knowledge\
+```
+
+应用在该目录下创建：
+
+```text
+D:\Knowledge\.knowledge\
+```
+
+用于存放：
+
+```text
+配置
+SQLite 数据库
+全文索引
+LanceDB 向量数据
+任务记录
+缓存
+日志
+备份
+```
+
+第一阶段只支持当前打开的一个知识库。
+
+---
+
+### 5.2 Asset，原始知识资产
+
+原始文件。
+
+例如：
+
+```text
+podcasts\episode-001.mp3
+videos\talk-001.mp4
+documents\paper.pdf
+notes\reading.md
+```
+
+Asset 类型：
+
+```text
+audio
+video
+document
+```
+
+---
+
+### 5.3 Artifact，派生产物
+
+围绕 Asset 产生的文件。
+
+例如：
+
+```text
+episode-001.txt
+episode-001.summary.md
+episode-001.notes.md
+paper.parsed.md
+```
+
+Artifact 类型：
+
+```text
+transcript
+summary
+note
+parsed
+meta
+```
+
+第一阶段重点是：
+
+```text
+transcript
+summary
+note
+```
+
+---
+
+### 5.4 Task，任务
+
+主应用触发的后台任务。
+
+第一阶段任务类型：
+
+```text
+transcription
+summarization
+rebuild_fts
+rebuild_vector
+scan
+```
+
+任务状态：
+
+```text
+pending
+running
+success
+failed
+cancelled
+```
+
+---
+
+### 5.5 Search Index，搜索索引
+
+搜索分三类：
+
+```text
+文件名搜索
+全文搜索
+向量语义搜索
+```
+
+技术选择：
+
+```text
+文件名搜索：SQLite
+全文搜索：SQLite FTS5
+向量搜索：LanceDB
+```
+
+---
+
+## 6. 运行环境
+
+### 6.1 操作系统
+
+第一阶段优先支持：
+
+```text
+Windows
+```
+
+代码层面尽量使用 Python 跨平台写法，但不保证 macOS/Linux 完整体验。
+
+---
+
+### 6.2 Python 版本
+
+建议：
+
+```text
+Python 3.11+
+```
+
+---
+
+### 6.3 启动方式
+
+第一阶段不打包成 exe。
+
+启动方式：
+
+```bash
+python -m app.main
+```
+
+或：
+
+```bash
+uvicorn app.main:app --host 127.0.0.1 --port 8765
+```
+
+默认浏览器访问：
+
+```text
+http://127.0.0.1:8765
+```
+
+---
+
+### 6.4 网络策略
+
+服务只监听：
+
+```text
+127.0.0.1
+```
+
+不监听：
+
+```text
+0.0.0.0
+```
+
+调用外部 API 时可配置开启或关闭：
+
+```text
+LLM 总结 API
+Embedding API
+```
+
+如果关闭，则相关功能不可用，但本地管理和全文搜索仍可用。
+
+---
+
+## 7. 知识库目录设计
+
+### 7.1 用户知识库示例
+
+```text
+D:\Knowledge\
+├── podcasts\
+│   ├── episode-001.mp3
+│   ├── episode-001.txt
+│   ├── episode-001.summary.md
+│   └── episode-001.notes.md
+│
+├── videos\
+│   ├── talk-001.mp4
+│   └── talk-001.txt
+│
+├── documents\
+│   ├── paper.pdf
+│   ├── note.md
+│   └── note.summary.md
+│
+└── .knowledge\
+```
+
+---
+
+### 7.2 应用数据目录
+
+```text
+.knowledge\
+├── config.toml
+├── db.sqlite
+├── vector\
+│   └── lancedb\
+├── cache\
+│   └── embeddings.sqlite
+├── backups\
+├── logs\
+└── tasks\
+```
+
+说明：
+
+```text
+config.toml          应用配置
+db.sqlite            资产、产物、任务、全文索引元数据
+vector/lancedb       LanceDB 向量数据
+cache/embeddings.sqlite  embedding 缓存，减少 API 重复消耗
+backups              覆盖总结前的备份
+logs                 日志
+tasks                可选任务日志或临时输出
+```
+
+---
+
+## 8. 文件类型支持
+
+### 8.1 音频
+
+第一阶段支持：
+
+```text
+.mp3
+.m4a
+.wav
+.flac
+.aac
+.ogg
+.opus
+```
+
+---
+
+### 8.2 视频
+
+第一阶段支持：
+
+```text
+.mp4
+.mkv
+.mov
+.webm
+.avi
+```
+
+---
+
+### 8.3 文档
+
+第一阶段支持作为 Asset 管理：
+
+```text
+.pdf
+.docx
+.doc
+.md
+.txt
+.html
+.htm
+.epub
+```
+
+但内容解析能力分阶段：
+
+```text
+第一阶段可直接内容索引：
+.md
+.txt
+.html / .htm，可选简单提取
+
+第一阶段暂不解析：
+.pdf
+.docx
+.doc
+.epub
+```
+
+这些文件第一阶段仍可：
+
+```text
+列表管理
+文件名搜索
+打开文件位置
+用外部程序打开
+```
+
+但不会进入全文搜索、向量搜索和 AI 总结，直到文档解析模块接入。
+
+---
+
+## 9. 派生文件规则
+
+### 9.1 当前阶段规则
+
+采用同目录同名 sidecar 文件。
+
+原始文件：
+
+```text
+episode-001.mp3
+```
+
+可识别派生文件：
+
+```text
+episode-001.txt                  转录文本，兼容现有 CLI
+episode-001.transcript.txt       转录文本，可选更明确命名
+episode-001.summary.md           AI 总结
+episode-001.notes.md             用户笔记
+episode-001.parsed.md            文档解析结果，后续使用
+episode-001.meta.json            元数据，后续使用
+```
+
+---
+
+### 9.2 识别优先级
+
+转录文本识别顺序：
+
+```text
+1. {stem}.transcript.txt
+2. {stem}.txt
+```
+
+如果同时存在，优先：
+
+```text
+{stem}.transcript.txt
+```
+
+但第一阶段也可以两个都识别为 transcript artifact，并在 UI 中提示存在多个转录文件。
+
+---
+
+### 9.3 歧义处理
+
+如果同目录存在：
+
+```text
+episode-001.mp3
+episode-001.mp4
+episode-001.txt
+```
+
+则 `episode-001.txt` 无法明确属于哪个 Asset。
+
+第一阶段处理：
+
+```text
+标记为 ambiguous artifact
+不自动绑定
+在 UI 中提示
+```
+
+后续可通过：
+
+```text
+sidecar 目录
+CLI 指定输出路径
+更明确命名
+```
+
+解决。
+
+---
+
+### 9.4 后续 sidecar 目录预留
+
+后续阶段支持：
+
+```text
+episode-001.mp3.kb\
+├── transcript.txt
+├── summary.md
+├── notes.md
+└── meta.json
+```
+
+第一阶段不要求实现，但数据模型要能兼容。
+
+---
+
+## 10. 文件扫描与同步
+
+### 10.1 启动扫描
+
+优先级：P0
+
+应用启动并打开知识库后，应进行一次扫描。
+
+扫描内容：
+
+```text
+发现新增 Asset
+发现新增 Artifact
+更新已有文件状态
+移除已删除文件记录
+```
+
+---
+
+### 10.2 手动刷新
+
+优先级：P0
+
+第一阶段不做实时文件监听。
+
+UI 需要提供：
+
+```text
+刷新
+重新扫描
+```
+
+手动刷新后同步文件变化。
+
+---
+
+### 10.3 文件识别依据
+
+第一阶段使用：
+
+```text
+relative_path
+size
+mtime
+```
+
+可选开启：
+
+```text
+file_hash
+```
+
+默认不建议对所有大文件立即 hash，避免扫描慢。
+
+---
+
+### 10.4 删除处理
+
+当文件被删除：
+
+```text
+删除 Asset 或 Artifact 数据库记录
+删除全文索引
+删除向量索引
+```
+
+不恢复文件，不操作回收站。
+
+---
+
+### 10.5 移动/重命名
+
+用户要求不允许应用移动或重命名文件。
+
+如果用户自己在资源管理器中移动或重命名：
+
+第一阶段处理：
+
+```text
+视为旧文件删除，新文件新增
+```
+
+后续可通过 hash 识别同一文件并迁移记录。
+
+---
+
+### 10.6 忽略目录
+
+默认忽略：
+
+```text
+.knowledge/
+.git/
+__pycache__/
+node_modules/
+.trash/
+.venv/
+venv/
+$RECYCLE.BIN/
+System Volume Information/
+```
+
+可配置。
+
+---
+
+## 11. 资产管理功能
+
+### 11.1 资产列表
+
+优先级：P0
+
+展示字段：
+
+```text
+标题
+类型
+相对路径
+大小
+修改时间
+转录状态
+总结状态
+笔记状态
+索引状态
+```
+
+支持：
+
+```text
+按类型过滤：音频 / 视频 / 文档
+按目录过滤
+按名称排序
+按修改时间排序
+关键词过滤
+```
+
+---
+
+### 11.2 资产详情页
+
+优先级：P0
+
+详情页显示：
+
+```text
+标题
+类型
+路径
+大小
+修改时间
+转录状态
+总结状态
+笔记状态
+任务状态
+```
+
+操作按钮：
+
+```text
+打开文件
+打开所在文件夹
+生成转录
+生成总结
+刷新当前资产
+重新索引当前资产
+```
+
+音频/视频详情页：
+
+```text
+播放器，第一阶段可使用浏览器原生 audio/video
+转录内容预览
+总结内容预览
+笔记内容预览
+```
+
+文档详情页：
+
+```text
+文本内容预览，仅限可读取文本
+总结内容预览
+笔记内容预览
+```
+
+---
+
+### 11.3 外部打开
+
+优先级：P0
+
+Windows 下支持：
+
+```text
+用默认程序打开文件
+打开文件所在文件夹
+```
+
+实现建议使用：
+
+```python
+os.startfile(path)
+```
+
+打开文件夹可使用：
+
+```text
+explorer /select,"path"
+```
+
+---
+
+## 12. 转录功能
+
+### 12.1 CLI 现状
+
+当前已有转录 CLI：
+
+```bash
+mytool transcribe input.mp3
+```
+
+并支持：
+
+```bash
+mytool transcribe input.mp3 --output output.txt
+```
+
+当前不输出 JSON segments。
+
+因此第一阶段只做纯文本转录管理，不做时间轴、字幕、点击跳转。
+
+---
+
+### 12.2 转录命令配置
+
+优先级：P0
+
+配置项：
+
+```toml
+[cli]
+transcribe_command = 'mytool transcribe "{input}" --output "{output}"'
+```
+
+支持变量：
+
+```text
+{input}    原始音视频绝对路径
+{output}   期望输出 txt 绝对路径
+```
+
+默认输出：
+
+```text
+与原始文件同目录同名的 .txt
+```
+
+例如：
+
+```text
+D:\Knowledge\podcasts\episode-001.mp3
+```
+
+输出：
+
+```text
+D:\Knowledge\podcasts\episode-001.txt
+```
+
+---
+
+### 12.3 手动触发转录
+
+优先级：P0
+
+用户在音频或视频详情页点击：
+
+```text
+生成转录
+```
+
+流程：
+
+```text
+1. 创建 transcription task
+2. 检查是否已有 transcript artifact
+3. 如已存在，提示用户确认是否覆盖
+4. 调用 CLI
+5. 等待 CLI 结束
+6. 检查输出 txt 是否存在且非空
+7. 写入 artifact 记录
+8. 建立全文索引
+9. 建立向量索引
+10. 更新 UI 状态
+```
+
+---
+
+### 12.4 已有转录文件处理
+
+优先级：P0
+
+如果已有：
+
+```text
+episode-001.txt
+```
+
+点击转录时提示：
+
+```text
+已存在转录文件，是否覆盖？
+```
+
+策略：
+
+```text
+默认跳过
+用户确认后才覆盖
+覆盖前可备份到 .knowledge/backups/
+```
+
+---
+
+### 12.5 外部 CLI 生成文件
+
+优先级：P0
+
+用户手动运行：
+
+```bash
+mytool transcribe episode-001.mp3
+```
+
+生成：
+
+```text
+episode-001.txt
+```
+
+由于第一阶段没有实时监听，用户需要点击：
+
+```text
+刷新
+```
+
+或重新扫描。
+
+应用识别后：
+
+```text
+绑定到对应 Asset
+标记 source = external
+建立索引
+```
+
+---
+
+### 12.6 自动转录
+
+优先级：P2
+
+第一阶段不做自动转录。
+
+后续可配置：
+
+```text
+新增音视频后自动转录
+```
+
+---
+
+## 13. AI 总结功能
+
+### 13.1 总结方式
+
+根据你的选择，第一阶段没有总结 CLI。
+
+因此总结由主应用直接调用：
+
+```text
+OpenAI 兼容 API
+```
+
+---
+
+### 13.2 总结输入
+
+优先级：P0
+
+不同 Asset 的总结输入不同。
+
+#### 音频/视频
+
+必须存在转录文本：
+
+```text
+{stem}.txt
+或
+{stem}.transcript.txt
+```
+
+如果没有转录：
+
+```text
+禁用生成总结按钮
+提示先生成转录
+```
+
+#### 文档
+
+第一阶段可总结：
+
+```text
+.md
+.txt
+.html / .htm，若实现文本提取
+```
+
+暂不可总结：
+
+```text
+.pdf
+.docx
+.doc
+.epub
+```
+
+原因是文档解析模块尚未实现。
+
+后续文档解析 CLI 接入后，总结输入改为：
+
+```text
+{stem}.parsed.md
+```
+
+---
+
+### 13.3 总结输出
+
+输出文件：
+
+```text
+{stem}.summary.md
+```
+
+例如：
+
+```text
+episode-001.summary.md
+```
+
+文件内容建议包含 frontmatter：
+
+```markdown
+---
+type: summary
+source: episode-001.mp3
+source_hash: 
+generator: openai_compatible
+model: gpt-4o-mini
+created_at: 2026-08-16T12:00:00+08:00
+---
+
+# episode-001 总结
+
+## 核心内容
+
+...
+
+## 关键点
+
+...
+
+## 可能值得后续关注
+
+...
+```
+
+第一阶段即使模型输出没有 frontmatter，应用也应自动补充基础 frontmatter。
+
+---
+
+### 13.4 总结覆盖策略
+
+优先级：P0
+
+如果已有：
+
+```text
+episode-001.summary.md
+```
+
+重新生成时：
+
+```text
+提示已存在总结
+用户确认后才覆盖
+覆盖前备份到 .knowledge/backups/
+```
+
+备份命名建议：
+
+```text
+episode-001.summary.20260816-120000.md
+```
+
+---
+
+### 13.5 长文本总结策略
+
+优先级：P0
+
+播客和视频时长大多在：
+
+```text
+30 分钟 - 2 小时
+```
+
+转录文本可能超过模型上下文限制。
+
+第一阶段采用简单分层总结：
+
+```text
+1. 将转录文本按段落切块
+2. 对每个块生成局部摘要
+3. 将局部摘要合并生成最终总结
+```
+
+如果 API 调用失败，可降级为：
+
+```text
+截取前 N 个字符生成总结
+```
+
+并在总结 frontmatter 或任务日志中记录：
+
+```text
+summary_mode: truncated
+```
+
+---
+
+### 13.6 总结 Prompt
+
+配置中应支持 Prompt 模板。
+
+默认模板示例：
+
+```text
+你是一个知识管理助手。
+请根据下面内容生成中文总结。
+
+要求：
+1. 先给出 3-5 句核心总结。
+2. 再列出 5-15 个关键点。
+3. 如果内容包含行动项，请单独列出。
+4. 不要编造不存在的信息。
+5. 使用 Markdown 格式。
+
+内容：
+{content}
+```
+
+分段摘要模板示例：
+
+```text
+请总结下面这段内容，保留关键信息，输出简洁中文摘要。
+
+内容：
+{chunk}
+```
+
+合并摘要模板示例：
+
+```text
+下面是一篇长内容的多段摘要。
+请根据这些摘要生成最终中文总结。
+
+要求：
+1. 先给出核心总结。
+2. 再列出关键点。
+3. 不要编造不存在的信息。
+
+分段摘要：
+{partial_summaries}
+```
+
+---
+
+### 13.7 总结任务状态
+
+优先级：P0
+
+总结任务需要记录：
+
+```text
+task_id
+asset_id
+type = summarization
+status
+input_artifact_id
+model
+api_base_url
+error
+created_at
+started_at
+finished_at
+output_path
+```
+
+---
+
+## 14. 笔记功能
+
+根据你的选择，第一阶段笔记以管理和预览为主，不做复杂编辑。
+
+---
+
+### 14.1 笔记文件
+
+优先级：P0
+
+笔记文件：
+
+```text
+{stem}.notes.md
+```
+
+例如：
+
+```text
+episode-001.notes.md
+```
+
+---
+
+### 14.2 笔记识别
+
+优先级：P0
+
+扫描时如果发现：
+
+```text
+episode-001.notes.md
+```
+
+则识别为：
+
+```text
+episode-001.mp3 的 note artifact
+```
+
+如果没有 notes 文件，不自动创建。
+
+---
+
+### 14.3 笔记展示
+
+优先级：P0
+
+详情页提供笔记 tab：
+
+```text
+只读预览 Markdown
+显示文件路径
+显示修改时间
+```
+
+---
+
+### 14.4 外部编辑
+
+优先级：P0
+
+提供按钮：
+
+```text
+用外部编辑器打开
+```
+
+Windows 下使用默认程序打开：
+
+```text
+episode-001.notes.md
+```
+
+用户外部保存后，由于第一阶段无监听，需要点击刷新重新索引。
+
+---
+
+### 14.5 应用内编辑
+
+优先级：P2
+
+第一阶段不做应用内编辑。
+
+后续可加：
+
+```text
+简单 Markdown 编辑
+保存
+自动索引
+```
+
+---
+
+### 14.6 笔记保护
+
+优先级：P0
+
+任何自动任务不得覆盖：
+
+```text
+{stem}.notes.md
+```
+
+AI 总结只写：
+
+```text
+{stem}.summary.md
+```
+
+后续 AI 笔记草稿只写：
+
+```text
+{stem}.ai-notes.md
+```
+
+---
+
+## 15. 文档解析策略
+
+你当前文档解析 CLI：
+
+```text
+尚未实现，计划做
+```
+
+因此第一阶段采取保守策略。
+
+---
+
+### 15.1 第一阶段支持
+
+可直接读取并索引：
+
+```text
+.md
+.txt
+```
+
+可选支持：
+
+```text
+.html / .htm
+```
+
+这些文件可以：
+
+```text
+全文搜索
+向量搜索
+生成总结
+```
+
+---
+
+### 15.2 第一阶段暂不支持解析
+
+```text
+.pdf
+.docx
+.doc
+.epub
+```
+
+这些文件可以：
+
+```text
+作为 Asset 管理
+文件名搜索
+外部打开
+查看详情
+```
+
+但：
+
+```text
+不进入全文搜索
+不进入向量搜索
+不能生成 AI 总结
+```
+
+UI 显示：
+
+```text
+等待文档解析模块
+```
+
+---
+
+### 15.3 后续接入
+
+后续文档解析 CLI 接入后，定义命令模板：
+
+```toml
+parse_command = 'mytool parse "{input}" --output "{output}"'
+```
+
+输出：
+
+```text
+{stem}.parsed.md
+```
+
+一旦 parsed.md 生成：
+
+```text
+全文索引
+向量索引
+AI 总结
+```
+
+都基于 parsed.md。
+
+---
+
+## 16. 搜索功能
+
+### 16.1 搜索入口
+
+优先级：P0
+
+全局搜索框。
+
+搜索模式：
+
+```text
+文件名
+全文
+语义
+```
+
+第一阶段可以做成三个 tab。
+
+---
+
+### 16.2 文件名搜索
+
+优先级：P0
+
+搜索范围：
+
+```text
+Asset 标题
+Asset 相对路径
+Artifact 相对路径
+```
+
+实现：
+
+```sql
+LIKE
+```
+
+后续可优化为 SQLite FTS。
+
+---
+
+### 16.3 全文搜索
+
+优先级：P0
+
+使用 SQLite FTS5。
+
+索引内容：
+
+```text
+转录文本
+总结文本
+笔记文本
+Markdown 文档
+TXT 文档
+HTML 提取文本，若实现
+```
+
+不索引：
+
+```text
+未解析 PDF/DOCX 二进制内容
+```
+
+搜索结果展示：
+
+```text
+资产标题
+命中文件路径
+命中来源：transcript / summary / note / document
+命中片段
+```
+
+---
+
+### 16.4 向量搜索
+
+优先级：P0
+
+使用 LanceDB。
+
+搜索流程：
+
+```text
+1. 用户输入查询文本
+2. 调用 Embedding API 生成 query vector
+3. 在 LanceDB 中检索 top_k chunks
+4. 根据 chunk 关联 asset/artifact
+5. 返回结果
+```
+
+结果展示：
+
+```text
+资产标题
+命中内容片段
+来源类型
+相对路径
+相似度分数，可选
+```
+
+---
+
+### 16.5 向量索引范围
+
+第一阶段索引：
+
+```text
+transcript
+summary
+note
+document text，仅限可读文本
+```
+
+暂不索引：
+
+```text
+未解析 PDF/DOCX
+二进制文件
+```
+
+---
+
+### 16.6 搜索过滤
+
+优先级：P1
+
+支持：
+
+```text
+按类型过滤：audio / video / document
+按来源过滤：transcript / summary / note / document
+```
+
+---
+
+### 16.7 综合搜索
+
+优先级：P2
+
+第一阶段不做复杂混合排序。
+
+后续可以做：
+
+```text
+全文结果 + 向量结果融合
+Reciprocal Rank Fusion
+```
+
+---
+
+## 17. LanceDB 向量索引设计
+
+### 17.1 存储路径
+
+```text
+.knowledge/vector/lancedb
+```
+
+---
+
+### 17.2 表名
+
+```text
+chunks
+```
+
+---
+
+### 17.3 字段设计
+
+```text
+id
+asset_id
+artifact_id
+artifact_kind
+asset_type
+relative_path
+chunk_index
+content
+content_hash
+embedding_model
+updated_at
+vector
+```
+
+示例：
+
+```json
+{
+  "id": "chunk_20260816_000001",
+  "asset_id": "asset_0001",
+  "artifact_id": "artifact_0001",
+  "artifact_kind": "transcript",
+  "asset_type": "audio",
+  "relative_path": "podcasts/episode-001.mp3",
+  "chunk_index": 3,
+  "content": "这里是一段转录文本……",
+  "content_hash": "sha256:xxxx",
+  "embedding_model": "text-embedding-3-small",
+  "updated_at": "2026-08-16T12:00:00+08:00",
+  "vector": [0.012, -0.034, 0.056]
+}
+```
+
+---
+
+### 17.4 分块策略
+
+第一阶段建议：
+
+```text
+max_chunk_chars = 800
+chunk_overlap = 100
+```
+
+切块顺序：
+
+```text
+优先按段落
+段落过长按句子
+句子过长按字符
+```
+
+---
+
+### 17.5 Embedding API
+
+使用 OpenAI 兼容 API。
+
+配置项：
+
+```toml
+[embedding]
+enabled = true
+provider = "openai_compatible"
+base_url = "https://api.example.com/v1"
+api_key_env = "OPENAI_API_KEY"
+model = "text-embedding-3-small"
+dimension = 1536
+batch_size = 32
+timeout = 120
+```
+
+注意：
+
+```text
+dimension 必须和模型实际输出一致
+模型或维度变化后需要重建向量索引
+```
+
+---
+
+### 17.6 Embedding 缓存
+
+为了减少 API 重复调用，需要缓存 embedding。
+
+缓存数据库：
+
+```text
+.knowledge/cache/embeddings.sqlite
+```
+
+表结构：
+
+```sql
+CREATE TABLE embedding_cache (
+  content_hash TEXT PRIMARY KEY,
+  model TEXT NOT NULL,
+  vector BLOB NOT NULL,
+  dimension INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+```
+
+逻辑：
+
+```text
+1. 对 chunk 内容计算 content_hash
+2. 查询缓存
+3. 命中则直接使用
+4. 未命中则调用 API
+5. 写入缓存
+```
+
+如果模型变化：
+
+```text
+旧缓存不复用
+```
+
+---
+
+### 17.7 向量更新
+
+当 Artifact 变化：
+
+```text
+删除该 artifact_id 的旧向量
+重新分块
+重新 embedding
+写入 LanceDB
+```
+
+当 Asset 删除：
+
+```text
+删除该 asset_id 的所有向量
+```
+
+---
+
+### 17.8 向量重建
+
+设置页提供：
+
+```text
+重建向量索引
+```
+
+重建时：
+
+```text
+清空 LanceDB chunks 表
+重新扫描所有可索引 artifact
+重新分块
+重新 embedding
+```
+
+需要注意 API 成本。
+
+---
+
+## 18. 全文索引设计
+
+### 18.1 chunks 表
+
+```sql
+CREATE TABLE chunks (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT NOT NULL,
+  artifact_id TEXT,
+  kind TEXT NOT NULL,
+  relative_path TEXT NOT NULL,
+  chunk_index INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  content_hash TEXT,
+  created_at TEXT NOT NULL
+);
+```
+
+---
+
+### 18.2 FTS5 表
+
+```sql
+CREATE VIRTUAL TABLE chunks_fts USING fts5(
+  content,
+  content='chunks',
+  content_rowid='rowid'
+);
+```
+
+---
+
+### 18.3 索引范围
+
+```text
+transcript
+summary
+note
+document_text
+```
+
+---
+
+### 18.4 搜索片段
+
+使用：
+
+```sql
+snippet(chunks_fts, 0, '<b>', '</b>', '...', 20)
+```
+
+前端需要注意 HTML 转义或安全渲染。
+
+---
+
+## 19. 数据模型定稿
+
+### 19.1 assets
+
+```sql
+CREATE TABLE assets (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  type TEXT NOT NULL,
+  relative_path TEXT NOT NULL UNIQUE,
+  absolute_path TEXT NOT NULL,
+  mime_type TEXT,
+  size INTEGER,
+  mtime INTEGER,
+  file_hash TEXT,
+  duration_seconds REAL,
+  parse_status TEXT DEFAULT 'unknown',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+```
+
+`parse_status`：
+
+```text
+unknown
+not_required
+pending
+parsed
+failed
+```
+
+---
+
+### 19.2 artifacts
+
+```sql
+CREATE TABLE artifacts (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  relative_path TEXT NOT NULL UNIQUE,
+  absolute_path TEXT NOT NULL,
+  file_hash TEXT,
+  mtime INTEGER,
+  source TEXT,
+  generator TEXT,
+  model TEXT,
+  status TEXT DEFAULT 'active',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+```
+
+`kind`：
+
+```text
+transcript
+summary
+note
+parsed
+meta
+```
+
+`source`：
+
+```text
+app
+cli
+external
+```
+
+`status`：
+
+```text
+active
+stale
+ambiguous
+orphan
+```
+
+---
+
+### 19.3 tasks
+
+```sql
+CREATE TABLE tasks (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT,
+  type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  command TEXT,
+  params_json TEXT,
+  output_path TEXT,
+  error TEXT,
+  pid INTEGER,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT
+);
+```
+
+---
+
+### 19.4 chunks
+
+见全文索引部分。
+
+---
+
+### 19.5 embedding_cache
+
+```sql
+CREATE TABLE embedding_cache (
+  content_hash TEXT PRIMARY KEY,
+  model TEXT NOT NULL,
+  vector BLOB NOT NULL,
+  dimension INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+```
+
+---
+
+## 20. 配置设计
+
+配置文件：
+
+```text
+.knowledge/config.toml
+```
+
+示例：
+
+```toml
+[app]
+host = "127.0.0.1"
+port = 8765
+open_browser = true
+log_level = "INFO"
+
+[library]
+watch_enabled = false
+scan_on_startup = true
+ignore = [
+  ".knowledge",
+  ".git",
+  "__pycache__",
+  "node_modules",
+  ".venv",
+  "venv",
+  "$RECYCLE.BIN",
+  "System Volume Information"
+]
+
+[task]
+max_workers = 1
+task_timeout_seconds = 7200
+
+[cli]
+transcribe_command = 'mytool transcribe "{input}" --output "{output}"'
+parse_command = ""
+
+[llm.summary]
+enabled = true
+provider = "openai_compatible"
+base_url = "https://api.example.com/v1"
+api_key_env = "OPENAI_API_KEY"
+model = "gpt-4o-mini"
+temperature = 0.2
+max_tokens = 2000
+timeout = 180
+max_input_chars = 24000
+chunk_chars = 6000
+
+[embedding]
+enabled = true
+provider = "openai_compatible"
+base_url = "https://api.example.com/v1"
+api_key_env = "OPENAI_API_KEY"
+model = "text-embedding-3-small"
+dimension = 1536
+batch_size = 32
+timeout = 120
+
+[index]
+chunk_max_chars = 800
+chunk_overlap = 100
+rebuild_batch_size = 100
+```
+
+说明：
+
+```text
+api_key_env 表示从环境变量读取 API Key。
+也可以支持 api_key，但不推荐。
+```
+
+---
+
+## 21. 技术架构
+
+### 21.1 总体架构
+
+```text
+浏览器
+  ↓
+NiceGUI UI
+  ↓
+FastAPI / Service Layer
+  ↓
+SQLite / LanceDB / File System
+  ↓
+Task Worker
+  ↓
+CLI Runner / OpenAI Compatible API
+```
+
+---
+
+### 21.2 模块划分
+
+```text
+app/
+├── main.py
+├── config.py
+├── dependencies.py
+│
+├── domain/
+│   ├── models.py
+│   ├── enums.py
+│   └── rules.py
+│
+├── services/
+│   ├── library_service.py
+│   ├── scanner_service.py
+│   ├── artifact_service.py
+│   ├── sync_service.py
+│   ├── task_service.py
+│   ├── transcription_service.py
+│   ├── summarization_service.py
+│   ├── note_service.py
+│   ├── search_service.py
+│   ├── fts_service.py
+│   ├── vector_service.py
+│   ├── embedding_service.py
+│   ├── llm_client.py
+│   └── cli_runner.py
+│
+├── repositories/
+│   ├── sqlite_repository.py
+│   ├── asset_repository.py
+│   ├── artifact_repository.py
+│   ├── task_repository.py
+│   ├── chunk_repository.py
+│   └── lancedb_repository.py
+│
+├── api/
+│   ├── router.py
+│   ├── library.py
+│   ├── assets.py
+│   ├── tasks.py
+│   ├── search.py
+│   └── settings.py
+│
+├── ui/
+│   ├── layout.py
+│   ├── pages/
+│   │   ├── home.py
+│   │   ├── assets.py
+│   │   ├── asset_detail.py
+│   │   ├── search.py
+│   │   ├── tasks.py
+│   │   └── settings.py
+│   └── components/
+│       ├── asset_table.py
+│       ├── search_box.py
+│       ├── task_status.py
+│       ├── markdown_viewer.py
+│       └── status_badge.py
+│
+└── workers/
+    └── task_worker.py
+```
+
+---
+
+## 22. UI 页面设计
+
+### 22.1 首页 / 知识库选择页
+
+功能：
+
+```text
+打开知识库
+新建知识库
+显示最近知识库，P1
+```
+
+第一阶段可以简化为：
+
+```text
+输入/选择本地目录
+打开
+```
+
+---
+
+### 22.2 资产列表页
+
+顶部：
+
+```text
+搜索框
+类型过滤
+目录过滤
+刷新按钮
+新建/打开库
+```
+
+主体：
+
+```text
+资产表格
+```
+
+每行操作：
+
+```text
+详情
+打开文件
+打开目录
+生成转录
+生成总结
+```
+
+状态徽章：
+
+```text
+已转录
+未转录
+已总结
+未总结
+有笔记
+无笔记
+歧义文件
+未解析
+```
+
+---
+
+### 22.3 资产详情页
+
+顶部：
+
+```text
+标题
+类型
+路径
+状态
+操作按钮
+```
+
+Tabs：
+
+```text
+概览
+转录
+总结
+笔记
+文件信息
+任务记录
+```
+
+音频/视频概览：
+
+```text
+播放器
+```
+
+转录 tab：
+
+```text
+只读 Markdown / 文本预览
+```
+
+总结 tab：
+
+```text
+Markdown 预览
+生成总结按钮
+```
+
+笔记 tab：
+
+```text
+Markdown 只读预览
+外部编辑器打开按钮
+```
+
+文件信息 tab：
+
+```text
+路径
+大小
+mtime
+hash，可选
+关联 artifacts
+```
+
+任务记录 tab：
+
+```text
+该资产相关任务
+```
+
+---
+
+### 22.4 搜索页
+
+```text
+搜索框
+模式切换：文件名 / 全文 / 语义
+过滤器：类型、来源
+结果列表
+```
+
+结果项：
+
+```text
+资产标题
+相对路径
+命中来源
+命中片段
+打开详情
+```
+
+---
+
+### 22.5 任务中心页
+
+```text
+任务列表
+状态过滤
+重试
+取消，P1
+查看错误
+打开输出文件
+```
+
+---
+
+### 22.6 设置页
+
+```text
+API 设置
+CLI 设置
+扫描设置
+索引设置
+重建全文索引
+重建向量索引
+查看日志
+```
+
+---
+
+## 23. API 设计
+
+虽然第一阶段 UI 使用 NiceGUI，但为了长期维护，建议提前定义 API。
+
+---
+
+### 23.1 Library API
+
+```text
+POST /api/library/open
+POST /api/library/scan
+GET  /api/library/status
+```
+
+---
+
+### 23.2 Assets API
+
+```text
+GET /api/assets
+GET /api/assets/{asset_id}
+GET /api/assets/{asset_id}/artifacts
+POST /api/assets/{asset_id}/transcribe
+POST /api/assets/{asset_id}/summarize
+POST /api/assets/{asset_id}/reindex
+```
+
+---
+
+### 23.3 Search API
+
+```text
+GET /api/search?q=keyword&mode=filename
+GET /api/search?q=keyword&mode=fulltext
+GET /api/search?q=keyword&mode=vector
+```
+
+---
+
+### 23.4 Tasks API
+
+```text
+GET /api/tasks
+GET /api/tasks/{task_id}
+POST /api/tasks/{task_id}/cancel
+POST /api/tasks/{task_id}/retry
+```
+
+---
+
+### 23.5 Settings API
+
+```text
+GET /api/settings
+PUT /api/settings
+POST /api/index/rebuild-fts
+POST /api/index/rebuild-vector
+```
+
+---
+
+## 24. 任务系统设计
+
+### 24.1 任务队列
+
+第一阶段使用简单本地任务队列：
+
+```text
+SQLite tasks 表
++
+后台 worker
+```
+
+默认：
+
+```text
+max_workers = 1
+```
+
+避免多个转录任务同时占用资源。
+
+---
+
+### 24.2 任务执行
+
+CLI 类任务：
+
+```text
+asyncio.create_subprocess_exec
+```
+
+Windows 注意：
+
+```text
+不要使用 shell=True
+命令解析为 list
+路径使用绝对路径
+```
+
+API 类任务：
+
+```text
+httpx AsyncClient
+```
+
+---
+
+### 24.3 超时
+
+默认任务超时：
+
+```text
+7200 秒
+```
+
+可配置。
+
+总结 API 单次请求超时：
+
+```text
+120 - 180 秒
+```
+
+---
+
+### 24.4 错误处理
+
+任务失败时记录：
+
+```text
+error message
+stdout/stderr 摘要
+API response status
+API error body 摘要
+```
+
+UI 显示友好提示：
+
+```text
+转录失败，请查看任务详情
+总结失败：API 超时
+向量索引失败：embedding 配置无效
+```
+
+---
+
+## 25. Windows 特别注意事项
+
+### 25.1 路径
+
+使用：
+
+```python
+pathlib.Path
+```
+
+避免手动拼接字符串。
+
+---
+
+### 25.2 长路径
+
+Windows 可能存在长路径问题。
+
+建议：
+
+```text
+知识库目录不要过深
+文件路径过长时记录错误
+```
+
+---
+
+### 25.3 编码
+
+文本文件默认尝试：
+
+```text
+utf-8
+utf-8-sig
+gbk，仅作为 fallback
+```
+
+转录 txt 建议要求 CLI 输出 UTF-8。
+
+---
+
+### 25.4 命令执行
+
+命令模板不要直接 `shell=True`。
+
+建议：
+
+```text
+解析命令模板为 argv list
+替换 {input} / {output}
+使用 subprocess/exec 调用
+```
+
+---
+
+## 26. 隐私与安全
+
+### 26.1 本地服务
+
+```text
+只监听 127.0.0.1
+```
+
+---
+
+### 26.2 API Key
+
+优先使用环境变量：
+
+```text
+OPENAI_API_KEY
+```
+
+配置中只写：
+
+```toml
+api_key_env = "OPENAI_API_KEY"
+```
+
+如果用户坚持写入配置文件，需要提示风险。
+
+---
+
+### 26.3 远程 API 提示
+
+当调用总结或 embedding API 时，应提示：
+
+```text
+部分内容将发送到配置的 API 服务
+```
+
+如果用户关闭远程 API：
+
+```text
+总结不可用
+向量搜索不可用
+本地全文搜索仍可用
+```
+
+---
+
+## 27. 性能目标
+
+以下为第一阶段目标。
+
+### 27.1 扫描
+
+```text
+1,000 文件：全量扫描 < 5 秒
+10,000 文件：全量扫描 < 30 秒
+手动增量刷新 < 3 秒，小量变化
+```
+
+---
+
+### 27.2 搜索
+
+```text
+文件名搜索 < 0.5 秒
+全文搜索 < 1 秒
+向量搜索 < 2 秒，50,000 chunks 内
+```
+
+向量搜索依赖 embedding API 查询延迟。
+
+---
+
+### 27.3 UI
+
+```text
+页面切换 < 1 秒
+列表页加载 < 1 秒
+详情页加载 < 1 秒，不含大文本渲染
+```
+
+---
+
+## 28. 里程碑计划
+
+### M0：项目骨架
+
+目标：
+
+```text
+FastAPI + NiceGUI 启动
+配置加载
+日志初始化
+首页可访问
+```
+
+完成标志：
+
+```text
+python -m app.main 可运行
+浏览器打开 127.0.0.1:8765
+```
+
+---
+
+### M1：知识库与扫描
+
+目标：
+
+```text
+选择目录
+创建 .knowledge
+初始化 SQLite
+扫描文件
+展示资产列表
+```
+
+完成标志：
+
+```text
+能显示音频、视频、文档列表
+能手动刷新
+能打开文件位置
+```
+
+---
+
+### M2：派生文件识别
+
+目标：
+
+```text
+识别 transcript / summary / note
+显示资产状态
+处理歧义文件
+```
+
+完成标志：
+
+```text
+已有 episode.mp3 + episode.txt 时显示已转录
+已有 summary.md / notes.md 时显示状态
+```
+
+---
+
+### M3：转录任务
+
+目标：
+
+```text
+点击生成转录
+调用 CLI
+任务状态
+识别输出 txt
+建立索引
+```
+
+完成标志：
+
+```text
+可通过 UI 生成转录
+CLI 失败会显示错误
+外部 CLI 生成后刷新可识别
+```
+
+---
+
+### M4：全文搜索
+
+目标：
+
+```text
+建立 chunks
+建立 FTS5
+文件名搜索
+全文搜索
+```
+
+完成标志：
+
+```text
+可以搜索转录、总结、笔记、md/txt 内容
+```
+
+---
+
+### M5：Embedding 与 LanceDB 向量搜索
+
+目标：
+
+```text
+配置 OpenAI compatible embedding
+chunk embedding
+LanceDB 写入
+向量搜索
+embedding cache
+```
+
+完成标志：
+
+```text
+语义搜索可用
+重复 chunk 不重复调用 API
+模型变化可重建索引
+```
+
+---
+
+### M6：AI 总结
+
+目标：
+
+```text
+配置 OpenAI compatible LLM
+基于转录/文本生成总结
+长文本分段总结
+写入 summary.md
+任务状态
+覆盖备份
+```
+
+完成标志：
+
+```text
+音频有转录后可生成总结
+已有总结可提示覆盖
+总结进入搜索索引
+```
+
+---
+
+### M7：设置、任务中心与索引重建
+
+目标：
+
+```text
+设置页
+任务中心
+重建 FTS
+重建 LanceDB
+```
+
+完成标志：
+
+```text
+可通过 UI 修改关键配置
+可重建索引
+可查看任务错误
+```
+
+---
+
+### M8：体验优化
+
+目标：
+
+```text
+状态徽章
+搜索高亮
+大文本分页/折叠
+错误提示优化
+Windows 路径兼容性优化
+```
+
+---
+
+## 29. 验收标准
+
+### 29.1 知识库
+
+验收：
+
+```text
+可以选择 Windows 目录作为知识库
+自动创建 .knowledge
+可以初始化数据库和 LanceDB 目录
+删除 .knowledge 后重新扫描可恢复 Asset/Artifact 关系
+```
+
+---
+
+### 29.2 扫描
+
+验收：
+
+```text
+放入 mp3 / mp4 / md / txt / pdf 后，手动刷新能显示
+pdf 显示为未解析
+md/txt 可进入全文索引
+删除文件后手动刷新，记录移除
+```
+
+---
+
+### 29.3 转录
+
+验收：
+
+```text
+已有 episode.mp3 + episode.txt 时，显示已转录
+点击生成转录可调用 mytool
+支持输出到同名 txt
+外部 CLI 生成 txt 后，手动刷新能识别
+转录文本可全文搜索
+```
+
+---
+
+### 29.4 总结
+
+验收：
+
+```text
+没有转录的音视频不能生成总结
+有转录的音视频可以调用 API 生成 summary.md
+summary.md 可预览
+summary.md 可进入全文搜索和向量搜索
+已有 summary.md 时覆盖前提示并备份
+```
+
+---
+
+### 29.5 笔记
+
+验收：
+
+```text
+notes.md 可识别
+详情页可只读预览
+可用外部编辑器打开
+外部修改后手动刷新能重新索引
+AI 总结不会覆盖 notes.md
+```
+
+---
+
+### 29.6 搜索
+
+验收：
+
+```text
+文件名搜索能命中
+转录内容关键词能全文命中
+语义相近查询能通过 LanceDB 命中
+搜索结果能跳转到资产详情
+```
+
+---
+
+### 29.7 配置
+
+验收：
+
+```text
+可配置 LLM API
+可配置 Embedding API
+可关闭远程 API
+可配置转录 CLI
+可重建索引
+```
+
+---
+
+## 30. 风险与应对
+
+### 30.1 API 成本
+
+风险：
+
+```text
+长播客总结和大库 embedding 会消耗 API token
+```
+
+应对：
+
+```text
+embedding cache
+总结前提示
+重建向量前提示预计规模
+可关闭远程 API
+```
+
+---
+
+### 30.2 长文本总结失败
+
+风险：
+
+```text
+2 小时播客转录很长，API 可能失败
+```
+
+应对：
+
+```text
+分段摘要
+合并摘要
+失败降级截断
+任务日志记录
+```
+
+---
+
+### 30.3 Embedding 模型变化
+
+风险：
+
+```text
+模型或维度变化导致旧向量不可用
+```
+
+应对：
+
+```text
+记录 embedding_model 和 dimension
+检测维度不匹配
+提示重建 LanceDB
+```
+
+---
+
+### 30.4 同名文件歧义
+
+风险：
+
+```text
+同 stem 多个媒体文件导致 txt 无法绑定
+```
+
+应对：
+
+```text
+标记 ambiguous
+UI 提示
+后续支持 sidecar 目录
+```
+
+---
+
+### 30.5 Windows 路径和编码
+
+风险：
+
+```text
+中文路径、空格路径、长路径、GBK 编码
+```
+
+应对：
+
+```text
+pathlib
+subprocess argv
+UTF-8 优先
+错误日志记录具体路径
+```
+
+---
+
+## 31. 后续阶段规划
+
+第一阶段完成后，可以按顺序做：
+
+```text
+1. watchdog 文件监听自动同步
+2. 文档解析 CLI 接入
+3. PDF/DOCX/EPUB 内容索引
+4. sidecar 目录 .kb
+5. 应用内笔记编辑
+6. transcript JSON segments
+7. 音频字幕级跳转
+8. TTS 模块接入
+9. 混合搜索排序
+10. 标签系统
+11. 收藏与稍后处理
+12. 批量任务
+```
+
+---
+
+## 32. 第一阶段开发任务拆解
+
+下面是可以直接开始的任务列表。
+
+---
+
+### 32.1 后端基础
+
+```text
+1. 创建项目结构
+2. 加载 config.toml
+3. 初始化日志
+4. 初始化 FastAPI + NiceGUI
+5. 提供本地服务，只监听 127.0.0.1
+```
+
+---
+
+### 32.2 数据库
+
+```text
+1. 初始化 SQLite
+2. 创建 assets 表
+3. 创建 artifacts 表
+4. 创建 tasks 表
+5. 创建 chunks 表
+6. 创建 FTS5 表
+7. 创建 embedding cache 表
+```
+
+---
+
+### 32.3 库管理
+
+```text
+1. 打开目录
+2. 创建 .knowledge
+3. 初始化配置
+4. 获取库状态
+5. 手动扫描入口
+```
+
+---
+
+### 32.4 扫描器
+
+```text
+1. 遍历目录
+2. 识别音频/视频/文档
+3. 识别派生文件
+4. 写入 assets/artifacts
+5. 删除已失效记录
+6. 处理歧义 artifact
+```
+
+---
+
+### 32.5 CLI Runner
+
+```text
+1. 解析命令模板
+2. 替换 {input}/{output}
+3. 启动子进程
+4. 捕获 stdout/stderr
+5. 超时处理
+6. 返回结果
+```
+
+---
+
+### 32.6 转录任务
+
+```text
+1. 创建任务
+2. 调用转录 CLI
+3. 检查输出
+4. 更新 artifact
+5. 触发索引
+```
+
+---
+
+### 32.7 全文索引
+
+```text
+1. 读取 txt/md/summary/notes
+2. 分块
+3. 写入 chunks
+4. 同步 FTS5
+5. 删除旧 chunks
+```
+
+---
+
+### 32.8 LanceDB 向量索引
+
+```text
+1. 初始化 LanceDB
+2. 创建 chunks 表
+3. 分块
+4. 计算 content_hash
+5. 查询 embedding cache
+6. 调用 embedding API
+7. 写入 LanceDB
+8. 删除旧向量
+```
+
+---
+
+### 32.9 LLM 总结
+
+```text
+1. OpenAI compatible client
+2. Prompt 模板
+3. 长文本分段
+4. partial summary
+5. merge summary
+6. 写入 summary.md
+7. frontmatter 生成
+8. 备份旧总结
+```
+
+---
+
+### 32.10 UI
+
+```text
+1. 首页/打开库
+2. 资产列表页
+3. 资产详情页
+4. 搜索页
+5. 任务中心页
+6. 设置页
+```
+
+---
+
+## 33. 仍需你后续提供的配置信息
+
+开发时不需要立刻确定，但运行前需要配置：
+
+```text
+1. OpenAI 兼容 API base_url
+2. LLM model 名称
+3. Embedding model 名称
+4. Embedding dimension
+5. API Key 环境变量名
+6. mytool 是否已加入 PATH
+7. mytool transcribe --output 的实际参数格式
+```
+
+例如需要确认实际命令是：
+
+```bash
+mytool transcribe input.mp3 --output output.txt
+```
+
+还是：
+
+```bash
+mytool transcribe input.mp3 -o output.txt
+```
+
+---
+
+## 34. 最终确认版范围摘要
+
+第一阶段将实现：
+
+```text
+Windows 本地源码运行
+浏览器访问 127.0.0.1
+单知识库管理
+不移动、不重命名文件
+扫描音频/视频/文档
+同目录派生文件识别
+手动刷新，不做实时监听
+手动触发转录，不做自动转录
+转录 CLI 调用
+OpenAI 兼容 API 生成总结
+OpenAI 兼容 API 生成 embedding
+LanceDB 向量搜索
+SQLite FTS5 全文搜索
+文件名搜索
+笔记只读预览和外部编辑
+任务中心
+配置页
+索引重建
+```
+
+第一阶段不实现：
+
+```text
+文件监听
+自动转录
+应用内笔记编辑
+PDF/DOCX 内容解析
+JSON segments 字幕跳转
+TTS
+标签系统
+混合搜索排序
+sidecar 目录
+打包 exe
+```
+
+---
+
+## 35. 结论
+
+这版 PRD 已经可以作为第一阶段开发依据。
+
+当前最合理的开发顺序是：
+
+```text
+M0 项目骨架
+→ M1 扫描和资产列表
+→ M2 派生文件识别
+→ M3 转录任务
+→ M4 全文搜索
+→ M5 LanceDB 向量搜索
+→ M6 OpenAI 兼容 API 总结
+→ M7 设置和任务中心
+→ M8 体验优化
+```
+
+如果你认可这版 PRD，下一步可以直接进入：
+
+```text
+项目目录结构设计
+依赖列表
+数据库初始化代码
+FastAPI + NiceGUI 骨架代码
+```
