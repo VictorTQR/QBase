@@ -126,7 +126,7 @@ TTS 朗读
 文档版本历史
 总结版本对比
 复杂权限管理
-在应用内明文存储和输入 API Key（坚持使用系统环境变量）
+在应用内明文存储和输入 API Key（密钥通过环境变量或库级 .knowledge/secrets.toml 提供，不明文存储）
 ```
 
 其中文件监听、文档解析 CLI、sidecar 目录、笔记编辑放入后续阶段。
@@ -2000,7 +2000,7 @@ rebuild_batch_size = 100
 说明：
 
 ```text
-api_key_env 表示从环境变量读取 API Key。
+api_key_env 表示密钥名称，应用按「环境变量 → .knowledge/secrets.toml → config.toml 明文（不推荐）」顺序读取。
 也可以支持 api_key，但不推荐。
 ```
 
@@ -2284,8 +2284,8 @@ hash，可选
 
 3. **环境变量状态指示（Env Inspector）**：
    - 在 `api_key_env` 字段旁显示状态灯。
-   - 🟢 **就绪**：系统中存在该环境变量。
-   - 🔴 **缺失**：未找到变量，点击弹出“如何在 Windows / macOS 中配置环境变量”的指引。
+   - 🟢 **就绪**：已从进程环境变量或 `.knowledge/secrets.toml` 读取到该密钥。
+   - 🔴 **缺失**：未找到密钥，点击弹出“如何配置环境变量或 secrets.toml”的指引。
 
 4. **连通性测试（Test Connection）**：
    - 在 LLM / Embedding 卡片提供 `[测试 API]` 按钮。
@@ -2510,13 +2510,20 @@ gbk，仅作为 fallback
 
 ### 26.2 API Key
 
-优先使用环境变量：
+优先通过环境变量或知识库目录下的本地密钥文件 `.knowledge/secrets.toml` 提供（`api_key_env` 指向密钥名称，不写真实密钥）：
 
 ```text
 OPENAI_API_KEY
 ```
 
-配置中只写：
+本地密钥文件 `.knowledge/secrets.toml` 示例：
+
+```toml
+[keys]
+OPENAI_API_KEY = "sk-xxx"
+```
+
+配置中只写密钥名称：
 
 ```toml
 api_key_env = "OPENAI_API_KEY"
@@ -2856,7 +2863,7 @@ AI 总结不会覆盖 notes.md
 ```text
 可通过 UI 表单修改 LLM / Embedding 的 base_url、model、分块参数，保存后 .knowledge/config.toml 文件内容正确更新
 高级 CLI 配置可通过“在编辑器中打开”按钮直接编辑
-界面能正确检测系统环境变量是否存在，并给出红绿灯提示
+界面能正确检测密钥来源（环境变量或 secrets.toml）是否存在，并给出红绿灯提示
 点击“测试 API”能正确返回连通成功或 401 / 404 等错误信息
 在 UI 中修改 Embedding 维度并保存时，能弹出警告提示需要重建向量索引
 绝不在 UI 界面和 TOML 文件中出现明文的 API Key

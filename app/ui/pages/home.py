@@ -12,12 +12,12 @@ from app.ui.layout import page_frame
 MILESTONES = [
     ("M0", "项目骨架", True),
     ("M1", "知识库与扫描", True),
-    ("M2", "派生文件识别", False),
-    ("M3", "转录任务", False),
-    ("M4", "全文搜索", False),
-    ("M5", "向量搜索", False),
-    ("M6", "AI 总结", False),
-    ("M7", "设置与任务中心", False),
+    ("M2", "派生文件识别", True),
+    ("M3", "转录任务", True),
+    ("M4", "全文搜索", True),
+    ("M5", "向量搜索", True),
+    ("M6", "AI 总结", True),
+    ("M7", "设置与任务中心", True),
     ("M8", "体验优化", False),
 ]
 
