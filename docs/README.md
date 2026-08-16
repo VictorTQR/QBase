@@ -90,15 +90,15 @@
 - M7 补完（m7-config-ui）：配置 UI 化 - 已完成（2026-08-16）
   - 依据：讨论稿 qwen-prdv1/m7-config-ui.md（qwen 误标为 M8，已纠正为 M7 配置 UI 化补完，与 PRD v1.1 §20.2/§22.6/§23.5 对齐）
   - 偏差/补充（m7-config-ui.md 未覆盖、由实施补齐）：
-    - 保留 M5/M6 既有 `get_embedding_config`/`get_summary_llm_config` 不被破坏；`config_service` 新增 `save_config`/`validate_config`/`get_env_status`/`has_plain_api_key`/`test_connection` 等
+    - 保留 M5/M6 既有 `get_embedding_config`/`get_summary_llm_config` 不被破坏；`config_service` 新增 `save_config`/`validate_config`/`get_key_status`/`has_plain_api_key`/`test_connection` 等
     - 新增 `app/api/settings.py`：`GET/PUT /api/settings` + `POST /api/settings/test-connection`，main.py 用 `include_router` 注册（沿用 M0 入口，不替换 main.py）
-    - `app/ui/pages/settings.py`：重写保留 page_frame，表单编辑 LLM/Embedding/Index/Task/Library 高频项，CLI/App 只读展示 + 「打开 config.toml」按钮；明文 api_key 警告、环境变量状态灯、测试 API 按钮、保存写回 + dimension/model 变更告警、重建索引
+    - `app/ui/pages/settings.py`：重写保留 page_frame，表单编辑 LLM/Embedding/Index/Task/Library 高频项，CLI/App 只读展示 + 「打开 config.toml」按钮；明文 api_key 警告、密钥来源状态灯、测试 API 按钮、保存写回 + dimension/model 变更告警、重建索引；新增「编辑 secrets.toml」按钮
     - 明文 Key 处理：`GET /api/settings` 返回的 config 中 api_key 一律打码为 `***`；`has_plain_api_key` 单独检测用于警告；UI 绝不提供明文 Key 输入框
     - 依赖新增 `tomli-w`（TOML 写回）
   - 决策记录：
     - 配置唯一真相来源 = `.knowledge/config.toml`；保存走「加载原配置 → deep merge patch → 清理 None → 校验 → 写回」，未编辑字段与未来新增字段均保留（已验收 `future_test_field` 保留）
     - 环境变量安全：测试连通性时 `_get_api_key` 只读 `api_key_env` 对应环境变量，不读取/展示明文 Key
-    - 验收（mock，零 API 费用）：GET 返回打码配置 + 明文警告 + 空 env_status；PUT 改 model 写回成功且未知字段保留；test-connection embedding/llm 经 `api_key_env` override 命中 mock 返回 200；缺失环境变量明确报错；校验失败（dimension=0）返回 HTTP 400 中文错误；dimension/model 变更告警为前端逻辑（已代码确认）
+    - 验收（mock，零 API 费用）：GET 返回打码配置 + 明文警告 + 空 key_status；PUT 改 model 写回成功且未知字段保留；test-connection embedding/llm 经 `api_key_env` override 命中 mock 返回 200；缺失环境变量明确报错；校验失败（dimension=0）返回 HTTP 400 中文错误；dimension/model 变更告警为前端逻辑（已代码确认）
 
 ## 项目文档
 

@@ -26,3 +26,5 @@ parse.backup/
 
 # Knowledge library index (rebuildable)
 .knowledge/
+# Local secrets file inside a knowledge library (also covered by .knowledge/)
+.knowledge/secrets.toml

@@ -40,6 +40,49 @@ def load_config() -> dict:
         return tomllib.load(f)
 
 
+def get_secrets_path() -> Path:
+    """返回知识库目录下的本地密钥文件路径 .knowledge/secrets.toml。"""
+    if state.library_root is None:
+        raise ConfigError("未打开知识库")
+
+    return Path(state.library_root) / ".knowledge" / "secrets.toml"
+
+
+def load_secrets() -> dict[str, str]:
+    """读取 .knowledge/secrets.toml 的 [keys] 段，返回 {键名: 密钥}。
+
+    文件不存在或段缺失时返回空字典。该文件存放真实密钥，不应提交 Git。
+    """
+    path = get_secrets_path()
+
+    if not path.exists():
+        return {}
+
+    with path.open("rb") as f:
+        data = tomllib.load(f)
+
+    keys = data.get("keys", {})
+
+    return {str(k): str(v) for k, v in keys.items() if v}
+
+
+def get_api_key(key_name: str) -> str:
+    """根据密钥名解析真实 API Key。
+
+    读取优先级（见 M7 设计 §19.2）：
+    1. 当前进程环境变量
+    2. .knowledge/secrets.toml 中的 [keys]
+    """
+    if not key_name:
+        return ""
+
+    env_value = os.getenv(key_name, "")
+    if env_value:
+        return env_value
+
+    return load_secrets().get(key_name, "")
+
+
 def get_transcribe_cli_config() -> dict:
     """读取转录 CLI 配置。"""
     config = load_config()
@@ -75,7 +118,8 @@ def get_embedding_config() -> dict:
     api_key = str(embedding_config.get("api_key", "")).strip()
 
     if api_key_env:
-        api_key = os.environ.get(api_key_env, api_key)
+        resolved = get_api_key(api_key_env)
+        api_key = resolved if resolved else api_key
 
     model = str(embedding_config.get("model", "")).strip()
     dimension = int(embedding_config.get("dimension", 0) or 0)
@@ -107,7 +151,9 @@ def get_embedding_config() -> dict:
         if not api_key:
             if api_key_env:
                 raise ValueError(
-                    f"未获取到 Embedding API Key，请设置环境变量：{api_key_env}"
+                    "未获取到 Embedding API Key。"
+                    f"已检查进程环境变量与 .knowledge/secrets.toml，均未找到 {api_key_env}。"
+                    "请设置该环境变量名，或在 .knowledge/secrets.toml 的 [keys] 下配置。"
                 )
             raise ValueError(
                 "未获取到 Embedding API Key，请配置 api_key_env 或 api_key"
@@ -128,7 +174,8 @@ def get_summary_llm_config() -> dict:
     api_key = str(summary_config.get("api_key", "")).strip()
 
     if api_key_env:
-        api_key = os.environ.get(api_key_env, api_key)
+        resolved = get_api_key(api_key_env)
+        api_key = resolved if resolved else api_key
 
     model = str(summary_config.get("model", "")).strip()
     temperature = float(summary_config.get("temperature", 0.2))
@@ -161,7 +208,9 @@ def get_summary_llm_config() -> dict:
         if not api_key:
             if api_key_env:
                 raise ValueError(
-                    f"未获取到 LLM API Key，请设置环境变量：{api_key_env}"
+                    "未获取到 LLM API Key。"
+                    f"已检查进程环境变量与 .knowledge/secrets.toml，均未找到 {api_key_env}。"
+                    "请设置该环境变量名，或在 .knowledge/secrets.toml 的 [keys] 下配置。"
                 )
             raise ValueError("未获取到 LLM API Key，请配置 api_key_env 或 api_key")
 
@@ -191,12 +240,12 @@ def _mask_api_keys(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_settings_view() -> dict[str, Any]:
-    """返回设置页所需数据：配置（明文 Key 已打码）、环境变量状态、配置文件路径。"""
+    """返回设置页所需数据：配置（明文 Key 已打码）、密钥状态、配置文件路径。"""
     config = load_config()
 
     return {
         "config": _mask_api_keys(config),
-        "env_status": get_env_status(config),
+        "key_status": get_key_status(config),
         "has_plain_api_key": has_plain_api_key(config),
         "config_path": str(get_config_path()),
     }
@@ -334,22 +383,37 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
     return cfg
 
 
-def get_env_status(config: dict[str, Any] | None = None) -> dict[str, bool]:
-    """检测配置中引用的环境变量是否存在（非空）。"""
+def get_key_status(config: dict[str, Any] | None = None) -> dict[str, dict]:
+    """检测配置中引用的密钥名称是否可解析，并标明来源。
+
+    返回：{key_name: {"found": bool, "source": "环境变量" | "secrets.toml" | ""}}
+    source 为空字符串表示未找到。
+    """
     if config is None:
         config = load_config()
 
-    env_names: set[str] = set()
+    key_names: set[str] = set()
 
     embedding = config.get("embedding", {})
     if embedding.get("api_key_env"):
-        env_names.add(str(embedding["api_key_env"]))
+        key_names.add(str(embedding["api_key_env"]))
 
     llm_summary = config.get("llm", {}).get("summary", {})
     if llm_summary.get("api_key_env"):
-        env_names.add(str(llm_summary["api_key_env"]))
+        key_names.add(str(llm_summary["api_key_env"]))
 
-    return {env_name: bool(os.getenv(env_name)) for env_name in env_names}
+    secrets = load_secrets()
+
+    result: dict[str, dict] = {}
+    for name in key_names:
+        if os.getenv(name):
+            result[name] = {"found": True, "source": "环境变量"}
+        elif name in secrets:
+            result[name] = {"found": True, "source": "secrets.toml"}
+        else:
+            result[name] = {"found": False, "source": ""}
+
+    return result
 
 
 def has_plain_api_key(config: dict[str, Any] | None = None) -> bool:
@@ -386,13 +450,16 @@ def test_connection(
 
 
 def _get_api_key(section: dict[str, Any]) -> tuple[str, str]:
-    """根据 api_key_env 获取环境变量中的 API Key，返回 (env_name, api_key)。"""
+    """根据 api_key_env 解析真实 API Key，返回 (key_name, api_key)。
+
+    解析走 get_api_key：先查进程环境变量，再查 .knowledge/secrets.toml。
+    """
     env_name = str(section.get("api_key_env", "")).strip()
 
     if not env_name:
         return "", ""
 
-    return env_name, os.getenv(env_name, "")
+    return env_name, get_api_key(env_name)
 
 
 def _test_embedding_connection(config: dict[str, Any]) -> dict[str, Any]:

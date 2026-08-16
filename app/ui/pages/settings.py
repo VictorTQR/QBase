@@ -8,6 +8,7 @@ CLI / App 等复杂配置只读展示，提供「打开 config.toml」按钮交�
 from __future__ import annotations
 
 from nicegui import run, ui
+from pathlib import Path
 
 from app.services import config_service
 from app.services.config_service import ConfigError
@@ -19,6 +20,24 @@ from app.utils import open_file
 @ui.page("/settings")
 def settings_page() -> None:
     with page_frame("设置"):
+
+        def handle_open_secrets() -> None:
+            """打开 .knowledge/secrets.toml；不存在则创建含 [keys] 模板的文件。"""
+            try:
+                secrets_file = config_service.get_secrets_path()
+            except ConfigError as exc:
+                ui.notify(str(exc), type="negative")
+                return
+
+            if not secrets_file.exists():
+                secrets_file.parent.mkdir(parents=True, exist_ok=True)
+                secrets_file.write_text(
+                    "# 本地密钥文件，请勿提交 Git\n"
+                    "[keys]\n"
+                    "# OPENAI_API_KEY = \"sk-xxxx\"\n",
+                    encoding="utf-8",
+                )
+            open_file(str(secrets_file))
         if state.library_root is None:
             ui.label("未打开知识库").classes("text-xl")
             ui.link("去打开知识库", "/").classes("text-blue-600")
@@ -27,7 +46,7 @@ def settings_page() -> None:
         try:
             config = config_service.load_config()
             config_path = config_service.get_config_path()
-            env_status = config_service.get_env_status(config)
+            key_status = config_service.get_key_status(config)
         except ConfigError as exc:
             ui.label(str(exc)).classes("text-red-600 mt-4")
             return
@@ -47,10 +66,20 @@ def settings_page() -> None:
                     on_click=lambda: open_file(str(config_path)),
                 )
                 ui.button(
+                    "编辑 secrets.toml",
+                    icon="key",
+                    on_click=handle_open_secrets,
+                )
+                ui.button(
                     "重新加载",
                     icon="refresh",
                     on_click=lambda: ui.navigate.to("/settings"),
                 )
+
+            ui.label(
+                "API Key 也可放在 .knowledge/secrets.toml 的 [keys] 中，"
+                "由 api_key_env 引用的名称查找，无需设置系统环境变量。"
+            ).classes("text-xs text-gray-500 mt-3")
 
             if config_service.has_plain_api_key(config):
                 ui.label(
@@ -85,10 +114,10 @@ def settings_page() -> None:
                 "Model", value=str(llm_config.get("model", ""))
             ).classes("w-full")
             llm_api_key_env = ui.input(
-                "API Key 环境变量名",
+                "API Key 密钥名（api_key_env）",
                 value=str(llm_config.get("api_key_env", "")),
             ).classes("w-full")
-            _render_env_status(env_status, str(llm_config.get("api_key_env", "")))
+            _render_key_status(key_status, str(llm_config.get("api_key_env", "")))
 
             with ui.row().classes("w-full gap-3"):
                 llm_temperature = ui.number(
@@ -142,11 +171,11 @@ def settings_page() -> None:
                 "Model", value=str(embedding_config.get("model", ""))
             ).classes("w-full")
             embedding_api_key_env = ui.input(
-                "API Key 环境变量名",
+                "API Key 密钥名（api_key_env）",
                 value=str(embedding_config.get("api_key_env", "")),
             ).classes("w-full")
-            _render_env_status(
-                env_status, str(embedding_config.get("api_key_env", ""))
+            _render_key_status(
+                key_status, str(embedding_config.get("api_key_env", ""))
             )
 
             with ui.row().classes("w-full gap-3"):
@@ -434,19 +463,23 @@ def settings_page() -> None:
         rebuild_vector_button.on_click(handle_rebuild_vector)
 
 
-def _render_env_status(env_status: dict[str, bool], env_name: str) -> None:
-    """展示环境变量是否已设置（红绿灯）。"""
-    if not env_name:
-        ui.label("未配置 API Key 环境变量名").classes(
+def _render_key_status(key_status: dict[str, dict], key_name: str) -> None:
+    """展示密钥名称是否已解析，以及来源（环境变量 / secrets.toml）。"""
+    if not key_name:
+        ui.label("未配置密钥名称（api_key_env）").classes(
             "text-xs text-gray-500 mt-1"
         )
         return
 
-    if env_status.get(env_name):
-        ui.label(f"✓ 环境变量 {env_name} 已设置").classes(
+    info = key_status.get(key_name, {"found": False, "source": ""})
+
+    if info.get("found"):
+        source = info.get("source", "")
+        ui.label(f"✓ {key_name} 已设置，来源：{source}").classes(
             "text-green-600 text-xs mt-1"
         )
     else:
-        ui.label(f"✗ 环境变量 {env_name} 未设置").classes(
-            "text-red-600 text-xs mt-1"
-        )
+        ui.label(
+            f"✗ {key_name} 未设置（请设置环境变量，"
+            "或在 .knowledge/secrets.toml 的 [keys] 中配置）"
+        ).classes("text-red-600 text-xs mt-1")

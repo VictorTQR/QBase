@@ -218,6 +218,8 @@ UI 应提示：
 
 但 UI 不主动展示、编辑或保存明文 Key。
 
+> **密钥来源升级（待开发，见 §19）**：当前版本实际 Key 从**系统环境变量**读取。后续将支持知识库目录内的本地密钥文件 `.knowledge/secrets.toml`，由应用启动时读取，`api_key_env` 不再强制表示「系统环境变量」而表示「密钥名称」。
+
 ---
 
 ## 4. 新增依赖
@@ -1836,7 +1838,7 @@ Embedding model 或 dimension 已变化，请重建向量索引。
 ✅ M4：全文搜索
 ✅ M5：LanceDB 向量搜索
 ✅ M6：AI 总结生成
-✅ M7：统一导航 + 设置页 + 任务中心增强 + 配置 UI 化（本阶段）
+✅ M7：统一导航 + 设置页 + 任务中心增强 + 配置 UI 化（本阶段）｜⏳ secrets.toml 本地密钥方案待开发（见 §19）
 ⬜ M8：体验优化（PRD §28 既定，尚未开始）
 ```
 
@@ -1844,7 +1846,11 @@ Embedding model 或 dimension 已变化，请重建向量索引。
 
 ## 17. 后续阶段建议
 
-本阶段是 M7 的配置 UI 化补完。PRD §28 中 M8 仍为「体验优化」，尚未开始。以下为 qwen 提出的后续阶段设想（编号从 M9 起，与 PRD 的整数里程碑体系后续再对齐）：
+本阶段是 M7 的配置 UI 化补完。PRD §28 中 M8 仍为「体验优化」，尚未开始。
+
+API Key 本地密钥文件方案（`.knowledge/secrets.toml`）已与 qwen 讨论并形成设计，作为 M7 配置体系的安全增强，**待开发，详见 §19**，不占用新的整数里程碑。
+
+以下为 qwen 提出的后续阶段设想（编号从 M9 起，与 PRD 的整数里程碑体系后续再对齐）：
 
 ```text
 M9：watchdog 文件监听自动同步
@@ -1880,3 +1886,205 @@ M20：打包分发
 10. 测试 Embedding 变化提醒
 11. 更新本阶段验收结果
 ```
+
+---
+
+## 19. API Key 本地密钥文件方案（.knowledge/secrets.toml，待开发）
+
+> 来源：用户与 qwen 关于「不想设置系统环境变量，改用新的 toml 文件存放密钥」的讨论记录。
+> 状态：**已实施**。已替换 §3.3 / §5.3 / §6 中的 `os.getenv` 读取逻辑为 `get_api_key` / `get_key_status`，详见 §19.10。
+
+### 19.1 背景与决策
+
+原 §3 安全红线要求 API Key 通过**系统环境变量**提供。用户反馈不喜欢设置「系统级环境变量」，与 qwen 讨论后达成一致：把密钥放在知识库目录内的本地密钥文件 `.knowledge/secrets.toml`，由应用启动时读取。不污染系统环境，仍符合 QBase「文件即数据」的本地优先设计。
+
+`api_key_env` 字段名保留（与现有 `config.toml` 兼容），但语义从「系统环境变量名」扩展为「密钥名称」。
+
+### 19.2 采用方案：.knowledge/secrets.toml
+
+文件位置：
+
+```text
+<知识库目录>/.knowledge/secrets.toml
+```
+
+文件内容：
+
+```toml
+[keys]
+OPENAI_API_KEY = "sk-xxxxxxxxxxxxxxxx"
+SILICONFLOW_API_KEY = "sk-yyyyyyyyyyyyyyyy"
+```
+
+`config.toml` 仍只写密钥名称：
+
+```toml
+[llm.summary]
+enabled = true
+base_url = "https://api.example.com/v1"
+api_key_env = "OPENAI_API_KEY"
+model = "gpt-4o-mini"
+
+[embedding]
+enabled = true
+base_url = "https://api.example.com/v1"
+api_key_env = "OPENAI_API_KEY"
+model = "text-embedding-3-small"
+dimension = 1536
+```
+
+读取优先级：
+
+```text
+1. 当前进程环境变量
+2. .knowledge/secrets.toml
+3. config.toml 明文 api_key（不推荐，仅兼容并警告）
+```
+
+### 19.3 备选方案对比
+
+| 方案 | 优点 | 缺点 | 建议 |
+|---|---|---|---|
+| `.knowledge/secrets.toml` | 与项目 TOML 风格一致；无需额外依赖 | 需自写几行读取逻辑 | ✅ 默认采用 |
+| `.knowledge/.env` | 生态常见 | 需引入 python-dotenv | 备选 |
+| 启动脚本临时 `set` | 不写系统环境变量 | 仍是明文文件，需防提交 Git | 备选 |
+| UI 临时输入（内存） | 不落盘，关闭即失效 | 每次启动都要重输 | 可作高级选项 |
+| OS Keyring | 系统加密，最安全 | 实现复杂，迁移不便 | M9+ 后续增强 |
+
+### 19.4 后端读取逻辑（目标实现）
+
+修改 `app/services/config_service.py`：
+
+```python
+import tomllib
+from pathlib import Path
+
+
+def get_secrets_path() -> Path:
+    if state.library_root is None:
+        raise ConfigError("未打开知识库")
+    return Path(state.library_root) / ".knowledge" / "secrets.toml"
+
+
+def load_secrets() -> dict[str, str]:
+    path = get_secrets_path()
+    if not path.exists():
+        return {}
+    with path.open("rb") as f:
+        data = tomllib.load(f)
+    keys = data.get("keys", {})
+    return {str(k): str(v) for k, v in keys.items() if v}
+
+
+def get_api_key(key_name: str) -> str:
+    if not key_name:
+        return ""
+    env_value = os.getenv(key_name, "")
+    if env_value:
+        return env_value
+    return load_secrets().get(key_name, "")
+```
+
+将 §6 中 `_get_api_key` 的 `os.getenv(env_name, "")` 改为 `get_api_key(env_name)`，并替换 `_test_embedding_connection` / `_test_llm_connection` 中的对应调用点。
+
+> 后续若引入「UI 临时输入内存 Key」，`get_api_key` 再补一层运行时内存 Key 优先。
+
+### 19.5 密钥状态检测更新
+
+原 `get_env_status`（§5.3）仅判断 `os.getenv`，需升级为判断 `get_api_key` 并提示来源：
+
+```python
+def get_key_status(config: dict) -> dict[str, dict]:
+    result = {}
+    env_names = set()
+    embedding = config.get("embedding", {})
+    if embedding.get("api_key_env"):
+        env_names.add(str(embedding["api_key_env"]))
+    llm_summary = config.get("llm", {}).get("summary", {})
+    if llm_summary.get("api_key_env"):
+        env_names.add(str(llm_summary["api_key_env"]))
+    secrets = load_secrets()
+    for name in env_names:
+        if os.getenv(name):
+            result[name] = {"found": True, "source": "环境变量"}
+        elif name in secrets:
+            result[name] = {"found": True, "source": "secrets.toml"}
+        else:
+            result[name] = {"found": False, "source": ""}
+    return result
+```
+
+UI 展示：
+
+```text
+✓ OPENAI_API_KEY 已设置，来源：secrets.toml
+✓ OPENAI_API_KEY 已设置，来源：环境变量
+✗ OPENAI_API_KEY 未设置
+```
+
+### 19.6 推荐目录结构
+
+```text
+<知识库目录>/
+└── .knowledge/
+    ├── config.toml      # 普通配置，只存密钥名称
+    ├── secrets.toml     # 密钥文件，勿提交 Git
+    ├── db.sqlite
+    ├── vector/
+    └── ...
+```
+
+### 19.7 安全提示
+
+1. `.gitignore` 增加 `.knowledge/secrets.toml` / `.knowledge/.env`。
+2. 知识库同步网盘时排除密钥文件。
+3. 备份知识库时注意 secrets.toml 一并被备份。
+4. 共享电脑用用户目录权限保护 `.knowledge`。
+5. 不把 secrets.toml 发到聊天 / 截图 / Issue。
+
+仍不推荐明文 `api_key` 写进 `config.toml`；若保留，UI 黄色警告 + GET 接口打码。
+
+### 19.8 对 PRD 的修改建议
+
+PRD §3 原「API Key 通过系统环境变量提供」改为：
+
+```text
+API Key 优先通过进程环境变量或知识库目录下的 .knowledge/secrets.toml 提供。
+UI 不默认提供明文 API Key 输入框。
+config.toml 只保存密钥名称，不保存真实密钥。
+```
+
+并补充读取优先级（同 §19.2）。
+
+### 19.9 实施范围（待开发）
+
+明确做：
+
+1. 新增 `get_secrets_path` / `load_secrets` / `get_api_key`。
+2. 改造 `_get_api_key` 及所有 `os.getenv(env_name)` 调用点，统一走 `get_api_key`。
+3. 改造状态检测返回密钥来源（升级 `get_env_status` 或新增 `get_key_status`）。
+4. 设置页状态展示从「环境变量」升级为「密钥来源」。
+5. 更新 PRD §3 措辞。
+6. `.gitignore` 增加密钥文件。
+
+暂不做（后续增强）：UI 临时输入内存 Key、OS Keyring（M9+）、`.env` 方案。
+
+保留兼容：`config.toml` 明文 `api_key` 仍可工作，但 UI 黄色警告 + GET 打码；进程环境变量优先级高于 `secrets.toml`。
+
+### 19.10 实施记录（已落地，2026-08-16）
+
+按 §19.4–§19.9 完成开发，改动文件：
+
+- **`app/services/config_service.py`**
+  - 新增 `get_secrets_path()` / `load_secrets()` / `get_api_key(key_name)`：读取优先级为「进程环境变量 → `.knowledge/secrets.toml` 的 `[keys]`」。
+  - `get_embedding_config` / `get_summary_llm_config`：真实密钥解析统一走 `get_api_key`，`api_key_env` 为空时回退到 `config.toml` 明文 `api_key`（兼容）。
+  - `_get_api_key()`：改用 `get_api_key(env_name)` 解析真实 Key（测试连通性受益）。
+  - 缺失密钥报错文案补充「已检查进程环境变量与 `.knowledge/secrets.toml`」指引。
+  - `get_env_status` 升级为 `get_key_status`，返回每个密钥名的 `{found, source}`（`source` ∈ `环境变量` / `secrets.toml` / `""`）；`get_settings_view` 返回字段 `env_status` → `key_status`。
+- **`app/ui/pages/settings.py`**
+  - 「配置文件」卡片新增「编辑 secrets.toml」按钮（`get_secrets_path()` 定位，不存在则创建含 `[keys]` 模板文件后打开），并补充说明文案。
+  - 密钥输入框 label 改为「API Key 密钥名（api_key_env）」。
+  - `_render_env_status` 升级为 `_render_key_status`，展示 `✓ 名称 已设置，来源：xxx` 或 `✗ 名称 未设置` 并提示 secrets.toml 配置方式。
+- **`docs/README.md`** / **`.gitignore`**：同步函数改名与 secrets.toml 忽略说明（根 `.gitignore` 已有 `.knowledge/`，追加 `.knowledge/secrets.toml` 显式行）。
+
+验收（单元级，临时脚本已在项目 `.venv` 跑通）：`load_secrets` 解析、`get_api_key` 的「环境变量优先于 secrets.toml」「secrets.toml 优先于 config.toml 明文」、未配置密钥名校验为空、`get_key_status` 来源判定、`get_settings_view` 返回 `key_status`、缺失 key 报错含 secrets.toml 指引，全部通过。
