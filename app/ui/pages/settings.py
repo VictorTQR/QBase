@@ -12,6 +12,7 @@ from pathlib import Path
 
 from app.services import config_service
 from app.services.config_service import ConfigError
+from app.services.vector_service import get_vector_stats, clear_embedding_cache
 from app.state import state
 from app.ui.layout import page_frame
 from app.utils import notify_error, open_file
@@ -314,16 +315,54 @@ def settings_page() -> None:
             ui.label("重建全文索引会重新处理所有已识别的文本内容。").classes(
                 "text-sm text-gray-600 mt-2"
             )
-            ui.label(
-                "重建向量索引会调用 Embedding API，已缓存的片段不会重复计费。"
-            ).classes("text-sm text-orange-600 mt-1")
             with ui.row().classes("gap-3 mt-3"):
                 rebuild_fts_button = ui.button(
                     "重建全文索引", icon="refresh"
                 )
+
+        # ── 向量索引状态 ──
+        with ui.card().classes("w-full p-4 mt-4"):
+            ui.label("向量索引状态").classes("text-lg font-semibold")
+            ui.label(
+                "重建向量索引会调用 Embedding API，已缓存的片段不会重复计费。"
+            ).classes("text-sm text-orange-600 mt-1")
+
+            vector_stats_container = ui.column().classes("w-full mt-3")
+
+            with ui.row().classes("gap-3 mt-3"):
                 rebuild_vector_button = ui.button(
-                    "重建向量索引", icon="hub"
+                    "全量重建", icon="hub"
                 )
+                clear_cache_button = ui.button(
+                    "清空缓存", icon="delete"
+                ).props("outline color=orange")
+
+            def render_vector_stats() -> None:
+                stats = get_vector_stats()
+                vector_stats_container.clear()
+                with vector_stats_container:
+                    ui.badge(
+                        _vector_health_label(stats["health"]),
+                        color=_vector_health_color(stats["health"]),
+                    ).classes("text-sm")
+                    with ui.grid(columns=3).classes("w-full gap-2 mt-2"):
+                        ui.label(f"向量总数：{stats['total_vectors']}")
+                        ui.label(f"磁盘占用：{stats['disk_size_mb']} MB")
+                        ui.label(f"缓存条目：{stats['cache_count']}")
+                        ui.label(f"模型：{stats['model'] or '—'}")
+                        ui.label(f"维度：{stats['dimension'] or '—'}")
+                        ui.label(
+                            f"覆盖度：{stats['indexed_assets']} / {stats['total_assets']}"
+                        )
+                    ui.label(
+                        f"最后重建：{stats['last_rebuilt'] or '从未'}"
+                    ).classes("text-sm text-gray-600 mt-2")
+                    if stats["health_msg"]:
+                        ui.label(stats["health_msg"]).classes(
+                            "text-sm text-gray-600"
+                        )
+
+            render_vector_stats()
 
         # ── 表单值收集 ──
         def build_patch() -> dict:
@@ -455,12 +494,28 @@ def settings_page() -> None:
                 notify_error(exc)
             finally:
                 rebuild_vector_button.enable()
+                render_vector_stats()
+
+        async def handle_clear_cache():
+            clear_cache_button.disable()
+            try:
+                n = await run.io_bound(clear_embedding_cache)
+                ui.notify(
+                    f"已清空 embedding 缓存（{n} 条），下次重建将重新调用 API",
+                    type="positive",
+                )
+            except Exception as exc:
+                notify_error(exc)
+            finally:
+                clear_cache_button.enable()
+                render_vector_stats()
 
         save_button.on_click(handle_save)
         test_llm_button.on_click(handle_test_llm)
         test_embedding_button.on_click(handle_test_embedding)
         rebuild_fts_button.on_click(handle_rebuild_fts)
         rebuild_vector_button.on_click(handle_rebuild_vector)
+        clear_cache_button.on_click(handle_clear_cache)
 
 
 def _render_key_status(key_status: dict[str, dict], key_name: str) -> None:
@@ -483,3 +538,32 @@ def _render_key_status(key_status: dict[str, dict], key_name: str) -> None:
             f"✗ {key_name} 未设置（请设置环境变量，"
             "或在 .knowledge/secrets.toml 的 [keys] 中配置）"
         ).classes("text-red-600 text-xs mt-1")
+
+
+_VECTOR_HEALTH_LABELS: dict[str, str] = {
+    "no_library": "未打开知识库",
+    "none": "未建立",
+    "model_mismatch": "模型已变更",
+    "inconsistent": "索引不一致",
+    "stale": "可能过期",
+    "ok": "正常",
+    "unknown": "未知",
+}
+
+_VECTOR_HEALTH_COLORS: dict[str, str] = {
+    "no_library": "grey",
+    "none": "red",
+    "model_mismatch": "red",
+    "inconsistent": "orange",
+    "stale": "orange",
+    "ok": "green",
+    "unknown": "grey",
+}
+
+
+def _vector_health_label(health: str) -> str:
+    return _VECTOR_HEALTH_LABELS.get(health, "未知")
+
+
+def _vector_health_color(health: str) -> str:
+    return _VECTOR_HEALTH_COLORS.get(health, "grey")

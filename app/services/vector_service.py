@@ -15,7 +15,11 @@ import httpx
 from loguru import logger
 
 from app.database import get_conn
-from app.services.config_service import get_embedding_config
+from app.services.config_service import (
+    get_embedding_config,
+    get_vector_last_rebuilt,
+    set_vector_last_rebuilt,
+)
 from app.state import get_db_path, state
 
 TABLE_NAME = "chunks"
@@ -274,7 +278,134 @@ def rebuild_vector_index() -> dict:
         stats["embedded"],
     )
 
+    # 记录最后重建时间到 config.toml [vector] last_rebuilt
+    set_vector_last_rebuilt()
+
     return stats
+
+
+def get_vector_stats() -> dict:
+    """聚合向量索引状态，供设置页"向量索引状态"卡片展示。
+
+    返回健康状态 health：no_library / none / model_mismatch / inconsistent /
+    stale / ok，以及各项统计字段。
+    """
+    stats = {
+        "total_vectors": 0,
+        "disk_size_mb": 0.0,
+        "cache_count": 0,
+        "last_rebuilt": None,
+        "model": "",
+        "dimension": 0,
+        "indexed_assets": 0,
+        "total_assets": 0,
+        "health": "unknown",
+        "health_msg": "",
+    }
+
+    if state.library_root is None:
+        stats["health"] = "no_library"
+        stats["health_msg"] = "请先打开知识库"
+        return stats
+
+    # 1. LanceDB 记录数 + 磁盘占用
+    vd = vector_dir()
+    if vd.exists():
+        try:
+            db = connect_lancedb()
+            if table_exists(db):
+                stats["total_vectors"] = db.open_table(TABLE_NAME).count_rows()
+            total = sum(f.stat().st_size for f in vd.rglob("*") if f.is_file())
+            stats["disk_size_mb"] = round(total / 1024 / 1024, 1)
+        except Exception:
+            logger.exception("读取 LanceDB 统计失败")
+
+    # 2. SQLite 统计（统一一个连接）
+    conn = get_conn(get_db_path())
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM embedding_cache"
+        ).fetchone()
+        stats["cache_count"] = row["c"] if row else 0
+
+        row = conn.execute(
+            "SELECT model, dimension FROM embedding_cache LIMIT 1"
+        ).fetchone()
+        if row:
+            stats["model"] = row["model"]
+            stats["dimension"] = row["dimension"]
+
+        row = conn.execute("SELECT COUNT(*) AS c FROM assets").fetchone()
+        stats["total_assets"] = row["c"] if row else 0
+
+        row = conn.execute(
+            "SELECT COUNT(DISTINCT asset_id) AS c FROM chunks WHERE kind='vector'"
+        ).fetchone()
+        stats["indexed_assets"] = row["c"] if row else 0
+
+        chunk_rows = conn.execute(
+            "SELECT COUNT(*) AS c FROM chunks WHERE kind='vector'"
+        ).fetchone()
+        chunk_rows = chunk_rows["c"] if chunk_rows else 0
+
+        latest_chunk = conn.execute(
+            "SELECT MAX(created_at) AS m FROM chunks"
+        ).fetchone()
+        latest_chunk = latest_chunk["m"] if latest_chunk else None
+    finally:
+        conn.close()
+
+    stats["last_rebuilt"] = get_vector_last_rebuilt()
+
+    # 3. 健康判定
+    if stats["total_vectors"] == 0:
+        stats["health"] = "none"
+        stats["health_msg"] = "向量索引尚未建立，建议重建"
+    else:
+        emb = get_config_embedding()
+        if stats["model"] and (
+            emb.get("model") != stats["model"]
+            or emb.get("dimension") != stats["dimension"]
+        ):
+            stats["health"] = "model_mismatch"
+            stats["health_msg"] = (
+                "Embedding 模型/维度已变更，旧向量可能失效，建议重建"
+            )
+        elif chunk_rows != stats["total_vectors"]:
+            stats["health"] = "inconsistent"
+            stats["health_msg"] = "向量索引与数据不一致，建议重建"
+        elif stats["last_rebuilt"] and latest_chunk and latest_chunk > stats["last_rebuilt"]:
+            stats["health"] = "stale"
+            stats["health_msg"] = (
+                "向量索引可能已过期（有更新的内容未纳入），建议重建"
+            )
+        else:
+            stats["health"] = "ok"
+            stats["health_msg"] = "正常"
+
+    return stats
+
+
+def get_config_embedding() -> dict:
+    """安全读取 [embedding] 的 model/dimension，避免因未配置而抛异常。"""
+    from app.services.config_service import load_config
+
+    emb = load_config().get("embedding", {})
+    return {
+        "model": str(emb.get("model", "")),
+        "dimension": int(emb.get("dimension", 0) or 0),
+    }
+
+
+def clear_embedding_cache() -> int:
+    """清空 embedding_cache（不影响 LanceDB，下次重建会重新调用 API）。"""
+    conn = get_conn(get_db_path())
+    try:
+        cur = conn.execute("DELETE FROM embedding_cache")
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
 
 
 def search_vectors(query: str, limit: int = 20) -> list[dict]:

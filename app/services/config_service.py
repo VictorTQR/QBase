@@ -427,6 +427,36 @@ def has_plain_api_key(config: dict[str, Any] | None = None) -> bool:
     return bool(embedding_key or llm_key)
 
 
+def get_vector_last_rebuilt() -> str | None:
+    """读取 config.toml [vector] last_rebuilt（ISO8601），未设置或尚未打开知识库返回 None。"""
+    try:
+        return load_config().get("vector", {}).get("last_rebuilt")
+    except ConfigError:
+        return None
+
+
+def set_vector_last_rebuilt(iso: str | None = None) -> None:
+    """记录向量索引最后重建时间到 config.toml 的 [vector] last_rebuilt。
+
+    iso 为 None 时写入当前 UTC 时间（ISO8601）。重建向量索引成功后调用。
+    只更新 [vector] 段，其余配置保持不变。
+    """
+    from datetime import datetime, timezone
+
+    if iso is None:
+        iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    config = load_config()
+    vector_section = dict(config.get("vector", {}))
+    vector_section["last_rebuilt"] = iso
+    config["vector"] = vector_section
+
+    path = get_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("wb") as f:
+        tomli_w.dump(config, f)
+
+
 def test_connection(
     kind: str,
     override: dict[str, Any] | None = None,
