@@ -21,6 +21,7 @@ from app.services.index_service import rebuild_fulltext_index
 from app.services.scanner_service import scan_current_library
 from app.services.search_service import search
 from app.services.transcription_service import start_transcription
+from app.services.vector_service import rebuild_vector_index
 from app.state import get_db_path
 
 router = APIRouter(prefix="/api")
@@ -141,14 +142,19 @@ def api_get_task(task_id: str) -> dict:
 
 @router.get("/search")
 def api_search(q: str, mode: str = "fulltext", limit: int = 50) -> dict:
-    """搜索：mode 为 filename / fulltext。"""
+    """搜索：mode 为 filename / fulltext / vector。"""
     if get_library_status().get("opened") is not True:
         raise HTTPException(status_code=400, detail="未打开知识库")
 
-    if mode not in ("filename", "fulltext"):
-        raise HTTPException(status_code=400, detail="mode 仅支持 filename / fulltext")
+    if mode not in ("filename", "fulltext", "vector"):
+        raise HTTPException(
+            status_code=400, detail="mode 仅支持 filename / fulltext / vector"
+        )
 
-    return {"query": q, "mode": mode, "items": search(q, mode, limit=limit)}
+    try:
+        return {"query": q, "mode": mode, "items": search(q, mode, limit=limit)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/search/rebuild")
@@ -161,3 +167,17 @@ def api_rebuild_index() -> dict:
         return rebuild_fulltext_index()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"索引重建失败：{exc}") from exc
+
+
+@router.post("/search/vector/rebuild")
+def api_rebuild_vector_index() -> dict:
+    """手动重建向量索引（会调用 Embedding API，可能产生费用）。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    try:
+        return rebuild_vector_index()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"向量索引重建失败：{exc}") from exc

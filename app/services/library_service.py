@@ -48,11 +48,17 @@ api_key_env = "OPENAI_API_KEY"
 model = "gpt-4o-mini"
 
 [embedding]
-enabled = true
+# 向量语义搜索（m5）。使用前先填好 base_url / model / dimension，
+# 再把 enabled 改为 true。dimension 必须与模型实际输出维度一致：
+#   BAAI/bge-m3 -> 1024，text-embedding-3-small -> 1536
+enabled = false
 provider = "openai_compatible"
-base_url = "https://api.example.com/v1"
-api_key_env = "OPENAI_API_KEY"
-model = "text-embedding-3-small"
+base_url = "https://api.siliconflow.cn/v1"
+api_key_env = "SILICONFLOW_API_KEY"
+model = "BAAI/bge-m3"
+dimension = 1024
+batch_size = 16
+timeout = 120
 
 [index]
 chunk_max_chars = 800

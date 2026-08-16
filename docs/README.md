@@ -54,6 +54,17 @@
     - 全文搜索 = FTS5 优先 + LIKE 兜底（FTS5 默认分词对中文子串不可靠，个人库规模 LIKE 可接受）
     - 索引来源：active 状态的 transcript/summary/note/parsed 派生 + .md/.txt 文档资产（parse_status=not_required）
     - 重建策略为全量清空重建；大库可优化为按资产增量索引
+- M5 LanceDB 向量搜索 - 已完成（2026-08-16）
+  - 依据：讨论稿 qwen-prdv1/m5.md，已适配 M4 结构
+  - 偏差/补充（m5.md 未覆盖、由实施补齐）：
+    - `app/ui/pages/search.py`：搜索页包 page_frame（m5.md 版本手写导航已去除），新增「语义」模式与「重建向量索引」按钮、distance 显示
+    - 新增 API：`POST /api/search/vector/rebuild`；`GET /api/search` 的 mode 放行 vector
+    - `DEFAULT_LIBRARY_CONFIG` 的 [embedding] 模板补 dimension/batch_size/timeout，示例 SiliconFlow BAAI/bge-m3 (1024)；enabled 默认 false（避免误触发 API 费用）
+    - 未采纳 m5.md §10 的自动重建向量索引（转录成功只自动重建全文索引，向量索引手动触发，同 m5.md 建议）
+  - 决策记录：
+    - 向量库位置 `<library_root>/.knowledge/vector/lancedb`，表名 chunks，全量重建（drop + create）
+    - embedding 缓存 key = `chunk|query:{model}:{sha256(text)}`，存 embedding_cache 表（M2 已建），JSON 向量
+    - 验收用本地 mock embeddings 服务（kb-test/.knowledge/mock_embeddings.py，字符频率向量，端口 8790）跑通：首次重建 7 片段全量嵌入 → 二次重建 7 缓存命中 0 新调用 → 「知识管理」语义命中 ep001 总结（distance 1.20 vs 其他 ≥1.79）→ enabled=false 时 HTTP 400 明确报错
 
 ## 项目文档
 

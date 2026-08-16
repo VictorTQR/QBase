@@ -1,10 +1,10 @@
-"""搜索页：文件名搜索 + 全文搜索 + 手动重建全文索引。"""
+"""搜索页：文件名 + 全文 + 语义搜索，手动重建全文/向量索引。"""
 
 from __future__ import annotations
 
 from nicegui import run, ui
 
-from app.services import index_service, search_service
+from app.services import index_service, search_service, vector_service
 from app.state import state
 from app.ui.layout import page_frame
 
@@ -18,7 +18,10 @@ KIND_LABELS = {
     "parsed": "解析结果",
     "transcript_meta": "转录元数据",
     "meta": "元数据",
+    "vector": "向量",
 }
+
+MODE_MAP = {"全文": "fulltext", "文件名": "filename", "语义": "vector"}
 
 
 @ui.page("/search")
@@ -36,16 +39,21 @@ def search_page():
             query_input = ui.input("搜索关键词").classes("w-96")
 
             mode_select = ui.select(
-                ["全文", "文件名"],
+                list(MODE_MAP.keys()),
                 value="全文",
                 label="搜索模式",
             )
 
             search_button = ui.button("搜索", icon="search")
             rebuild_button = ui.button("重建全文索引", icon="refresh")
+            rebuild_vector_button = ui.button("重建向量索引", icon="bubble_chart")
 
-        ui.label("首次使用全文搜索前，建议先点击「重建全文索引」。").classes(
-            "text-sm text-gray-600 mt-2"
+        ui.label(
+            "首次使用全文搜索前，先重建全文索引；首次使用语义搜索前，先重建向量索引。"
+        ).classes("text-sm text-gray-600 mt-2")
+
+        ui.label("重建向量索引会调用 Embedding API，可能产生费用或额度消耗。").classes(
+            "text-sm text-orange-600 mt-1"
         )
 
         results_container = ui.column().classes("w-full mt-4")
@@ -77,6 +85,11 @@ def search_page():
                             if result.get("asset_type"):
                                 ui.badge(result["asset_type"], color="blue-grey")
 
+                            if result.get("distance") is not None:
+                                ui.label(f"distance: {result['distance']:.4f}").classes(
+                                    "text-xs text-gray-500"
+                                )
+
                         ui.label(result["relative_path"]).classes(
                             "text-xs text-gray-500 mt-1 truncate"
                         )
@@ -92,7 +105,7 @@ def search_page():
                 ui.notify("请输入搜索关键词", type="warning")
                 return
 
-            mode = "filename" if mode_select.value == "文件名" else "fulltext"
+            mode = MODE_MAP.get(mode_select.value, "fulltext")
 
             search_button.disable()
 
@@ -126,7 +139,26 @@ def search_page():
             finally:
                 rebuild_button.enable()
 
+        async def handle_rebuild_vector():
+            rebuild_vector_button.disable()
+
+            try:
+                stats = await run.io_bound(vector_service.rebuild_vector_index)
+
+                ui.notify(
+                    "向量索引重建完成："
+                    f"总片段 {stats['total_chunks']}，"
+                    f"缓存命中 {stats['cache_hits']}，"
+                    f"新调用 {stats['embedded']}",
+                    type="positive",
+                )
+            except Exception as exc:
+                ui.notify(str(exc), type="negative")
+            finally:
+                rebuild_vector_button.enable()
+
         search_button.on_click(handle_search)
         rebuild_button.on_click(handle_rebuild)
+        rebuild_vector_button.on_click(handle_rebuild_vector)
 
         query_input.on("keydown.enter", handle_search)

@@ -1,4 +1,4 @@
-"""搜索服务：文件名搜索 + 全文搜索（FTS5 + LIKE 兜底）。"""
+"""搜索服务：文件名搜索 + 全文搜索（FTS5 + LIKE 兜底）+ 向量语义搜索（m5）。"""
 
 from __future__ import annotations
 
@@ -160,8 +160,45 @@ def search_fulltext(conn, query: str, limit: int = 50) -> list[dict]:
     return results
 
 
+def search_vector(conn, query: str, limit: int = 20) -> list[dict]:
+    """向量语义搜索：LanceDB 命中后回查资产标题。"""
+    from app.services import vector_service
+
+    hits = vector_service.search_vectors(query, limit=limit)
+
+    results = []
+
+    for hit in hits:
+        asset_title = hit["relative_path"]
+        asset_type = None
+
+        if hit["asset_id"]:
+            asset_row = conn.execute(
+                "SELECT title, type FROM assets WHERE id = ?",
+                (hit["asset_id"],),
+            ).fetchone()
+
+            if asset_row is not None:
+                asset_title = asset_row["title"]
+                asset_type = asset_row["type"]
+
+        results.append(
+            {
+                "asset_id": hit["asset_id"],
+                "asset_title": asset_title,
+                "asset_type": asset_type,
+                "kind": hit.get("kind") or "vector",
+                "relative_path": hit.get("relative_path"),
+                "snippet": make_snippet(hit.get("content") or "", query),
+                "distance": hit.get("distance"),
+            }
+        )
+
+    return results
+
+
 def search(query: str, mode: str, limit: int = 50) -> list[dict]:
-    """统一搜索入口。mode: filename / fulltext。"""
+    """统一搜索入口。mode: filename / fulltext / vector。"""
     query = query.strip()
 
     if not query:
@@ -172,6 +209,9 @@ def search(query: str, mode: str, limit: int = 50) -> list[dict]:
     try:
         if mode == "filename":
             return search_filename(conn, query, limit=limit)
+
+        if mode == "vector":
+            return search_vector(conn, query, limit=limit)
 
         return search_fulltext(conn, query, limit=limit)
     finally:
