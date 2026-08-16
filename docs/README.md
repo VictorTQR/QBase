@@ -76,6 +76,17 @@
     - 前置校验在 start_summarization 同步完成（无转录/不支持类型/空文本 → HTTP 400，不产生任务）；LLM 调用失败则在任务内标记 failed，错误信息任务中心可查
     - 总结成功后自动 scan + rebuild_fulltext_index（失败仅记 warning，不影响任务 success）
     - 验收用本地 mock LLM（kb-test/.knowledge/mock_llm.py，端口 8791，内容含「触发失败」时返回 500）：短文直出 / 长文分段合并（601 字原文 → 合并请求 1091 字符）/ 覆盖备份（.knowledge/backups/）/ 自动刷新索引（新总结立即可搜）全部通过
+- M7 统一导航 + 设置页 + 任务中心增强 - 已完成（2026-08-16）
+  - 依据：讨论稿 qwen-prdv1/m7.md，已适配现有结构
+  - 偏差/补充（m7.md 未覆盖、由实施补齐）：
+    - m7.md §1 的 page_header/require_library 未采纳——统一导航自 M0 起已由 page_frame 提供（含设置入口），全部页面沿用
+    - m7.md §4 资产列表页未替换——类型过滤 M1 已实现（DB 层 asset_type 参数，非页面端过滤）
+    - `app/ui/pages/settings.py`：新建设置页（当前配置 TOML 总览 + CLI/Embedding/LLM 配置卡 + 索引管理），替换 placeholders.py 占位页；placeholders.py 删除
+    - `_format_config`：嵌套 section 输出 `[llm.summary]` 风格标题；明文 api_key 显示为 ***（api_key_env 不打码）
+    - 任务中心增强：详情对话框（类型/时间/输出路径/命令/参数/错误）、失败任务「重试」按钮（转录/总结分别调 start_transcription / start_summarization 创建新任务）
+  - 决策记录：
+    - 重试 = 创建新任务而非复用旧记录（任务表保留完整历史）；同资产存在 pending/running 任务时仍受并发去重约束（400）
+    - m7.md §10 后续规划（M8 watch/M9 文档解析/M10 笔记编辑等）仅作参考，下一里程碑以 PRD 为准
 
 ## 项目文档
 
