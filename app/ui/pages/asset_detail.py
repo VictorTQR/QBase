@@ -7,6 +7,7 @@ from nicegui import run, ui
 from app.database import get_conn
 from app.repositories.artifact_repository import list_artifacts_by_asset
 from app.repositories.asset_repository import get_asset_by_id
+from app.services import transcription_service
 from app.state import get_db_path, state
 from app.ui.layout import page_frame
 from app.utils import (
@@ -75,6 +76,7 @@ def asset_detail_page(asset_id: str) -> None:
             ui.badge(asset["type"], color="grey")
 
             kinds = {artifact["kind"] for artifact in artifacts}
+            has_transcript = "transcript" in kinds
 
             if "transcript" in kinds:
                 ui.badge("转录", color="green")
@@ -84,6 +86,62 @@ def asset_detail_page(asset_id: str) -> None:
                 ui.badge("笔记", color="purple")
             if "parsed" in kinds:
                 ui.badge("已解析", color="teal")
+
+        # 转录操作卡片（仅音频/视频）
+        if asset["type"] in {"audio", "video"}:
+            async def start_transcription():
+                try:
+                    task_id = await run.io_bound(
+                        transcription_service.start_transcription,
+                        asset["id"],
+                    )
+
+                    ui.notify(
+                        f"转录任务已创建：{task_id[:8]}。请查看任务中心。",
+                        type="positive",
+                    )
+                    transcribe_button.disable()
+                except Exception as exc:
+                    ui.notify(str(exc), type="negative")
+
+            with ui.dialog() as overwrite_dialog:
+                with ui.card():
+                    ui.label("已存在转录文件，是否覆盖？")
+
+                    with ui.row().classes("gap-2 mt-3"):
+                        ui.button("取消", on_click=overwrite_dialog.close)
+
+                        async def confirm_overwrite():
+                            overwrite_dialog.close()
+                            await start_transcription()
+
+                        ui.button("覆盖并转录", on_click=confirm_overwrite)
+
+            with ui.card().classes("w-full p-4 mt-4"):
+                ui.label("转录").classes("text-lg font-semibold")
+
+                if has_transcript:
+                    ui.label(
+                        "当前已检测到转录文件。重新生成可能会覆盖已有文件。"
+                    ).classes("text-sm text-gray-600")
+                else:
+                    ui.label("当前未检测到转录文件。").classes(
+                        "text-sm text-gray-600"
+                    )
+
+                with ui.row().classes("gap-3 mt-3"):
+                    transcribe_button = ui.button(
+                        "重新生成转录" if has_transcript else "生成转录",
+                        on_click=lambda: (
+                            overwrite_dialog.open()
+                            if has_transcript
+                            else start_transcription()
+                        ),
+                    )
+
+                    ui.link("任务中心", "/tasks").classes(
+                        "flex items-center text-blue-600"
+                    )
 
         with ui.card().classes("w-full p-4 mt-4"):
             ui.label("文件信息").classes("text-lg font-semibold")

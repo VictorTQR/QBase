@@ -24,6 +24,7 @@ from app.repositories.asset_repository import (
     upsert_asset,
 )
 from app.rules import (
+    IGNORE_FILE_NAMES,
     classify_extension,
     explicit_artifact_kind,
     explicit_artifact_stem,
@@ -42,6 +43,9 @@ def collect_files(root: Path) -> list[dict]:
 
         for filename in filenames:
             if filename.startswith("."):
+                continue
+
+            if filename.lower() in IGNORE_FILE_NAMES:
                 continue
 
             full_path = Path(dirpath) / filename

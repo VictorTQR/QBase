@@ -30,6 +30,18 @@
     - 派生匹配键 = (relative_dir, stem.lower())；转录类只匹配音视频资产，其余 kind 匹配任意资产
     - 同 stem 多候选 -> 歧义不绑定；无候选 -> 孤儿（stats 计数，UI warning 提示）
     - 普通 {stem}.txt 在同目录存在同 stem 音视频时识别为转录，否则仍是文档资产
+- M3 转录任务 - 已完成（2026-08-16）
+  - 依据：讨论稿 qwen-prdv1/m3.md（QVoice CLI 集成），已适配 M2 结构
+  - 偏差/补充（m3.md 未覆盖、由实施补齐）：
+    - `app/services/config_service.py`：`transcribe_cwd` 空字符串归一为 None（否则 subprocess WinError 123）
+    - `app/services/transcription_service.py`：任务 command 字段统一存 json.dumps（m3.md 的 run 阶段误存 str(list) repr）；补 loguru 日志
+    - `app/ui/pages/asset_detail.py`：转录卡片/覆盖确认对话框并入 page_frame 版详情页（m3.md 版本丢了布局）
+    - `app/ui/pages/tasks.py`：任务中心包 page_frame，资产列链接到详情页，替换占位页
+    - 新增 API：`POST /api/assets/{id}/transcribe`、`GET /api/tasks`、`GET /api/tasks/{id}`
+    - `DEFAULT_LIBRARY_CONFIG` 的 [cli] 段更新为数组格式 + transcribe_cwd + timeout（原为旧字符串格式）
+  - 决策记录：
+    - 验收用 mock CLI（kb-test/.knowledge/mock_transcribe.py）跑通 success/failed/超时去重三条路径；真实 QVoice 配置已写入默认模板，用户改库级 config 即可切换
+    - 并发去重：同资产同类型存在 pending/running 任务时拒绝（HTTP 400）
 
 ## 项目文档
 

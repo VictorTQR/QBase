@@ -29,8 +29,16 @@ max_workers = 1
 task_timeout_seconds = 7200
 
 [cli]
-transcribe_command = 'mytool transcribe "{input}" --output "{output}"'
-parse_command = ""
+transcribe_command = [
+  "uv",
+  "run",
+  "qvoice",
+  "transcribe",
+  "{input}",
+]
+transcribe_cwd = "E:/Code/00Code/GitBank/QVoice"
+transcribe_timeout_seconds = 14400
+parse_command = []
 
 [llm.summary]
 enabled = true

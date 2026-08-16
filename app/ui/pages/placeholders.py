@@ -17,5 +17,4 @@ def placeholder_page(route: str, title: str, note: str):
 
 
 placeholder_page("/search", "搜索", "M4/M5 实现：全文 + 向量搜索")
-placeholder_page("/tasks", "任务", "M7 实现：任务中心")
 placeholder_page("/settings", "设置", "M7 实现：配置管理")

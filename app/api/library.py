@@ -11,12 +11,14 @@ from pydantic import BaseModel
 from app.database import get_conn
 from app.repositories.artifact_repository import list_artifacts_by_asset
 from app.repositories.asset_repository import count_assets, get_asset_by_id, list_assets
+from app.repositories.task_repository import get_task, list_tasks
 from app.services.library_service import (
     close_library,
     get_library_status,
     open_library,
 )
 from app.services.scanner_service import scan_current_library
+from app.services.transcription_service import start_transcription
 from app.state import get_db_path
 
 router = APIRouter(prefix="/api")
@@ -86,5 +88,50 @@ def api_get_asset(asset_id: str) -> dict:
             "asset": asset,
             "artifacts": list_artifacts_by_asset(conn, asset_id),
         }
+    finally:
+        conn.close()
+
+
+@router.post("/assets/{asset_id}/transcribe")
+def api_start_transcription(asset_id: str) -> dict:
+    """触发生成转录任务。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    try:
+        task_id = start_transcription(asset_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {"task_id": task_id, "status": "pending"}
+
+
+@router.get("/tasks")
+def api_list_tasks(limit: int = 200) -> dict:
+    """任务列表。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    conn = get_conn(get_db_path())
+    try:
+        return {"items": list_tasks(conn, limit=limit)}
+    finally:
+        conn.close()
+
+
+@router.get("/tasks/{task_id}")
+def api_get_task(task_id: str) -> dict:
+    """单个任务详情。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    conn = get_conn(get_db_path())
+    try:
+        task = get_task(conn, task_id)
+
+        if task is None:
+            raise HTTPException(status_code=404, detail="任务不存在")
+
+        return task
     finally:
         conn.close()
