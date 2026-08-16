@@ -14,19 +14,19 @@ from app.services import config_service
 from app.services.config_service import ConfigError
 from app.state import state
 from app.ui.layout import page_frame
-from app.utils import open_file
+from app.utils import notify_error, open_file
 
 
 @ui.page("/settings")
 def settings_page() -> None:
-    with page_frame("设置"):
+    with page_frame("设置", active_nav="/settings"):
 
         def handle_open_secrets() -> None:
             """打开 .knowledge/secrets.toml；不存在则创建含 [keys] 模板的文件。"""
             try:
                 secrets_file = config_service.get_secrets_path()
             except ConfigError as exc:
-                ui.notify(str(exc), type="negative")
+                notify_error(exc)
                 return
 
             if not secrets_file.exists():
@@ -388,7 +388,7 @@ def settings_page() -> None:
                         timeout=8000,
                     )
             except Exception as exc:
-                ui.notify(str(exc), type="negative")
+                notify_error(exc)
             finally:
                 save_button.enable()
 
@@ -403,7 +403,7 @@ def settings_page() -> None:
                 else:
                     ui.notify(result.get("message", "连接失败"), type="negative")
             except Exception as exc:
-                ui.notify(str(exc), type="negative")
+                notify_error(exc)
             finally:
                 test_llm_button.enable()
 
@@ -420,7 +420,7 @@ def settings_page() -> None:
                 else:
                     ui.notify(result.get("message", "连接失败"), type="negative")
             except Exception as exc:
-                ui.notify(str(exc), type="negative")
+                notify_error(exc)
             finally:
                 test_embedding_button.enable()
 
@@ -436,7 +436,7 @@ def settings_page() -> None:
                     type="positive",
                 )
             except Exception as exc:
-                ui.notify(str(exc), type="negative")
+                notify_error(exc)
             finally:
                 rebuild_fts_button.enable()
 
@@ -452,7 +452,7 @@ def settings_page() -> None:
                     type="positive",
                 )
             except Exception as exc:
-                ui.notify(str(exc), type="negative")
+                notify_error(exc)
             finally:
                 rebuild_vector_button.enable()
 

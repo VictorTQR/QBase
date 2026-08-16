@@ -97,42 +97,60 @@ _HAS_BADGE_COLUMNS = """
   EXISTS(
     SELECT 1 FROM artifacts b
     WHERE b.asset_id = a.id AND b.kind = 'note' AND b.status = 'active'
-  ) AS has_note
+  ) AS has_note,
+  EXISTS(
+    SELECT 1 FROM artifacts b
+    WHERE b.asset_id = a.id AND b.kind = 'parsed' AND b.status = 'active'
+  ) AS has_parsed,
+  EXISTS(
+    SELECT 1 FROM artifacts b
+    WHERE b.asset_id = a.id AND b.kind = 'meta' AND b.status = 'active'
+  ) AS has_meta
 """
+
+# 排序白名单，防止 SQL 注入
+_ALLOWED_ORDER_COLUMNS = {"title", "mtime", "size", "type"}
 
 
 def list_assets(
     conn: sqlite3.Connection,
-    limit: int = 1000,
+    limit: int = 50,
+    offset: int = 0,
     asset_type: str | None = None,
+    order_by: str = "mtime",
+    order_dir: str = "DESC",
 ) -> list[dict]:
-    """获取资产列表，附带派生文件状态（转录/总结/笔记徽章）。"""
+    """获取资产列表，附带派生文件状态（徽章）并支持排序与分页。
+
+    order_by: "title" / "mtime" / "size" / "type"
+    order_dir: "ASC" / "DESC"
+    """
+    if order_by not in _ALLOWED_ORDER_COLUMNS:
+        order_by = "mtime"
+    if order_dir.upper() not in ("ASC", "DESC"):
+        order_dir = "DESC"
+
     base_columns = """
       a.id, a.title, a.type, a.relative_path, a.absolute_path,
       a.size, a.mtime, a.parse_status, a.created_at, a.updated_at
     """
 
+    where_clause = ""
+    params: list = []
     if asset_type:
-        rows = conn.execute(
-            f"""
-            SELECT {base_columns}, {_HAS_BADGE_COLUMNS}
-            FROM assets a
-            WHERE a.type = ?
-            ORDER BY a.type, a.title
-            LIMIT ?
-            """,
-            (asset_type, limit),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            f"""
-            SELECT {base_columns}, {_HAS_BADGE_COLUMNS}
-            FROM assets a
-            ORDER BY a.type, a.title
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
+        where_clause = "WHERE a.type = ?"
+        params.append(asset_type)
+
+    rows = conn.execute(
+        f"""
+        SELECT {base_columns}, {_HAS_BADGE_COLUMNS}
+        FROM assets a
+        {where_clause}
+        ORDER BY a.{order_by} {order_dir}
+        LIMIT ? OFFSET ?
+        """,
+        params + [limit, offset],
+    ).fetchall()
 
     return [dict(row) for row in rows]
 

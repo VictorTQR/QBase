@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from nicegui import run, ui
 
 from app import __version__
 from app.config import get_config
 from app.services.library_service import get_library_status, open_library
 from app.ui.layout import page_frame
+from app.utils import notify_error
 
 MILESTONES = [
     ("M0", "项目骨架", True),
@@ -18,7 +22,7 @@ MILESTONES = [
     ("M5", "向量搜索", True),
     ("M6", "AI 总结", True),
     ("M7", "设置与任务中心", True),
-    ("M8", "体验优化", False),
+    ("M8", "体验优化", True),
 ]
 
 
@@ -26,7 +30,7 @@ MILESTONES = [
 def home_page() -> None:
     cfg = get_config()
 
-    with page_frame("首页"):
+    with page_frame("首页", active_nav="/"):
         ui.label("本地知识管理中心").classes("text-2xl font-bold")
         ui.label("管理播客、视频、文档，配套转录 / 总结 / 三层搜索。").classes(
             "text-gray-500"
@@ -56,12 +60,39 @@ def home_page() -> None:
                     status_label.text = "当前未打开知识库"
 
             async def handle_open():
+                raw_path = (path_input.value or "").strip()
+                if not raw_path:
+                    ui.notify("请输入知识库目录路径", type="warning")
+                    return
+
                 try:
-                    result = await run.io_bound(open_library, path_input.value)
+                    target = Path(raw_path).expanduser().resolve()
+                except Exception:
+                    ui.notify(f"路径无法解析：{raw_path}", type="negative")
+                    return
+
+                if not target.exists():
+                    ui.notify(f"目录不存在：{target}", type="negative")
+                    return
+                if not target.is_dir():
+                    ui.notify(f"路径不是目录：{target}", type="negative")
+                    return
+                if not os.access(target, os.W_OK):
+                    ui.notify(f"目录不可写：{target}", type="negative")
+                    return
+                if ".knowledge" in target.parts:
+                    ui.notify(
+                        "不能选择 .knowledge 目录内的子目录作为知识库",
+                        type="negative",
+                    )
+                    return
+
+                try:
+                    result = await run.io_bound(open_library, str(target))
                     ui.notify(f"已打开：{result['library_root']}", type="positive")
                     refresh_status()
                 except Exception as exc:
-                    ui.notify(str(exc), type="negative")
+                    notify_error(exc)
 
             with ui.row().classes("mt-3 gap-3"):
                 ui.button("打开知识库", icon="folder_open", on_click=handle_open)

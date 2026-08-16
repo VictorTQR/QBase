@@ -8,6 +8,7 @@ from app.database import get_conn
 from app.repositories.task_repository import get_task, list_tasks
 from app.state import get_db_path, state
 from app.ui.layout import page_frame
+from app.utils import notify_error
 
 STATUS_COLORS = {
     "pending": "grey",
@@ -33,7 +34,7 @@ TYPE_LABELS = {
 
 @ui.page("/tasks")
 def tasks_page() -> None:
-    with page_frame("任务中心"):
+    with page_frame("任务中心", active_nav="/tasks"):
         if state.library_root is None:
             ui.label("未打开知识库").classes("text-xl")
             ui.link("去打开知识库", "/").classes("text-blue-600")
@@ -216,7 +217,7 @@ def tasks_page() -> None:
                     load_tasks()
 
                 except Exception as exc:
-                    ui.notify(str(exc), type="negative")
+                    notify_error(exc)
 
             return handler
 

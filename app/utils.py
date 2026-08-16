@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import html
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+
+from loguru import logger
 
 
 def human_size(size: int | None) -> str:
@@ -113,3 +117,89 @@ def read_text_preview(path_str: str, max_chars: int = 3000) -> tuple[str, bool]:
             continue
 
     raise ValueError(f"无法识别文本编码：{path}")
+
+
+# ──────────────────────────────────────────────
+# 错误提示统一层
+# ──────────────────────────────────────────────
+
+# 已知异常的中文映射（key 为异常类名字符串，value 为提示模板）
+_ERROR_MESSAGES = {
+    "FileNotFoundError": "文件不存在：{detail}",
+    "PermissionError": "权限不足：{detail}",
+    "ValueError": "{detail}",
+    "ConnectionError": "网络连接失败，请检查服务是否启动：{detail}",
+    "TimeoutError": "操作超时，请稍后重试：{detail}",
+}
+
+
+def notify_error(exc: Exception) -> str:
+    """统一错误处理：记录完整堆栈到日志，对用户显示友好的中文提示。
+
+    返回用户友好的消息字符串（供调用方需要时复用）。
+    """
+    from nicegui import ui
+
+    logger.exception(f"操作失败：{type(exc).__name__}: {exc}")
+
+    exc_name = type(exc).__name__
+    detail = str(exc)
+
+    if exc_name == "OperationalError" and "no such table" in detail.lower():
+        message = "索引可能未建立，请前往设置页重建索引。"
+    elif exc_name in _ERROR_MESSAGES:
+        message = _ERROR_MESSAGES[exc_name].format(detail=detail)
+    else:
+        message = f"操作失败：{detail}。详见日志。"
+
+    ui.notify(message, type="negative", multi_line=True)
+    return message
+
+
+# ──────────────────────────────────────────────
+# 搜索高亮
+# ──────────────────────────────────────────────
+
+
+def highlight_snippet(snippet: str, words: list[str]) -> str:
+    """对 snippet 中的命中词进行高亮，返回安全的 HTML 字符串。
+
+    1. 先 HTML 转义
+    2. 对每个 word 做大小写不敏感替换，包裹 <mark>
+    """
+    if not words:
+        return html.escape(snippet)
+
+    escaped = html.escape(snippet)
+    for word in words:
+        if not word:
+            continue
+        pattern = re.compile(re.escape(word), re.IGNORECASE)
+        escaped = pattern.sub(
+            lambda m: f'<mark class="bg-yellow-200 px-0.5 rounded">{m.group()}</mark>',
+            escaped,
+        )
+    return escaped
+
+
+# ──────────────────────────────────────────────
+# 大文本读取
+# ──────────────────────────────────────────────
+
+
+def read_text_full(path_str: str | Path) -> str:
+    """读取完整文本文件，UTF-8 → UTF-8-SIG → GBK 兜底。"""
+    p = Path(path_str)
+    raw = p.read_bytes()
+    for encoding in ("utf-8", "utf-8-sig", "gbk"):
+        try:
+            return raw.decode(encoding)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    raise ValueError("无法识别文本编码")
+
+
+def read_text_segment(path_str: str | Path, offset: int = 0, length: int = 10000) -> str:
+    """读取文本文件的指定片段（用于大文本分段显示）。"""
+    full_text = read_text_full(path_str)
+    return full_text[offset : offset + length]

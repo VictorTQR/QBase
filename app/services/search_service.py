@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 
 from app.database import get_conn
@@ -44,6 +45,46 @@ def make_snippet(content: str, query: str, radius: int = 80) -> str:
     return prefix + content[start:end].replace("\n", " ") + suffix
 
 
+def _extract_highlight_words(query: str) -> list[str]:
+    """从查询字符串提取高亮词列表（与 build_fts_query 拆词逻辑一致）。"""
+    words = query.strip().split()
+    return [w for w in words if w not in ("AND", "OR", "NOT", "*")]
+
+
+def _get_derived_badges(conn, asset_id: str | None) -> dict:
+    """查询某资产的派生完成度（转录/总结/笔记/已解析/元数据）。"""
+    if not asset_id:
+        return {}
+
+    sql = """
+        SELECT
+            CASE WHEN EXISTS(
+                SELECT 1 FROM artifacts WHERE asset_id = ? AND kind = 'transcript'
+                AND status = 'active'
+            ) THEN 1 ELSE 0 END AS has_transcript,
+            CASE WHEN EXISTS(
+                SELECT 1 FROM artifacts WHERE asset_id = ? AND kind = 'summary'
+                AND status = 'active'
+            ) THEN 1 ELSE 0 END AS has_summary,
+            CASE WHEN EXISTS(
+                SELECT 1 FROM artifacts WHERE asset_id = ? AND kind = 'note'
+                AND status = 'active'
+            ) THEN 1 ELSE 0 END AS has_note,
+            CASE WHEN EXISTS(
+                SELECT 1 FROM artifacts WHERE asset_id = ? AND kind = 'parsed'
+                AND status = 'active'
+            ) THEN 1 ELSE 0 END AS has_parsed,
+            CASE WHEN EXISTS(
+                SELECT 1 FROM artifacts WHERE asset_id = ? AND kind = 'meta'
+                AND status = 'active'
+            ) THEN 1 ELSE 0 END AS has_meta
+    """
+    row = conn.execute(
+        sql, (asset_id, asset_id, asset_id, asset_id, asset_id)
+    ).fetchone()
+    return dict(row) if row else {}
+
+
 def search_filename(conn, query: str, limit: int = 50) -> list[dict]:
     """文件名搜索：命中标题或相对路径。"""
     like_pattern = f"%{escape_like(query)}%"
@@ -63,14 +104,16 @@ def search_filename(conn, query: str, limit: int = 50) -> list[dict]:
     ).fetchall()
 
     return [
-        {
-            "asset_id": row["asset_id"],
-            "asset_title": row["asset_title"],
-            "asset_type": row["asset_type"],
-            "kind": "asset",
-            "relative_path": row["relative_path"],
-            "snippet": row["relative_path"],
-        }
+                {
+                    "asset_id": row["asset_id"],
+                    "asset_title": row["asset_title"],
+                    "asset_type": row["asset_type"],
+                    "kind": "asset",
+                    "relative_path": row["relative_path"],
+                    "snippet": row["relative_path"],
+                    "highlight_words": _extract_highlight_words(query),
+                    "derived_badges": _get_derived_badges(conn, row["asset_id"]),
+                }
         for row in rows
     ]
 
@@ -116,10 +159,16 @@ def search_fulltext(conn, query: str, limit: int = 50) -> list[dict]:
                         "kind": row["kind"],
                         "relative_path": row["relative_path"],
                         "snippet": make_snippet(row["content"], query),
+                        "highlight_words": _extract_highlight_words(query),
+                        "derived_badges": _get_derived_badges(conn, row["asset_id"]),
                     }
                 )
-        except sqlite3.OperationalError:
-            pass
+        except sqlite3.OperationalError as e:
+            if "no such table" in str(e).lower():
+                raise RuntimeError(
+                    "全文索引尚未建立，请前往「设置」页面点击「重建全文索引」。"
+                ) from e
+            raise
 
     like_pattern = f"%{escape_like(query)}%"
 
@@ -191,6 +240,8 @@ def search_vector(conn, query: str, limit: int = 20) -> list[dict]:
                 "relative_path": hit.get("relative_path"),
                 "snippet": make_snippet(hit.get("content") or "", query),
                 "distance": hit.get("distance"),
+                "highlight_words": [],
+                "derived_badges": _get_derived_badges(conn, hit.get("asset_id")),
             }
         )
 

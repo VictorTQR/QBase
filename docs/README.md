@@ -95,6 +95,21 @@
     - `app/ui/pages/settings.py`：重写保留 page_frame，表单编辑 LLM/Embedding/Index/Task/Library 高频项，CLI/App 只读展示 + 「打开 config.toml」按钮；明文 api_key 警告、密钥来源状态灯、测试 API 按钮、保存写回 + dimension/model 变更告警、重建索引；新增「编辑 secrets.toml」按钮
     - 明文 Key 处理：`GET /api/settings` 返回的 config 中 api_key 一律打码为 `***`；`has_plain_api_key` 单独检测用于警告；UI 绝不提供明文 Key 输入框
     - 依赖新增 `tomli-w`（TOML 写回）
+- M8 体验优化 - 已完成（2026-08-16）
+  - 依据：讨论稿 qwen-prdv1/m8.md（与 qwen 基于 m8-context.md 讨论产出）
+  - 落地内容：
+    - `app/ui/layout.py`：保留 `page_frame`（新增 `active_nav` 高亮参数），新增 `page_header`/`breadcrumb`/`require_library`
+    - `app/utils.py`：新增 `notify_error`（loguru 记录 + 中文友好提示）、`highlight_snippet`（HTML 转义 + `<mark>` 高亮）、`read_text_full`/`read_text_segment`
+    - `app/repositories/asset_repository.py`：`list_assets` 扩展排序/分页（白名单防注入）+ `has_parsed`/`has_meta` 徽章列；`asset_detail.py` 改用 `get_asset_by_id`
+    - `app/services/search_service.py`：返回 `highlight_words` + `derived_badges`；FTS5 `no such table` 改为引导「前往设置重建全文索引」
+    - 页面重写/增强：`search.py`（高亮 + 派生徽章 + 保留重建索引按钮）、`assets.py`（排序 + 分页 + 统一徽章）、`asset_detail.py`（面包屑 + 大文本展开/分段翻页 + 统一徽章，保留转录/总结卡片防回归）
+    - `home.py`：打开知识库增加路径校验（存在/可写/防 .knowledge 嵌套）；`MILESTONES` 中 M8 标记完成
+    - `settings.py`/`tasks.py`：错误提示统一替换为 `notify_error`
+  - 安全：高亮渲染经 `html.escape` 防 XSS；徽章来源统一为 artifacts 表 `status='active'` 派生计算
+  - 偏差/补充（m8.md 未覆盖、由实施补齐）：
+    - 保留 M3/M6 转录/总结卡片（m8.md §7 草稿遗漏，避免功能回归）
+    - 搜索页保留「重建全文/向量索引」按钮（m8.md §5 草稿遗漏）
+    - 首页/设置/任务页沿用 `page_frame(active_nav=...)` 而非切换 `page_header`，保证导航高亮一致且改动最小
   - 决策记录：
     - 配置唯一真相来源 = `.knowledge/config.toml`；保存走「加载原配置 → deep merge patch → 清理 None → 校验 → 写回」，未编辑字段与未来新增字段均保留（已验收 `future_test_field` 保留）
     - 环境变量安全：测试连通性时 `_get_api_key` 只读 `api_key_env` 对应环境变量，不读取/展示明文 Key
