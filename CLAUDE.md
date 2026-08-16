@@ -1,6 +1,6 @@
-# QBase 开发原则
+# QBase 开发原则与环境指南
 
-本文档定义项目的核心开发原则和规范。
+本文档定义项目的核心开发原则、规范和运行方式。
 
 ## 代码质量原则
 
@@ -22,16 +22,53 @@ You Ain't Gonna Need It（你以后用不着它的）。不要在当前版本中
 - 注释使用中文
 - commit 消息使用中文
 
+## 项目依赖管理
+
+- 项目使用 uv 管理 Python 虚拟环境，Python 3.12+，venv 位于仓库根 `.venv/`
+- 依赖声明在根目录 `pyproject.toml`，修改后执行 `uv lock && uv sync`
+
+## 运行与开发
+
+```bash
+# 启动（浏览器访问 http://127.0.0.1:8765）
+.venv/Scripts/python.exe -m app.main
+
+# 环境变量覆盖配置（可选）
+QBASE_HOST / QBASE_PORT / QBASE_LOG_LEVEL / QBASE_OPEN_BROWSER
+```
+
+## 目录结构
+
+```text
+app/
+├── main.py          # 入口：create_app + uvicorn 启动
+├── config.py        # 应用级配置（config.toml + 环境变量）
+├── logging_conf.py  # loguru 日志
+└── ui/              # NiceGUI 页面（layout.py 框架 + pages/ 各页面）
+config.toml          # 应用级默认配置
+docs/PRD.md          # 唯一权威 spec
+```
+
 ## 测试和质量保证
 
 - 你只需要给出测试步骤，而不自动进行测试，测试由开发人员手动进行
 - 安装依赖时，你只需要给出命令，而不自动执行
 
-## 项目依赖管理
+## 当前进度
 
-- 项目使用 uv 管理 Python 虚拟环境
+- [x] M0 项目骨架（2026-08-16 完成）
+- [ ] M1 知识库与扫描 - 下一步
+- [ ] M2 派生文件识别
+- [ ] M3 转录任务
+- [ ] M4 全文搜索
+- [ ] M5 LanceDB 向量搜索
+- [ ] M6 AI 总结
+- [ ] M7 设置与任务中心
+- [ ] M8 体验优化
+
+里程碑详细目标见 [docs/PRD.md](./docs/PRD.md) §28。
 
 ## 相关文档
 
-- [AGENTS.md](./AGENTS.md) - AI 代理开发指南
-- [docs/README.md](./docs/README.md) - 文档入口
+- [docs/PRD.md](./docs/PRD.md) - 权威 spec
+- [docs/README.md](./docs/README.md) - 文档索引与里程碑记录
