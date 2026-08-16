@@ -1,0 +1,12 @@
+[project]
+name = "qbase"
+version = "0.1.0"
+description = "QBase - 本地知识管理中心（播客/视频/文档 + 转录/总结/三层搜索）"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.141.1",
+    "loguru>=0.7.3",
+    "nicegui>=3.16.0",
+    "uvicorn[standard]>=0.52.3",
+]

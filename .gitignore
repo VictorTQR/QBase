@@ -7,13 +7,14 @@ Thumbs.db
 .vscode/
 *.swp
 
-# Dependencies
-node_modules/
-app/node_modules/
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
 
-# Build
-dist/
-app/dist/
+# Runtime
+logs/
 
 # Environment
 .env
@@ -22,3 +23,6 @@ app/dist/
 # Backup files
 *.backup
 parse.backup/
+
+# Knowledge library index (rebuildable)
+.knowledge/

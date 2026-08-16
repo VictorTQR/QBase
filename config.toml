@@ -1,0 +1,8 @@
+# QBase 应用级配置
+# 库级配置（扫描忽略、CLI、LLM 等）在打开知识库时写入 .knowledge/config.toml
+
+[app]
+host = "127.0.0.1"
+port = 8765
+open_browser = true
+log_level = "INFO"
