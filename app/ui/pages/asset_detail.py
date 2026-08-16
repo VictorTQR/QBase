@@ -1,0 +1,152 @@
+"""资产详情页：原始文件信息、派生文件列表、文本预览。"""
+
+from __future__ import annotations
+
+from nicegui import run, ui
+
+from app.database import get_conn
+from app.repositories.artifact_repository import list_artifacts_by_asset
+from app.repositories.asset_repository import get_asset_by_id
+from app.state import get_db_path, state
+from app.ui.layout import page_frame
+from app.utils import (
+    human_size,
+    human_time,
+    open_file,
+    open_folder,
+    read_text_preview,
+)
+
+KIND_LABELS = {
+    "transcript": "转录",
+    "transcript_meta": "转录元数据",
+    "summary": "总结",
+    "note": "笔记",
+    "parsed": "解析结果",
+    "meta": "元数据",
+}
+
+TEXT_ARTIFACT_KINDS = {"transcript", "summary", "note", "parsed"}
+
+
+def is_text_artifact(artifact: dict) -> bool:
+    if artifact["kind"] not in TEXT_ARTIFACT_KINDS:
+        return False
+
+    path = artifact["relative_path"].lower()
+    return path.endswith(".txt") or path.endswith(".md")
+
+
+def make_open_handler(fn, path: str):
+    async def handler():
+        try:
+            await run.io_bound(fn, path)
+        except Exception as exc:
+            ui.notify(str(exc), type="negative")
+
+    return handler
+
+
+@ui.page("/assets/{asset_id}")
+def asset_detail_page(asset_id: str) -> None:
+    with page_frame("资产详情"):
+        if state.library_root is None:
+            ui.label("未打开知识库").classes("text-xl")
+            ui.link("去打开知识库", "/").classes("text-blue-600")
+            return
+
+        conn = get_conn(get_db_path())
+        try:
+            asset = get_asset_by_id(conn, asset_id)
+            artifacts = list_artifacts_by_asset(conn, asset_id) if asset else []
+        finally:
+            conn.close()
+
+        if asset is None:
+            ui.label("资产不存在").classes("text-xl")
+            ui.link("返回资产列表", "/assets").classes("text-blue-600")
+            return
+
+        ui.link("< 返回资产列表", "/assets").classes("text-blue-600")
+
+        ui.label(asset["title"]).classes("text-3xl font-bold mt-2")
+
+        with ui.row().classes("gap-2 mt-2"):
+            ui.badge(asset["type"], color="grey")
+
+            kinds = {artifact["kind"] for artifact in artifacts}
+
+            if "transcript" in kinds:
+                ui.badge("转录", color="green")
+            if "summary" in kinds:
+                ui.badge("总结", color="blue")
+            if "note" in kinds:
+                ui.badge("笔记", color="purple")
+            if "parsed" in kinds:
+                ui.badge("已解析", color="teal")
+
+        with ui.card().classes("w-full p-4 mt-4"):
+            ui.label("文件信息").classes("text-lg font-semibold")
+
+            ui.label(f"类型：{asset['type']}")
+            ui.label(f"相对路径：{asset['relative_path']}")
+            ui.label(f"绝对路径：{asset['absolute_path']}")
+            ui.label(f"大小：{human_size(asset['size'])}")
+            ui.label(f"修改时间：{human_time(asset['mtime'])}")
+            ui.label(f"解析状态：{asset['parse_status']}")
+
+            with ui.row().classes("gap-2 mt-3"):
+                ui.button(
+                    "打开文件",
+                    on_click=make_open_handler(open_file, asset["absolute_path"]),
+                ).props("dense")
+                ui.button(
+                    "打开目录",
+                    on_click=make_open_handler(open_folder, asset["absolute_path"]),
+                ).props("dense")
+
+        ui.label("派生文件").classes("text-xl font-semibold mt-6")
+
+        if not artifacts:
+            ui.label("暂无派生文件。").classes("text-gray-600")
+
+        for artifact in artifacts:
+            with ui.card().classes("w-full p-3 mt-2"):
+                with ui.row().classes("w-full items-center gap-2"):
+                    ui.badge(
+                        KIND_LABELS.get(artifact["kind"], artifact["kind"]),
+                        color="grey",
+                    )
+                    ui.label(artifact["relative_path"]).classes(
+                        "flex-1 truncate"
+                    ).tooltip(artifact["relative_path"])
+
+                    ui.button(
+                        "文件",
+                        on_click=make_open_handler(open_file, artifact["absolute_path"]),
+                    ).props("dense size=sm")
+                    ui.button(
+                        "目录",
+                        on_click=make_open_handler(open_folder, artifact["absolute_path"]),
+                    ).props("dense size=sm")
+
+                if is_text_artifact(artifact):
+                    try:
+                        text, truncated = read_text_preview(
+                            artifact["absolute_path"],
+                            max_chars=2000,
+                        )
+
+                        with ui.expansion("预览", icon="visibility").classes(
+                            "w-full mt-2"
+                        ):
+                            ui.label(text).classes("whitespace-pre-wrap text-sm")
+
+                            if truncated:
+                                ui.label("预览已截断。").classes(
+                                    "text-xs text-gray-500 mt-2"
+                                )
+                    except Exception as exc:
+                        ui.label(f"预览失败：{exc}").classes(
+                            "text-sm text-red-600 mt-2"
+                        )

@@ -1,4 +1,4 @@
-"""资产列表页：扫描 / 刷新、类型过滤、打开文件与所在目录。"""
+"""资产列表页：扫描 / 刷新、类型过滤、派生文件徽章、打开文件与所在目录。"""
 
 from __future__ import annotations
 
@@ -68,6 +68,7 @@ def assets_page() -> None:
                     ui.label("标题").classes("w-56 truncate")
                     ui.label("类型").classes("w-16")
                     ui.label("路径").classes("flex-1")
+                    ui.label("派生").classes("w-32")
                     ui.label("大小").classes("w-20 text-right")
                     ui.label("修改时间").classes("w-32")
                     ui.label("操作").classes("w-28")
@@ -76,13 +77,23 @@ def assets_page() -> None:
                     with ui.row().classes(
                         "w-full border-b p-2 items-center hover:bg-gray-50 rounded"
                     ):
-                        ui.label(asset["title"]).classes("w-56 truncate").tooltip(
-                            asset["title"]
-                        )
+                        ui.link(
+                            asset["title"],
+                            f"/assets/{asset['id']}",
+                        ).classes("w-56 truncate text-blue-600").tooltip(asset["title"])
                         ui.label(asset["type"]).classes("w-16")
                         ui.label(asset["relative_path"]).classes(
                             "flex-1 truncate"
                         ).tooltip(asset["relative_path"])
+
+                        with ui.row().classes("w-32 gap-1"):
+                            if asset["has_transcript"]:
+                                ui.badge("转录", color="green")
+                            if asset["has_summary"]:
+                                ui.badge("总结", color="blue")
+                            if asset["has_note"]:
+                                ui.badge("笔记", color="purple")
+
                         ui.label(human_size(asset["size"])).classes("w-20 text-right")
                         ui.label(human_time(asset["mtime"])).classes("w-32")
 
@@ -100,11 +111,25 @@ def assets_page() -> None:
             scan_button.disable()
             try:
                 stats = await run.io_bound(scan_current_library)
-                ui.notify(
-                    f"扫描完成：新增/更新 {stats['added_or_updated']}，"
-                    f"删除 {stats['removed']}",
-                    type="positive",
+                message = (
+                    f"扫描完成：资产新增/更新 {stats['assets_added_or_updated']}，"
+                    f"删除 {stats['assets_removed']}；"
+                    f"派生文件 {stats['artifacts_added_or_updated']} 个"
                 )
+                ui.notify(message, type="positive")
+
+                if stats["ambiguous_artifacts"] > 0:
+                    ui.notify(
+                        f"有 {stats['ambiguous_artifacts']} 个派生文件存在歧义，未自动绑定",
+                        type="warning",
+                    )
+
+                if stats["orphan_artifacts"] > 0:
+                    ui.notify(
+                        f"有 {stats['orphan_artifacts']} 个派生文件未找到对应资产",
+                        type="warning",
+                    )
+
                 load_assets()
             except Exception as exc:
                 ui.notify(str(exc), type="negative")

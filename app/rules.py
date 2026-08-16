@@ -43,6 +43,16 @@ IGNORE_DIR_NAMES = {
     ".trash",
 }
 
+# 派生文件 sidecar 后缀 -> kind（顺序重要：长后缀优先匹配）。
+ARTIFACT_SUFFIXES = [
+    (".transcript.txt", "transcript"),
+    (".transcript.json", "transcript_meta"),
+    (".summary.md", "summary"),
+    (".notes.md", "note"),
+    (".parsed.md", "parsed"),
+    (".meta.json", "meta"),
+]
+
 
 def classify_extension(ext: str) -> str | None:
     """根据扩展名判断资产类型。"""
@@ -84,3 +94,31 @@ def get_parse_status(asset_type: str, ext: str) -> str:
         return "not_required"
 
     return "pending"
+
+
+def explicit_artifact_kind(filename: str) -> str | None:
+    """判断文件名是否是明确命名的派生文件，返回 kind。
+
+    例：episode-001.summary.md -> "summary"
+    """
+    lower_name = filename.lower()
+
+    for suffix, kind in ARTIFACT_SUFFIXES:
+        if lower_name.endswith(suffix):
+            return kind
+
+    return None
+
+
+def explicit_artifact_stem(filename: str) -> str:
+    """获取派生文件对应的原始文件名 stem。
+
+    例：episode-001.transcript.txt -> "episode-001"
+    """
+    lower_name = filename.lower()
+
+    for suffix, _ in ARTIFACT_SUFFIXES:
+        if lower_name.endswith(suffix):
+            return filename[: -len(suffix)]
+
+    return filename

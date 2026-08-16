@@ -85,31 +85,50 @@ def upsert_asset(conn: sqlite3.Connection, asset: dict) -> str:
     return asset_id
 
 
+_HAS_BADGE_COLUMNS = """
+  EXISTS(
+    SELECT 1 FROM artifacts b
+    WHERE b.asset_id = a.id AND b.kind = 'transcript' AND b.status = 'active'
+  ) AS has_transcript,
+  EXISTS(
+    SELECT 1 FROM artifacts b
+    WHERE b.asset_id = a.id AND b.kind = 'summary' AND b.status = 'active'
+  ) AS has_summary,
+  EXISTS(
+    SELECT 1 FROM artifacts b
+    WHERE b.asset_id = a.id AND b.kind = 'note' AND b.status = 'active'
+  ) AS has_note
+"""
+
+
 def list_assets(
     conn: sqlite3.Connection,
     limit: int = 1000,
     asset_type: str | None = None,
 ) -> list[dict]:
-    """获取资产列表。"""
+    """获取资产列表，附带派生文件状态（转录/总结/笔记徽章）。"""
+    base_columns = """
+      a.id, a.title, a.type, a.relative_path, a.absolute_path,
+      a.size, a.mtime, a.parse_status, a.created_at, a.updated_at
+    """
+
     if asset_type:
         rows = conn.execute(
-            """
-            SELECT id, title, type, relative_path, absolute_path,
-                   size, mtime, parse_status, created_at, updated_at
-            FROM assets
-            WHERE type = ?
-            ORDER BY type, title
+            f"""
+            SELECT {base_columns}, {_HAS_BADGE_COLUMNS}
+            FROM assets a
+            WHERE a.type = ?
+            ORDER BY a.type, a.title
             LIMIT ?
             """,
             (asset_type, limit),
         ).fetchall()
     else:
         rows = conn.execute(
-            """
-            SELECT id, title, type, relative_path, absolute_path,
-                   size, mtime, parse_status, created_at, updated_at
-            FROM assets
-            ORDER BY type, title
+            f"""
+            SELECT {base_columns}, {_HAS_BADGE_COLUMNS}
+            FROM assets a
+            ORDER BY a.type, a.title
             LIMIT ?
             """,
             (limit,),
@@ -126,6 +145,22 @@ def count_assets(conn: sqlite3.Connection, asset_type: str | None = None) -> int
     else:
         row = conn.execute("SELECT COUNT(*) AS cnt FROM assets").fetchone()
     return int(row["cnt"]) if row else 0
+
+
+def get_asset_by_id(conn: sqlite3.Connection, asset_id: str) -> dict | None:
+    """按 ID 获取单个资产。"""
+    row = conn.execute(
+        """
+        SELECT id, title, type, relative_path, absolute_path, mime_type,
+               size, mtime, file_hash, duration_seconds, parse_status,
+               created_at, updated_at
+        FROM assets
+        WHERE id = ?
+        """,
+        (asset_id,),
+    ).fetchone()
+
+    return dict(row) if row else None
 
 
 def delete_missing_assets(conn: sqlite3.Connection, seen_paths: set[str]) -> int:

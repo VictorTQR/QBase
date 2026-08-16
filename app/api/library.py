@@ -9,7 +9,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.database import get_conn
-from app.repositories.asset_repository import count_assets, list_assets
+from app.repositories.artifact_repository import list_artifacts_by_asset
+from app.repositories.asset_repository import count_assets, get_asset_by_id, list_assets
 from app.services.library_service import (
     close_library,
     get_library_status,
@@ -63,6 +64,27 @@ def api_list_assets(type: str | None = None, limit: int = 1000) -> dict:
         return {
             "total": count_assets(conn, type),
             "items": list_assets(conn, limit=limit, asset_type=type),
+        }
+    finally:
+        conn.close()
+
+
+@router.get("/assets/{asset_id}")
+def api_get_asset(asset_id: str) -> dict:
+    """获取单个资产详情及其派生文件。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    conn = get_conn(get_db_path())
+    try:
+        asset = get_asset_by_id(conn, asset_id)
+
+        if asset is None:
+            raise HTTPException(status_code=404, detail="资产不存在")
+
+        return {
+            "asset": asset,
+            "artifacts": list_artifacts_by_asset(conn, asset_id),
         }
     finally:
         conn.close()

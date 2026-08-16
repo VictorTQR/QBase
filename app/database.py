@@ -25,6 +25,60 @@ CREATE TABLE IF NOT EXISTS assets (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS artifacts (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  relative_path TEXT NOT NULL UNIQUE,
+  absolute_path TEXT NOT NULL,
+  file_hash TEXT,
+  mtime INTEGER,
+  source TEXT,
+  generator TEXT,
+  model TEXT,
+  status TEXT DEFAULT 'active',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT,
+  type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  command TEXT,
+  params_json TEXT,
+  output_path TEXT,
+  error TEXT,
+  pid INTEGER,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS chunks (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT NOT NULL,
+  artifact_id TEXT,
+  kind TEXT NOT NULL,
+  relative_path TEXT NOT NULL,
+  chunk_index INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  content_hash TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS embedding_cache (
+  content_hash TEXT PRIMARY KEY,
+  model TEXT NOT NULL,
+  vector BLOB NOT NULL,
+  dimension INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_asset_id ON artifacts(asset_id);
+CREATE INDEX IF NOT EXISTS idx_artifacts_kind ON artifacts(kind);
 """
 
 
@@ -39,10 +93,24 @@ def get_conn(db_path: Path) -> sqlite3.Connection:
 
 
 def init_db(db_path: Path) -> None:
-    """初始化库级数据库（幂等）。"""
+    """初始化库级数据库（幂等）。建表 + FTS5 虚拟表。"""
     conn = get_conn(db_path)
     try:
         conn.executescript(SCHEMA)
+
+        try:
+            conn.execute(
+                """
+                CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+                  content,
+                  content='chunks',
+                  content_rowid='rowid'
+                );
+                """
+            )
+        except sqlite3.OperationalError:
+            pass
+
         conn.commit()
     finally:
         conn.close()
