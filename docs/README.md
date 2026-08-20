@@ -130,6 +130,15 @@
   - 决策记录：
     - 文本提取收在 utils 读取层而非各消费方，索引/总结/向量（chunks 表下游）全部自动受益
     - JSON 转录只提取纯文本入索引，segments 时间轴保留在原文件中不做字幕跳转（维持 PRD 第一阶段边界）
+- M8 后补丁：UI 设计 token 与统一布局框架（2026-08-20）
+  - 新增 `app/ui/tokens.py`：设计 token 单一来源——`C`（语义颜色，Quasar 调色板名，供 `color=` 参数）与 `CLS`（Tailwind 类串，供 `.classes()`），消除两类样式写法在各页面散落混用
+  - 新增 `app/ui/components.py`：`render_derived_badges` 共享组件，统一 search / assets / asset_detail 三处重复的派生文件徽章渲染（转录/总结/笔记/已解析/元数据/待解析），颜色引用 `tokens.C`
+  - `app/ui/layout.py`：移除 `page_header`，全部页面（含搜索/资产列表/资产详情三页迁移）统一走 `page_frame`（顶栏 + 标题行 + 居中内容容器 + 页脚）；标题行新增当前知识库路径徽章；样式全部引用 tokens
+  - 灰度对比度统一：次要文字 `text-gray-400/500` 全部改为 `text-gray-600`（白底约 5.3:1，满足 WCAG AA）；主操作按钮（打开知识库/扫描/重建索引等）统一 `color="primary"` 主色
+  - 顺带行为变化：资产列表页改异步加载 + spinner、支持横向滚动；资产详情页派生文件区改为多 tab 展示
+  - 决策记录：
+    - 徽章/按钮颜色只用 Quasar 调色板名（`color=` 参数），文字/布局类只用 Tailwind 类串（`.classes()`），两类入口分别收口到 `C` / `CLS`，禁止页面内再写裸色值
+    - `page_header` 与 `page_frame` 双轨并存时两套页面骨架易漂移（M8 期间新增页面各选其一），收敛为单一 `page_frame` 后删除 `page_header`
 
 ## 项目文档
 
@@ -140,6 +149,7 @@
 上线后 bug 修复的根因分析与经验沉淀，按日期命名（`YYYY-MM-DD-slug.md`）。
 
 - [2026-08-20 任务中心详情对话框自动关闭](./fixes/2026-08-20-task-detail-dialog-auto-close.md) - 事件处理器内创建的 dialog 挂进列表容器，被 5 秒定时刷新的 `container.clear()` 销毁
+- [2026-08-20 向量状态卡片永远显示不一致](./fixes/2026-08-20-vector-stats-always-inconsistent.md) - 统计按不存在的 `kind='vector'` 过滤 chunks，覆盖度恒 0、重建后仍提示不一致
 
 ## 原始讨论存档（只读，不更新）
 

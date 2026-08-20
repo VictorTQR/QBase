@@ -15,13 +15,13 @@
 - **设置页 + 任务中心**：配置总览（只读）、索引管理、任务详情与失败重试
 - **最近打开的 5 个知识库**：首页一键切换最近使用的知识库
 - **向量索引状态卡片**：设置页展示向量索引健康状态（模型 / 维度 / 覆盖度 / 最后重建），支持全量重建与清空缓存
-- **体验优化**：搜索高亮、状态徽章、大文本折叠、统一错误提示、排序分页、全站统一导航
+- **体验优化**：搜索高亮、状态徽章、大文本折叠、统一错误提示、排序分页、全站统一导航与设计 token（统一布局框架 / WCAG AA 灰度对比度）
 
 M8 体验优化已全部完成（搜索高亮 / 状态徽章 / 大文本折叠 / 错误提示 / 排序分页 / 统一导航 / 最近打开 / 向量状态卡片）。下一步规划见 [docs/讨论/qwen-prdv1/m8.md §15](./docs/讨论/qwen-prdv1/m8.md) 与 [vector-manage.md](./docs/讨论/qwen-prdv1/vector-manage.md)。
 
 ## 技术栈
 
-- Python 3.13 + [uv](https://github.com/astral-sh/uv)（虚拟环境管理）
+- Python 3.12 + [uv](https://github.com/astral-sh/uv)（虚拟环境管理）
 - [NiceGUI](https://nicegui.io/)（UI）+ FastAPI + uvicorn
 - SQLite（资产/任务/分块元数据 + FTS5）+ LanceDB（向量）
 - 日志：[loguru](https://github.com/Delgan/loguru)
@@ -125,7 +125,7 @@ app/
 ├── utils.py         # 格式化、打开文件 / 目录
 ├── repositories/    # 数据访问层
 ├── services/        # 业务层（library / scanner / transcribe / index / search / vector / llm / summarization）
-└── ui/              # NiceGUI 页面（layout.py 框架 + pages/ 各页面）
+└── ui/              # NiceGUI 页面（layout.py 统一 page_frame + tokens.py 设计 token + components.py 共享徽章 + pages/ 各页面）
 config.toml          # 应用级默认配置
 start.bat            # 一键启动（Windows）
 docs/PRD.md          # 唯一权威 spec

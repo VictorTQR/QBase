@@ -51,10 +51,16 @@ app/
 ├── api/             # REST 路由
 ├── repositories/    # 数据访问层
 ├── services/        # 业务层（library/scanner/...）
-└── ui/              # NiceGUI 页面（layout.py 框架 + pages/ 各页面）
+└── ui/              # NiceGUI 页面（layout.py 统一 page_frame 框架 + tokens.py 设计 token + components.py 共享徽章 + pages/ 各页面）
 config.toml          # 应用级默认配置
 docs/PRD.md          # 唯一权威 spec
 ```
+
+## UI 约定
+
+- 布局统一走 `app/ui/layout.py` 的 `page_frame`（顶栏 + 标题行 + 内容容器 + 页脚），不另写页面骨架
+- 样式统一引用 `app/ui/tokens.py`：颜色用 `C`（Quasar 调色板名，`color=` 参数），类串用 `CLS`（Tailwind）；不在页面内写裸色值或散落类串
+- 派生文件徽章统一用 `app/ui/components.py` 的 `render_derived_badges`，不重复实现
 
 ## 测试和质量保证
 
