@@ -186,6 +186,11 @@ def asset_detail_page(asset_id: str) -> None:
             (asset["title"], None),
         ])
 
+        kinds = {artifact["kind"] for artifact in artifacts}
+        has_transcript = "transcript" in kinds
+        has_summary = "summary" in kinds
+        has_parsed = "parsed" in kinds
+
         # 基本信息卡片
         with ui.card().classes("w-full p-4 mt-3"):
             with ui.row().classes("items-center gap-3"):
@@ -198,7 +203,16 @@ def asset_detail_page(asset_id: str) -> None:
             ui.label(f"绝对路径：{asset['absolute_path']}").classes("text-sm text-gray-600")
             ui.label(f"大小：{human_size(asset['size'])}").classes("text-sm text-gray-600")
             ui.label(f"修改时间：{human_time(asset['mtime'])}").classes("text-sm text-gray-600")
-            ui.label(f"解析状态：{asset['parse_status']}").classes("text-sm text-gray-600")
+            # parse_status 是静态策略值（pdf/office 恒 pending），按解析产物显示有效状态
+            if has_parsed:
+                parse_status_label = "已解析"
+            elif asset["parse_status"] == "pending":
+                parse_status_label = "待解析"
+            elif asset["parse_status"] == "not_required":
+                parse_status_label = "无需解析"
+            else:
+                parse_status_label = asset["parse_status"]
+            ui.label(f"解析状态：{parse_status_label}").classes("text-sm text-gray-600")
 
             with ui.row().classes("gap-2 mt-3"):
                 ui.button(
@@ -209,11 +223,6 @@ def asset_detail_page(asset_id: str) -> None:
                     "打开目录",
                     on_click=_make_open_handler(open_folder, asset["absolute_path"]),
                 ).props("dense")
-
-        kinds = {artifact["kind"] for artifact in artifacts}
-        has_transcript = "transcript" in kinds
-        has_summary = "summary" in kinds
-        has_parsed = "parsed" in kinds
 
         # 文档解析卡片（仅白名单文档类型，m9）
         asset_ext = Path(asset["relative_path"]).suffix.lower()

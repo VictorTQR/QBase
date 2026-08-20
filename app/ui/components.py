@@ -30,4 +30,7 @@ def render_derived_badges(item: dict) -> None:
     if badges.get("has_meta"):
         ui.badge("元数据", color=C.META).classes("text-xs")
     if item.get("parse_status") == "pending":
-        ui.badge("待解析", color=C.PENDING).classes("text-xs")
+        # parse_status 是扫描时的静态策略值（pdf/office 恒为 pending，不随
+        # 解析产物翻转），已解析时须抑制待解析徽章，避免二者并排
+        if not badges.get("has_parsed"):
+            ui.badge("待解析", color=C.PENDING).classes("text-xs")
