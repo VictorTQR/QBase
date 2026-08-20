@@ -49,6 +49,50 @@ def tasks_page() -> None:
 
         container = ui.column().classes("w-full mt-4")
 
+        # 详情对话框必须定义在页面层级：若在按钮点击时创建，会挂到 container 内，
+        # 被定时刷新的 container.clear() 一并销毁，导致对话框打开后自动关闭
+        with ui.dialog() as detail_dialog:
+            with ui.card() as detail_card:
+                detail_card.classes("w-[640px] max-h-[80vh] overflow-y-auto")
+
+        def show_detail(task: dict):
+            detail_card.clear()
+            with detail_card:
+                ui.label(f"任务详情：{task['id'][:8]}").classes(
+                    "text-lg font-semibold"
+                )
+                ui.separator()
+
+                ui.label(f"类型：{TYPE_LABELS.get(task['type'], task['type'])}")
+                ui.label(f"状态：{STATUS_LABELS.get(task['status'], task['status'])}")
+                ui.label(f"创建时间：{task['created_at']}")
+                ui.label(f"开始时间：{task['started_at'] or '-'}")
+                ui.label(f"结束时间：{task['finished_at'] or '-'}")
+                ui.label(f"输出路径：{task['output_path'] or '-'}")
+
+                if task["command"]:
+                    ui.label("命令：").classes("font-semibold mt-2")
+                    ui.code(task["command"]).classes("w-full")
+
+                if task["params_json"]:
+                    ui.label("参数：").classes("font-semibold mt-2")
+                    ui.code(task["params_json"], language="json").classes(
+                        "w-full"
+                    )
+
+                if task["error"]:
+                    ui.label("错误信息：").classes(
+                        "font-semibold mt-2 text-red-600"
+                    )
+                    ui.code(task["error"]).classes(
+                        "w-full max-h-48 overflow-y-auto"
+                    )
+
+                with ui.row().classes("mt-3"):
+                    ui.button("关闭", on_click=detail_dialog.close)
+
+            detail_dialog.open()
+
         def load_tasks():
             container.clear()
 
@@ -137,43 +181,7 @@ def tasks_page() -> None:
                     ui.notify("任务不存在", type="negative")
                     return
 
-                with ui.dialog() as dialog, ui.card().classes(
-                    "w-[640px] max-h-[80vh] overflow-y-auto"
-                ):
-                    ui.label(f"任务详情：{task_id[:8]}").classes(
-                        "text-lg font-semibold"
-                    )
-                    ui.separator()
-
-                    ui.label(f"类型：{TYPE_LABELS.get(task['type'], task['type'])}")
-                    ui.label(f"状态：{STATUS_LABELS.get(task['status'], task['status'])}")
-                    ui.label(f"创建时间：{task['created_at']}")
-                    ui.label(f"开始时间：{task['started_at'] or '-'}")
-                    ui.label(f"结束时间：{task['finished_at'] or '-'}")
-                    ui.label(f"输出路径：{task['output_path'] or '-'}")
-
-                    if task["command"]:
-                        ui.label("命令：").classes("font-semibold mt-2")
-                        ui.code(task["command"]).classes("w-full")
-
-                    if task["params_json"]:
-                        ui.label("参数：").classes("font-semibold mt-2")
-                        ui.code(task["params_json"], language="json").classes(
-                            "w-full"
-                        )
-
-                    if task["error"]:
-                        ui.label("错误信息：").classes(
-                            "font-semibold mt-2 text-red-600"
-                        )
-                        ui.code(task["error"]).classes(
-                            "w-full max-h-48 overflow-y-auto"
-                        )
-
-                    with ui.row().classes("mt-3"):
-                        ui.button("关闭", on_click=dialog.close)
-
-                dialog.open()
+                show_detail(task)
 
             return handler
 
