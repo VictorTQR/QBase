@@ -3018,19 +3018,22 @@ UTF-8 优先
 第一阶段完成后，可以按顺序做：
 
 ```text
-1. watchdog 文件监听自动同步
-2. 文档解析 CLI 接入
-3. PDF/DOCX/EPUB 内容索引
-4. sidecar 目录 .kb
-5. 应用内笔记编辑
-6. transcript JSON segments
-7. 音频字幕级跳转
-8. TTS 模块接入
-9. 混合搜索排序
-10. 标签系统
-11. 收藏与稍后处理
-12. 批量任务
+1. 文档解析 CLI 接入
+2. PDF/DOCX/EPUB 内容索引
+3. sidecar 目录 .kb
+4. 应用内笔记编辑
+5. transcript JSON segments
+6. 音频字幕级跳转
+7. TTS 模块接入
+8. 混合搜索排序
+9. 标签系统
+10. 收藏与稍后处理
+11. 批量任务
 ```
+
+### 待实现（暂缓）
+
+- watchdog 文件监听自动同步：当前使用场景不强需求，暂缓，不排入上述顺序；配置模板已预留 `watch_enabled` 开关（默认 false），需要时再实现。
 
 ---
 
