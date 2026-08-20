@@ -17,6 +17,25 @@ from app.services.index_service import rebuild_fulltext_index
 from app.services.scanner_service import scan_current_library
 from app.state import get_db_path
 
+# CLI 成功后按优先级查找转录产物。
+# QVoice -f json 输出 <stem>.transcript.json（当前默认模板），-f txt / 不带 -f 输出 <stem>.transcript.txt。
+TRANSCRIPT_OUTPUT_SUFFIXES = (".transcript.json", ".transcript.txt", ".txt")
+
+
+def _candidate_outputs(asset_path: str) -> list[Path]:
+    """按优先级列出可能的转录输出路径。"""
+    path = Path(asset_path)
+    return [path.with_suffix(suffix) for suffix in TRANSCRIPT_OUTPUT_SUFFIXES]
+
+
+def _find_transcript_output(asset_path: str) -> Path | None:
+    """返回第一个实际存在的转录产物路径，都不存在返回 None。"""
+    for candidate in _candidate_outputs(asset_path):
+        if candidate.exists():
+            return candidate
+
+    return None
+
 
 def start_transcription(asset_id: str) -> str:
     """创建并启动转录任务，返回 task_id。"""
@@ -42,7 +61,7 @@ def start_transcription(asset_id: str) -> str:
 
         cli_config = get_transcribe_cli_config()
 
-        expected_output = Path(asset["absolute_path"]).with_suffix(".txt")
+        expected_output = _candidate_outputs(asset["absolute_path"])[0]
 
         command = build_command(
             cli_config["command"],
@@ -130,10 +149,10 @@ def run_transcription_task(task_id: str) -> None:
             timeout=cli_config.get("timeout", 14400),
         )
 
-        expected_output = Path(asset["absolute_path"]).with_suffix(".txt")
+        output_path = _find_transcript_output(asset["absolute_path"])
 
         if result.returncode == 0:
-            if expected_output.exists():
+            if output_path is not None:
                 warning = None
 
                 try:
@@ -146,16 +165,19 @@ def run_transcription_task(task_id: str) -> None:
                     conn,
                     task_id,
                     status="success",
-                    output_path=str(expected_output),
+                    output_path=str(output_path),
                     error=warning,
                     finished_at=task_repository.utcnow_iso(),
                 )
                 conn.commit()
                 logger.info("转录任务成功：{}", asset["title"])
             else:
+                candidates = "\n".join(
+                    str(p) for p in _candidate_outputs(asset["absolute_path"])
+                )
                 error_text = (
                     "CLI 执行成功，但没有找到输出文件。\n"
-                    f"期望输出：{expected_output}\n\n"
+                    f"按以下优先级查找均未命中：\n{candidates}\n\n"
                     f"stdout:\n{tail(result.stdout)}\n\n"
                     f"stderr:\n{tail(result.stderr)}"
                 )

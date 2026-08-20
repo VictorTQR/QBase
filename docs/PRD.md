@@ -513,7 +513,8 @@ episode-001.mp3
 
 ```text
 episode-001.txt                  转录文本，兼容现有 CLI
-episode-001.transcript.txt       转录文本，可选更明确命名
+episode-001.transcript.txt       转录文本，QVoice 默认输出
+episode-001.transcript.json      JSON 转录，QVoice -f json 输出（含全文 text + 带时间戳/说话人的 segments）
 episode-001.summary.md           AI 总结
 episode-001.notes.md             用户笔记
 episode-001.parsed.md            文档解析结果，后续使用
@@ -527,17 +528,22 @@ episode-001.meta.json            元数据，后续使用
 转录文本识别顺序：
 
 ```text
-1. {stem}.transcript.txt
-2. {stem}.txt
+1. {stem}.transcript.json
+2. {stem}.transcript.txt
+3. {stem}.txt
 ```
 
 如果同时存在，优先：
 
 ```text
-{stem}.transcript.txt
+{stem}.transcript.json
 ```
 
-但第一阶段也可以两个都识别为 transcript artifact，并在 UI 中提示存在多个转录文件。
+`.transcript.json` 是结构化转录（QVoice `-f json` 产物），读取时提取纯文本：
+优先顶层 `text` 字段，为空则按行拼接 `segments[].text`。时间轴 / 说话人字段
+第一阶段仅保留在原文件中，不做字幕跳转。
+
+但第一阶段也可以多个都识别为 transcript artifact，并在 UI 中提示存在多个转录文件。
 
 ---
 
@@ -804,21 +810,22 @@ explorer /select,"path"
 
 ### 12.1 CLI 现状
 
-当前已有转录 CLI：
+外部转录 CLI（QVoice）：
 
 ```bash
-mytool transcribe input.mp3
+qvoice transcribe input.mp3              # 输出 <stem>.transcript.txt（纯文本）
+qvoice transcribe input.mp3 -f json      # 输出 <stem>.transcript.json（结构化）
 ```
 
-并支持：
+JSON 结构：
 
-```bash
-mytool transcribe input.mp3 --output output.txt
+```text
+{generated_at, tool, file, provider, success, text,
+ language?, duration?, speakers?, segments: [{start, end, text, speaker?}]}
 ```
 
-当前不输出 JSON segments。
-
-因此第一阶段只做纯文本转录管理，不做时间轴、字幕、点击跳转。
+第一阶段只提取其中的纯文本（`text` 优先，回退 `segments[].text`）用于索引、
+总结与预览；不做时间轴、字幕、点击跳转。
 
 ---
 
@@ -826,24 +833,23 @@ mytool transcribe input.mp3 --output output.txt
 
 优先级：P0
 
-配置项：
+默认命令（新库）：
 
 ```toml
 [cli]
-transcribe_command = 'mytool transcribe "{input}" --output "{output}"'
+transcribe_command = ["uv", "run", "qvoice", "transcribe", "{input}", "-f", "json"]
 ```
 
 支持变量：
 
 ```text
 {input}    原始音视频绝对路径
-{output}   期望输出 txt 绝对路径
 ```
 
 默认输出：
 
 ```text
-与原始文件同目录同名的 .txt
+与原始文件同目录同名的 .transcript.json
 ```
 
 例如：
@@ -855,7 +861,15 @@ D:\Knowledge\podcasts\episode-001.mp3
 输出：
 
 ```text
-D:\Knowledge\podcasts\episode-001.txt
+D:\Knowledge\podcasts\episode-001.transcript.json
+```
+
+CLI 成功后按以下优先级查找产物（兼容 `-f txt` 或不带 `-f` 的自定义模板）：
+
+```text
+1. {stem}.transcript.json
+2. {stem}.transcript.txt
+3. {stem}.txt
 ```
 
 ---
@@ -878,7 +892,7 @@ D:\Knowledge\podcasts\episode-001.txt
 3. 如已存在，提示用户确认是否覆盖
 4. 调用 CLI
 5. 等待 CLI 结束
-6. 检查输出 txt 是否存在且非空
+6. 按候选优先级检查转录产物是否存在（.transcript.json → .transcript.txt → .txt）
 7. 写入 artifact 记录
 8. 建立全文索引
 9. 建立向量索引
@@ -986,9 +1000,11 @@ OpenAI 兼容 API
 必须存在转录文本：
 
 ```text
-{stem}.txt
+{stem}.transcript.json
 或
 {stem}.transcript.txt
+或
+{stem}.txt
 ```
 
 如果没有转录：

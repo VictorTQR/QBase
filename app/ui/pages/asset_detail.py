@@ -40,7 +40,11 @@ def is_text_artifact(artifact: dict) -> bool:
     if artifact["kind"] not in TEXT_ARTIFACT_KINDS:
         return False
     path = artifact["relative_path"].lower()
-    return path.endswith(".txt") or path.endswith(".md")
+    return (
+        path.endswith(".txt")
+        or path.endswith(".md")
+        or path.endswith(".transcript.json")
+    )
 
 
 def _render_asset_badges(asset: dict):

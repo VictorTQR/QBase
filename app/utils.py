@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import json
 import os
 import re
 import subprocess
@@ -11,6 +12,8 @@ from datetime import datetime
 from pathlib import Path
 
 from loguru import logger
+
+from app.rules import TRANSCRIPT_JSON_SUFFIX
 
 
 def human_size(size: int | None) -> str:
@@ -76,15 +79,53 @@ def open_folder(path_str: str) -> None:
         subprocess.Popen(["xdg-open", str(target_dir)])
 
 
+def _is_transcript_json(path: Path) -> bool:
+    """判断文件是否是 QVoice JSON 转录（.transcript.json）。"""
+    return path.name.lower().endswith(TRANSCRIPT_JSON_SUFFIX)
+
+
+def extract_transcript_json_text(path_str: str | Path) -> str:
+    """提取 QVoice JSON 转录中的纯文本。
+
+    优先取顶层 text 字段（含标点的完整全文）；为空时回退按行拼接 segments[].text。
+    解析失败抛 ValueError，由调用方决定跳过或报错。
+    """
+    path = Path(path_str)
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"无法解析转录 JSON：{path}（{exc}）") from exc
+
+    if not isinstance(data, dict):
+        raise ValueError(f"转录 JSON 结构不符合预期：{path}")
+
+    text = str(data.get("text") or "").strip()
+
+    if text:
+        return text
+
+    segments = data.get("segments") or []
+    return "\n".join(
+        str(seg.get("text", "")).strip()
+        for seg in segments
+        if isinstance(seg, dict) and str(seg.get("text", "")).strip()
+    )
+
+
 def read_text_for_index(path_str: str, max_chars: int = 500_000) -> str:
     """读取文本文件用于建立索引。
 
-    依次尝试 UTF-8 / UTF-8-SIG / GBK。
+    .transcript.json 提取纯文本；其余依次尝试 UTF-8 / UTF-8-SIG / GBK。
     """
     path = Path(path_str)
 
     if not path.exists():
         raise FileNotFoundError(f"文件不存在：{path}")
+
+    if _is_transcript_json(path):
+        return extract_transcript_json_text(path)[:max_chars]
 
     for encoding in ("utf-8", "utf-8-sig", "gbk"):
         try:
@@ -99,12 +140,17 @@ def read_text_for_index(path_str: str, max_chars: int = 500_000) -> str:
 def read_text_preview(path_str: str, max_chars: int = 3000) -> tuple[str, bool]:
     """读取文本文件预览，返回 (文本, 是否截断)。
 
-    依次尝试 UTF-8 / UTF-8-SIG / GBK。
+    .transcript.json 提取纯文本；其余依次尝试 UTF-8 / UTF-8-SIG / GBK。
     """
     path = Path(path_str)
 
     if not path.exists():
         raise FileNotFoundError(f"文件不存在：{path}")
+
+    if _is_transcript_json(path):
+        text = extract_transcript_json_text(path)
+        truncated = len(text) > max_chars
+        return text[:max_chars], truncated
 
     for encoding in ("utf-8", "utf-8-sig", "gbk"):
         try:
@@ -190,6 +236,10 @@ def highlight_snippet(snippet: str, words: list[str]) -> str:
 def read_text_full(path_str: str | Path) -> str:
     """读取完整文本文件，UTF-8 → UTF-8-SIG → GBK 兜底。"""
     p = Path(path_str)
+
+    if _is_transcript_json(p):
+        return extract_transcript_json_text(p)
+
     raw = p.read_bytes()
     for encoding in ("utf-8", "utf-8-sig", "gbk"):
         try:

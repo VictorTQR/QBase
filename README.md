@@ -7,7 +7,7 @@
 ## 功能现状（M0–M8 已完成）
 
 - **知识库管理**：打开任意目录作为知识库，自动扫描并建立资产清单
-- **派生文件识别**：自动识别转录（`.transcript.txt`）、总结（`.summary.md`）、笔记（`.notes.md`）等 sidecar 文件并绑定到对应资产
+- **派生文件识别**：自动识别转录（`.transcript.json` / `.transcript.txt`）、总结（`.summary.md`）、笔记（`.notes.md`）等 sidecar 文件并绑定到对应资产；JSON 转录自动提取纯文本用于索引、总结与预览
 - **转录任务**：集成外部转录 CLI（默认 QVoice），后台任务化，支持并发去重与失败重试
 - **全文搜索**：FTS5 全文检索 + 文件名搜索，中文子串用 LIKE 兜底
 - **语义搜索**：LanceDB 向量索引，OpenAI 兼容 Embedding API，带 embedding 缓存（已嵌入片段不重复计费）
@@ -81,7 +81,8 @@ open_browser = true
 
 ```toml
 [cli]
-transcribe_command = ["uv", "run", "qvoice", "transcribe", "{input}", "--output", "{output}"]
+# -f json 输出 <stem>.transcript.json（含时间戳/说话人）；改为 -f txt 输出纯文本
+transcribe_command = ["uv", "run", "qvoice", "transcribe", "{input}", "-f", "json"]
 transcribe_cwd = "../QVoice"
 transcribe_timeout_seconds = 14400
 

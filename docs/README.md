@@ -121,6 +121,15 @@
   - 决策记录：
     - 相对路径基准选 QBase 应用根（`Path(__file__).parents[2]`）而非知识库目录/进程 CWD——QVoice 与 QBase 为同级仓库，`../QVoice` 最贴合实际布局，且不受应用启动目录影响
     - `{input}` 保持绝对路径传入（子进程 cwd 会切到 CLI 项目目录，相对输入会指错位置）
+- M8 后补丁：支持 QVoice JSON 转录 `.transcript.json`（2026-08-20）
+  - `app/rules.py`：`.transcript.json` 由 `transcript_meta`（只识别不索引）升级为 `transcript`，自动获得索引资格/转录徽章/总结前置条件；新增 `TRANSCRIPT_JSON_SUFFIX` 常量。`transcript_meta` kind 不再由扫描产生，scanner 绑定集合与 UI 标签保留以兼容存量库未重扫的旧行
+  - `app/utils.py`：新增 `extract_transcript_json_text`（优先顶层 `text`，为空回退 `segments[].text` 按行拼接；解析失败抛 `ValueError`）；`read_text_for_index` / `read_text_preview` / `read_text_full` 按后缀分派，索引 / 总结 / 详情页预览三个消费方零改动
+  - `app/services/transcription_service.py`：修复输出检测 bug——原先硬编码期望 `{stem}.txt`，而 QVoice 实际写 `{stem}.transcript.txt` / `.transcript.json`，CLI 成功后任务误报"没有找到输出文件"。改为按 `.transcript.json → .transcript.txt → .txt` 候选优先级查找，`output_path` 记录实际产物
+  - `app/services/library_service.py`：`DEFAULT_LIBRARY_CONFIG` 的 `transcribe_command` 加 `-f json`（产物 `<stem>.transcript.json`，含时间戳/说话人，为后续字幕跳转预留）。仅影响新开的库，已有库手动在 config.toml 加 `-f json`
+  - `app/ui/pages/asset_detail.py`：`is_text_artifact` 后缀判断放行 `.transcript.json`，详情页预览/展开全文/分段翻页显示提取后的纯文本
+  - 决策记录：
+    - 文本提取收在 utils 读取层而非各消费方，索引/总结/向量（chunks 表下游）全部自动受益
+    - JSON 转录只提取纯文本入索引，segments 时间轴保留在原文件中不做字幕跳转（维持 PRD 第一阶段边界）
 
 ## 项目文档
 

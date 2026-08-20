@@ -47,10 +47,14 @@ IGNORE_DIR_NAMES = {
     ".trash",
 }
 
+# QVoice JSON 转录文件后缀（读取时需提取纯文本，见 utils.extract_transcript_json_text）。
+TRANSCRIPT_JSON_SUFFIX = ".transcript.json"
+
 # 派生文件 sidecar 后缀 -> kind（顺序重要：长后缀优先匹配）。
+# .transcript.txt / .transcript.json 均为 QVoice 产物（-f txt / -f json）。
 ARTIFACT_SUFFIXES = [
     (".transcript.txt", "transcript"),
-    (".transcript.json", "transcript_meta"),
+    (".transcript.json", "transcript"),
     (".summary.md", "summary"),
     (".notes.md", "note"),
     (".parsed.md", "parsed"),

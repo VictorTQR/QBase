@@ -30,12 +30,16 @@ max_workers = 1
 task_timeout_seconds = 7200
 
 [cli]
+# -f json：输出 <stem>.transcript.json（含全文 text + 带时间戳/说话人的 segments）；
+# 改为 -f txt 则输出纯文本 <stem>.transcript.txt。
 transcribe_command = [
   "uv",
   "run",
   "qvoice",
   "transcribe",
   "{input}",
+  "-f",
+  "json",
 ]
 # transcribe_cwd 支持绝对路径 / ~ 开头（用户主目录）/ 相对路径（相对 QBase 应用根目录）
 transcribe_cwd = "../QVoice"
