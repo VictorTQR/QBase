@@ -36,14 +36,14 @@ def home_page() -> None:
     with page_frame("首页", active_nav="/"):
         ui.label("本地知识管理中心").classes("text-2xl font-bold")
         ui.label("管理播客、视频、文档，配套转录 / 总结 / 三层搜索。").classes(
-            "text-gray-500"
+            "text-gray-600"
         )
 
         # 打开知识库
         with ui.card().classes("w-full"):
             ui.label("打开知识库").classes("font-semibold")
             ui.label("输入一个本地目录，应用会在该目录下创建 .knowledge 文件夹。").classes(
-                "text-sm text-gray-500"
+                "text-sm text-gray-600"
             )
 
             path_input = ui.input(
@@ -105,7 +105,7 @@ def home_page() -> None:
                 return handler
 
             with ui.row().classes("mt-3 gap-3"):
-                ui.button("打开知识库", icon="folder_open", on_click=lambda: do_open(path_input.value))
+                ui.button("打开知识库", icon="folder_open", color="primary", on_click=lambda: do_open(path_input.value))
                 ui.link("进入资产列表 →", "/assets").classes(
                     "flex items-center text-blue-600"
                 )
@@ -116,7 +116,7 @@ def home_page() -> None:
         if recents:
             with ui.card().classes("w-full"):
                 ui.label("最近打开").classes("font-semibold")
-                ui.label("点击可快速切换知识库。").classes("text-sm text-gray-500")
+                ui.label("点击可快速切换知识库。").classes("text-sm text-gray-600")
                 for item in recents[:5]:
                     with ui.row().classes("items-center gap-2 w-full"):
                         ui.label(item["path"]).classes(
@@ -132,11 +132,11 @@ def home_page() -> None:
         with ui.card().classes("w-full"):
             ui.label("运行状态").classes("font-semibold")
             with ui.grid(columns=2).classes("gap-2 w-full"):
-                ui.label("版本").classes("text-gray-500")
+                ui.label("版本").classes("text-gray-600")
                 ui.label(f"v{__version__}")
-                ui.label("监听地址").classes("text-gray-500")
+                ui.label("监听地址").classes("text-gray-600")
                 ui.label(f"http://{cfg.host}:{cfg.port}")
-                ui.label("日志级别").classes("text-gray-500")
+                ui.label("日志级别").classes("text-gray-600")
                 ui.label(cfg.log_level)
 
         # 里程碑
@@ -145,5 +145,5 @@ def home_page() -> None:
             for tag, name, done in MILESTONES:
                 icon = "✅" if done else "⬜"
                 ui.label(f"{icon} {tag} {name}").classes(
-                    "text-sm" + (" line-through text-gray-400" if done else "")
+                    "text-sm" + (" line-through text-gray-600" if done else "")
                 )

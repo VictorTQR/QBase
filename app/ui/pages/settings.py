@@ -15,6 +15,7 @@ from app.services.config_service import ConfigError
 from app.services.vector_service import get_vector_stats, clear_embedding_cache
 from app.state import state
 from app.ui.layout import page_frame
+from app.ui.tokens import C
 from app.utils import notify_error, open_file
 
 
@@ -53,7 +54,7 @@ def settings_page() -> None:
             return
 
         ui.label("设置").classes("text-2xl font-bold")
-        ui.label(str(state.library_root)).classes("text-sm text-gray-500")
+        ui.label(str(state.library_root)).classes("text-sm text-gray-600")
 
         # ── 配置文件信息 ──
         with ui.card().classes("w-full p-4 mt-4"):
@@ -80,7 +81,7 @@ def settings_page() -> None:
             ui.label(
                 "API Key 也可放在 .knowledge/secrets.toml 的 [keys] 中，"
                 "由 api_key_env 引用的名称查找，无需设置系统环境变量。"
-            ).classes("text-xs text-gray-500 mt-3")
+            ).classes("text-xs text-gray-600 mt-3")
 
             if config_service.has_plain_api_key(config):
                 ui.label(
@@ -233,7 +234,7 @@ def settings_page() -> None:
                 ).classes("w-48")
 
             ui.label("chunk_overlap 必须小于 chunk_max_chars。").classes(
-                "text-xs text-gray-500 mt-2"
+                "text-xs text-gray-600 mt-2"
             )
 
         # ── 任务配置 ──
@@ -271,7 +272,7 @@ def settings_page() -> None:
                 ui.label("未配置忽略目录").classes("text-sm text-gray-600")
             ui.label(
                 "忽略目录列表较复杂，请通过 config.toml 修改。"
-            ).classes("text-xs text-gray-500 mt-2")
+            ).classes("text-xs text-gray-600 mt-2")
 
         # ── 极客直编区：CLI / App 只读展示 ──
         with ui.card().classes("w-full p-4 mt-4"):
@@ -283,7 +284,7 @@ def settings_page() -> None:
                 ui.label("未配置").classes("text-sm text-gray-600")
             ui.label(
                 "CLI 命令模板涉及路径与参数格式，请通过 config.toml 修改。"
-            ).classes("text-xs text-gray-500 mt-2")
+            ).classes("text-xs text-gray-600 mt-2")
 
         with ui.card().classes("w-full p-4 mt-4"):
             ui.label("应用配置（只读）").classes("text-lg font-semibold")
@@ -296,7 +297,7 @@ def settings_page() -> None:
             ).classes("text-sm")
             ui.label(
                 "host / port 修改后需重启应用，请通过 config.toml 修改。"
-            ).classes("text-xs text-gray-500 mt-2")
+            ).classes("text-xs text-gray-600 mt-2")
 
         # ── 保存 ──
         with ui.card().classes("w-full p-4 mt-4"):
@@ -522,7 +523,7 @@ def _render_key_status(key_status: dict[str, dict], key_name: str) -> None:
     """展示密钥名称是否已解析，以及来源（环境变量 / secrets.toml）。"""
     if not key_name:
         ui.label("未配置密钥名称（api_key_env）").classes(
-            "text-xs text-gray-500 mt-1"
+            "text-xs text-gray-600 mt-1"
         )
         return
 
@@ -551,13 +552,13 @@ _VECTOR_HEALTH_LABELS: dict[str, str] = {
 }
 
 _VECTOR_HEALTH_COLORS: dict[str, str] = {
-    "no_library": "grey",
-    "none": "red",
-    "model_mismatch": "red",
-    "inconsistent": "orange",
-    "stale": "orange",
-    "ok": "green",
-    "unknown": "grey",
+    "no_library": C.NEUTRAL,
+    "none": C.ERROR,
+    "model_mismatch": C.ERROR,
+    "inconsistent": C.WARNING,
+    "stale": C.WARNING,
+    "ok": C.SUCCESS,
+    "unknown": C.NEUTRAL,
 }
 
 

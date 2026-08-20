@@ -8,14 +8,15 @@ from app.database import get_conn
 from app.repositories.task_repository import get_task, list_tasks
 from app.state import get_db_path, state
 from app.ui.layout import page_frame
+from app.ui.tokens import C
 from app.utils import notify_error
 
 STATUS_COLORS = {
-    "pending": "grey",
-    "running": "blue",
-    "success": "green",
-    "failed": "red",
-    "cancelled": "orange",
+    "pending": C.NEUTRAL,
+    "running": C.INFO,
+    "success": C.SUCCESS,
+    "failed": C.ERROR,
+    "cancelled": C.WARNING,
 }
 
 STATUS_LABELS = {
@@ -41,11 +42,11 @@ def tasks_page() -> None:
             return
 
         ui.label("任务中心").classes("text-2xl font-bold")
-        ui.label(str(state.library_root)).classes("text-sm text-gray-500")
+        ui.label(str(state.library_root)).classes("text-sm text-gray-600")
 
         with ui.row().classes("items-center gap-3 mt-3"):
             ui.button("刷新", icon="refresh", on_click=lambda: load_tasks())
-            ui.label("每 5 秒自动刷新").classes("text-xs text-gray-500")
+            ui.label("每 5 秒自动刷新").classes("text-xs text-gray-600")
 
         container = ui.column().classes("w-full mt-4")
 
