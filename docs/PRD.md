@@ -1024,22 +1024,25 @@ OpenAI 兼容 API
 .html / .htm，若实现文本提取
 ```
 
-暂不可总结：
+解析后可总结（m9 起）：
 
 ```text
 .pdf
 .docx
 .doc
-.epub
+.pptx
+.ppt
+.xlsx
+.xls
 ```
 
-原因是文档解析模块尚未实现。
-
-后续文档解析 CLI 接入后，总结输入改为：
+白名单文档解析生成 `{stem}.parsed.md` 后，总结输入改为：
 
 ```text
 {stem}.parsed.md
 ```
+
+仍不可总结：`.epub`（MinerU 不支持，等待其他解析器）。
 
 ---
 
@@ -1373,16 +1376,12 @@ AI 总结只写：
 
 ---
 
-### 15.2 第一阶段暂不支持解析
+### 15.2 解析策略（m9 起）
 
-```text
-.pdf
-.docx
-.doc
-.epub
-```
+m9 起白名单文档（.pdf/.docx/.doc/.pptx/.ppt/.xlsx/.xls）可在资产详情页发起
+MinerU 解析，生成 `{stem}.parsed.md` 后进入全文/向量索引并可用于 AI 总结。
 
-这些文件可以：
+解析前（以及仍不支持的 .epub）这些文件只能：
 
 ```text
 作为 Asset 管理
@@ -1391,28 +1390,23 @@ AI 总结只写：
 查看详情
 ```
 
-但：
-
-```text
-不进入全文搜索
-不进入向量搜索
-不能生成 AI 总结
-```
-
 UI 显示：
 
 ```text
-等待文档解析模块
+待解析（pdf/office 白名单，可发起解析）
+等待文档解析模块（.epub）
 ```
 
 ---
 
-### 15.3 后续接入
+### 15.3 解析器抽象（m9）
 
-后续文档解析 CLI 接入后，定义命令模板：
+文档解析走 provider 抽象（`app/services/parsers/`），不再使用 CLI 命令模板：
 
-```toml
-parse_command = 'mytool parse "{input}" --output "{output}"'
+```text
+DocumentParser 接口：submit（提交+上传）→ poll（轮询）→ fetch（取回产物）
+注册表 PARSERS = {"mineru": MineruParser}，[parse].provider 切换
+新增解析器实现同一接口并注册即可（doc2x / Textin / 本地 CLI 均可）
 ```
 
 输出：
@@ -1983,7 +1977,17 @@ task_timeout_seconds = 7200
 
 [cli]
 transcribe_command = 'mytool transcribe "{input}" --output "{output}"'
-parse_command = ""
+
+[parse]
+enabled = false
+provider = "mineru"
+
+[parse.mineru]
+base_url = "https://mineru.net"
+token_env = "MINERU_API_TOKEN"
+model_version = "vlm"
+timeout_seconds = 1800
+poll_interval_seconds = 10
 
 [llm.summary]
 enabled = true
@@ -2075,6 +2079,10 @@ app/
 │   ├── task_service.py
 │   ├── transcription_service.py
 │   ├── summarization_service.py
+│   ├── parse_service.py
+│   ├── parsers/
+│   │   ├── base.py
+│   │   └── mineru_parser.py
 │   ├── note_service.py
 │   ├── search_service.py
 │   ├── fts_service.py
@@ -2797,6 +2805,30 @@ Windows 路径兼容性优化
 
 ---
 
+### M9：文档解析接入（MinerU）
+
+目标：
+
+```text
+解析器 provider 抽象（submit / poll / fetch 三阶段 + 注册表）
+MinerU 精准解析 API v4：批量上传接口提交本地文件（batch-of-1）
+任务粒度一资产一任务，batch_id 持久化，应用重启恢复轮询
+产物 {stem}.parsed.md（zip 留档 .knowledge/backups/），自动进入索引
+白名单文档解析后 AI 总结输入切换为 parsed.md
+设置页解析配置卡（token_env 红绿灯 / 免额度测试 API）
+```
+
+完成标志：
+
+```text
+pdf / office 白名单文档可在详情页发起解析，任务中心可查进度与重试
+解析产物进入全文索引与搜索；已解析文档可生成总结
+失败原因（err_msg / 超时 / token 缺失 / 200MB 超限）中文可读
+明文 token 绝不出现在 UI 与 TOML
+```
+
+---
+
 ## 29. 验收标准
 
 ### 29.1 知识库
@@ -2916,6 +2948,22 @@ AI 总结不会覆盖 notes.md
 重建或清空后统计自动刷新
 ```
 
+### 29.10 文档解析（m9）
+
+验收：
+
+```text
+pdf / office 白名单文档可在详情页发起解析，任务中心可查进度
+解析成功后 {stem}.parsed.md 出现在源文件旁，zip 留档 .knowledge/backups/
+解析产物自动进入全文索引，搜索可命中
+已解析文档可生成 AI 总结（输入为 parsed.md）
+重复解析有覆盖确认，旧产物自动备份
+失败（err_msg / 超时 / token 缺失 / 200MB 超限）在任务中心或提交时给出中文原因
+应用重启后未完结的解析任务恢复轮询，不产生孤儿任务
+设置页可编辑解析配置，token 来源红绿灯与测试 API 可用（不消耗额度）
+明文 token 绝不出现在 UI 与 TOML 中
+```
+
 ---
 
 ## 30. 风险与应对
@@ -3015,20 +3063,20 @@ UTF-8 优先
 
 ## 31. 后续阶段规划
 
-第一阶段完成后，可以按顺序做：
+第一阶段（M0-M8）完成后，后续阶段按顺序推进。文档解析已由 M9（MinerU）
+完成，剩余：
 
 ```text
-1. 文档解析 CLI 接入
-2. PDF/DOCX/EPUB 内容索引
-3. sidecar 目录 .kb
-4. 应用内笔记编辑
-5. transcript JSON segments
-6. 音频字幕级跳转
-7. TTS 模块接入
-8. 混合搜索排序
-9. 标签系统
-10. 收藏与稍后处理
-11. 批量任务
+1. EPUB 内容索引（MinerU 不支持 epub，需接入其他解析器）
+2. sidecar 目录 .kb
+3. 应用内笔记编辑
+4. transcript JSON segments
+5. 音频字幕级跳转
+6. TTS 模块接入
+7. 混合搜索排序
+8. 标签系统
+9. 收藏与稍后处理
+10. 批量任务
 ```
 
 ### 待实现（暂缓）
@@ -3260,4 +3308,5 @@ M0 项目骨架
 → M6 OpenAI 兼容 API 总结
 → M7 设置和任务中心
 → M8 体验优化
+→ M9 文档解析接入（MinerU）
 ```

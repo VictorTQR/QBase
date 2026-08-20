@@ -139,6 +139,24 @@
   - 决策记录：
     - 徽章/按钮颜色只用 Quasar 调色板名（`color=` 参数），文字/布局类只用 Tailwind 类串（`.classes()`），两类入口分别收口到 `C` / `CLS`，禁止页面内再写裸色值
     - `page_header` 与 `page_frame` 双轨并存时两套页面骨架易漂移（M8 期间新增页面各选其一），收敛为单一 `page_frame` 后删除 `page_header`
+- M9 文档解析接入（MinerU）- 代码已落地（2026-08-20），验收步骤见讨论稿 m9-parse.md §8，待开发人员手动执行
+  - 依据：讨论稿 qwen-prdv1/m9-parse.md（与用户讨论定稿，9 条决策不再开放：batch-of-1 / 只落 parsed.md + zip 留档 / 白名单 / vlm 默认 / token_env 机制 / PDF 总结输入切换等）
+  - 落地内容：
+    - 新增 `app/services/parsers/`：`base.py`（`DocumentParser` ABC，submit/poll/fetch 三阶段 + `ParseSubmission`/`ParseFileState` 数据类）、`mineru_parser.py`（v4 批量上传接口：申请链接 → PUT 上传不带 Content-Type → 自动解析 → 轮询 → zip 下载）、`__init__.py`（注册表 `PARSERS` + `get_parser`）
+    - 新增 `app/services/parse_service.py`：`start_parsing`（前置校验：白名单/200MB/token/去重）→ `run_parse_task`（提交 → 轮询 → 下载 → 写 `{stem}.parsed.md` → zip 留档 `.knowledge/backups/` → 自动 scan + 重建全文索引）；`resume_running_parse_tasks` 打开库时恢复未完结任务（`_live_task_ids` 线程守卫防重复拉起）
+    - `app/services/config_service.py`：`get_parse_config` / validate 增 `[parse]` 校验（provider 注册表 + model_version 枚举）/ `get_key_status` 增 token_env / `test_connection` 增 parse 分支（假 batch_id 查 401/404，不消耗页数额度）
+    - `app/services/library_service.py`：配置模板 `[cli]` 删 `parse_command` 占位，新增 `[parse]` / `[parse.mineru]`；`open_library` 末尾挂 `resume_running_parse_tasks()`
+    - `app/api/library.py`：新增 `POST /api/assets/{asset_id}/parse`（与 transcribe/summarize 同构，ValueError → 400）
+    - UI：`asset_detail.py` 新增「文档解析」卡片（未启用/token 缺失禁用态、覆盖确认、重解析备份旧 parsed.md）；`settings.py` 新增「文档解析」卡（enabled / model_version / base_url / token_env 红绿灯 / 测试按钮）；`tasks.py` 类型标签「解析」+ 失败重试分支 + API 任务详情显示 provider 替代空命令
+    - `app/services/summarization_service.py`：白名单文档总结输入切为 active 的 `parsed` 派生（PRD §13.2 预留兑现）；未解析时报「请先在详情页生成解析」
+  - 偏差/补充（讨论稿未覆盖、由实施补齐）：
+    - `MineruParser._unwrap` 统一响应解包：401/403 → token 无效、非 JSON / code!=0 → 中文错误，三类远端失败形态收口
+    - 讨论「组合 vs 继承」后确定：基类用 `abc.ABC` 纯接口（零共享实现），行为复用（轮询/超时/持久化编排）走组合收在 parse_service，未来共享 HTTP 行为用 helper 持有而非中间基类
+  - 决策记录：
+    - 重启恢复：submission（batch_id/files）持久化进任务 `params_json`，重开后有 submission 续轮询、无则重新 submit，幂等
+    - 覆盖备份：重解析前旧 `{stem}.parsed.md` 复制为 `.knowledge/backups/{stem}.{时间戳}.bak.md`，与总结备份同目录同风格
+    - 扫描层零改动：`.parsed.md` 后缀 M2 起已在 `ARTIFACT_SUFFIXES`，产物落盘后重扫自动绑定 kind=parsed
+    - 测试用 mock（附录 A，纯标准库端口 8793，token=mock-token）：覆盖 未启用/无 token/连通测试/成功链路/覆盖备份/失败路径/重启恢复/epub 拒绝/200MB 拒绝
 
 ## 项目文档
 

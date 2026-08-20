@@ -50,7 +50,7 @@ app/
 ├── utils.py         # 大小/时间格式化、打开文件/目录
 ├── api/             # REST 路由
 ├── repositories/    # 数据访问层
-├── services/        # 业务层（library/scanner/...）
+├── services/        # 业务层（library/scanner/parse + parsers/ 解析器注册表）
 └── ui/              # NiceGUI 页面（layout.py 统一 page_frame 框架 + tokens.py 设计 token + components.py 共享徽章 + pages/ 各页面）
 config.toml          # 应用级默认配置
 docs/PRD.md          # 唯一权威 spec
@@ -79,6 +79,7 @@ docs/PRD.md          # 唯一权威 spec
 - [x] M7 设置页 + 任务中心增强（2026-08-16 完成，配置总览/索引管理/任务详情/失败重试）
 - [x] M7 补完：配置 UI 化（2026-08-16 完成，表单写回 config.toml / 环境变量检测 / 连通性测试 / 明文 Key 打码 / dimension 变更告警）
 - [x] M8 体验优化（2026-08-16 完成，状态徽章/搜索高亮/大文本折叠/错误提示/排序分页/统一导航 + 最近打开/向量状态卡片）
+- [x] M9 文档解析接入 MinerU（2026-08-20 代码落地，验收步骤见 docs/讨论/qwen-prdv1/m9-parse.md §8）：解析器 provider 抽象（parsers/）+ 批量上传 batch-of-1 + 重启恢复轮询 + parsed.md 进索引 + PDF 总结输入切换
 
 里程碑详细目标见 [docs/PRD.md](./docs/PRD.md) §28。
 
