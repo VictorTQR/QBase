@@ -16,6 +16,11 @@ from loguru import logger
 from app.rules import TRANSCRIPT_JSON_SUFFIX
 
 
+def escape_like(value: str) -> str:
+    """转义 LIKE 查询中的特殊字符。"""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def human_size(size: int | None) -> str:
     if size is None:
         return ""

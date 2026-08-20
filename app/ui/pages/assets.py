@@ -1,4 +1,4 @@
-"""资产列表页：扫描 / 刷新、类型过滤、排序、分页、派生状态徽章、打开文件与目录。"""
+"""资产列表页：扫描 / 刷新、类型与文件名过滤、排序、分页、派生状态徽章、打开文件与目录。"""
 
 from __future__ import annotations
 
@@ -42,6 +42,9 @@ async def assets_page():
 
         with ui.row().classes("items-center gap-3 mt-3"):
             scan_button = ui.button("扫描 / 刷新", color="primary")
+            name_filter = ui.input(
+                label="文件名", placeholder="按标题或路径筛选…"
+            ).classes("w-64").props("clearable")
             type_filter = ui.select(
                 ["全部", "audio", "video", "document"],
                 value="全部",
@@ -95,11 +98,12 @@ async def assets_page():
 
             selected_type = type_filter.value
             asset_type = selected_type if selected_type != "全部" else None
+            keyword = (name_filter.value or "").strip() or None
 
             def _load():
                 conn = get_conn(get_db_path())
                 try:
-                    total = count_assets(conn, asset_type)
+                    total = count_assets(conn, asset_type, keyword=keyword)
                     rows = list_assets(
                         conn,
                         limit=PAGE_SIZE,
@@ -107,6 +111,7 @@ async def assets_page():
                         asset_type=asset_type,
                         order_by=order_by,
                         order_dir=order_dir,
+                        keyword=keyword,
                     )
                 finally:
                     conn.close()
@@ -123,7 +128,12 @@ async def assets_page():
             list_container.clear()
             with list_container:
                 if not assets:
-                    ui.label("暂无资产。请点击「扫描 / 刷新」。").classes("text-gray-600")
+                    if keyword or asset_type:
+                        ui.label("没有匹配的资产。").classes("text-gray-600")
+                    else:
+                        ui.label("暂无资产。请点击「扫描 / 刷新」。").classes(
+                            "text-gray-600"
+                        )
                     return
 
                 with ui.row().classes(CLS["table_head"]).style("min-width: 900px"):
@@ -207,9 +217,13 @@ async def assets_page():
             current_page["value"] = 0
             await load_assets()
 
+        # 输入防抖：停止输入 0.3 秒后再查询，避免每个按键都触发加载
+        name_debounce = ui.timer(0.3, handle_filter_or_sort_change, active=False)
+
         scan_button.on_click(handle_scan)
         type_filter.on_value_change(handle_filter_or_sort_change)
         sort_select.on_value_change(handle_filter_or_sort_change)
+        name_filter.on_value_change(lambda: name_debounce.restart())
         prev_btn.on_click(handle_prev)
         next_btn.on_click(handle_next)
 

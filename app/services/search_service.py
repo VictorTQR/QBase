@@ -7,11 +7,7 @@ import sqlite3
 
 from app.database import get_conn
 from app.state import get_db_path
-
-
-def escape_like(value: str) -> str:
-    """转义 LIKE 查询中的特殊字符。"""
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+from app.utils import escape_like
 
 
 def build_fts_query(query: str) -> str | None:

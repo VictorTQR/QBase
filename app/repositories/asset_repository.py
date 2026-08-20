@@ -6,6 +6,8 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 
+from app.utils import escape_like
+
 
 def utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -112,6 +114,28 @@ _HAS_BADGE_COLUMNS = """
 _ALLOWED_ORDER_COLUMNS = {"title", "mtime", "size", "type"}
 
 
+def _build_asset_filters(
+    asset_type: str | None, keyword: str | None
+) -> tuple[str, list]:
+    """构造类型与文件名（标题/相对路径）筛选条件。"""
+    clauses: list[str] = []
+    params: list = []
+
+    if asset_type:
+        clauses.append("a.type = ?")
+        params.append(asset_type)
+
+    if keyword:
+        like_pattern = f"%{escape_like(keyword)}%"
+        clauses.append(
+            "(a.title LIKE ? ESCAPE '\\' OR a.relative_path LIKE ? ESCAPE '\\')"
+        )
+        params.extend([like_pattern, like_pattern])
+
+    where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    return where_clause, params
+
+
 def list_assets(
     conn: sqlite3.Connection,
     limit: int = 50,
@@ -119,11 +143,13 @@ def list_assets(
     asset_type: str | None = None,
     order_by: str = "mtime",
     order_dir: str = "DESC",
+    keyword: str | None = None,
 ) -> list[dict]:
-    """获取资产列表，附带派生文件状态（徽章）并支持排序与分页。
+    """获取资产列表，附带派生文件状态（徽章）并支持筛选、排序与分页。
 
     order_by: "title" / "mtime" / "size" / "type"
     order_dir: "ASC" / "DESC"
+    keyword: 文件名关键词，命中标题或相对路径
     """
     if order_by not in _ALLOWED_ORDER_COLUMNS:
         order_by = "mtime"
@@ -135,11 +161,7 @@ def list_assets(
       a.size, a.mtime, a.parse_status, a.created_at, a.updated_at
     """
 
-    where_clause = ""
-    params: list = []
-    if asset_type:
-        where_clause = "WHERE a.type = ?"
-        params.append(asset_type)
+    where_clause, params = _build_asset_filters(asset_type, keyword)
 
     rows = conn.execute(
         f"""
@@ -155,13 +177,16 @@ def list_assets(
     return [dict(row) for row in rows]
 
 
-def count_assets(conn: sqlite3.Connection, asset_type: str | None = None) -> int:
-    if asset_type:
-        row = conn.execute(
-            "SELECT COUNT(*) AS cnt FROM assets WHERE type = ?", (asset_type,)
-        ).fetchone()
-    else:
-        row = conn.execute("SELECT COUNT(*) AS cnt FROM assets").fetchone()
+def count_assets(
+    conn: sqlite3.Connection,
+    asset_type: str | None = None,
+    keyword: str | None = None,
+) -> int:
+    where_clause, params = _build_asset_filters(asset_type, keyword)
+    row = conn.execute(
+        f"SELECT COUNT(*) AS cnt FROM assets a {where_clause}",
+        params,
+    ).fetchone()
     return int(row["cnt"]) if row else 0
 
 
