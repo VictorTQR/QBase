@@ -81,7 +81,8 @@ def _render_text_section(artifact: dict):
 
     with preview_container:
         ui.label(preview_text).classes(
-            "text-sm whitespace-pre-wrap text-gray-700 bg-gray-50 p-3 rounded"
+            "text-sm whitespace-pre-wrap text-gray-700 bg-gray-50 p-3 rounded "
+            "max-h-[40vh] overflow-y-auto"
         )
         ui.label("预览已截断").classes("text-xs text-gray-600 mt-1")
 
