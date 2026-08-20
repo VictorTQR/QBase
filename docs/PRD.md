@@ -477,11 +477,9 @@ tasks                可选任务日志或临时输出
 .txt
 .html / .htm，可选简单提取
 
-第一阶段暂不解析：
-.pdf
-.docx
-.doc
-.epub
+第一阶段暂不解析（后续里程碑解决）：
+.pdf / .docx / .doc —— m9 起经 MinerU 解析（见 §15）
+.epub —— m10 起经内置本地解析器解析（见 §15）
 ```
 
 这些文件第一阶段仍可：
@@ -493,7 +491,7 @@ tasks                可选任务日志或临时输出
 用外部程序打开
 ```
 
-但不会进入全文搜索、向量搜索和 AI 总结，直到文档解析模块接入。
+但在对应解析里程碑接入前，不会进入全文搜索、向量搜索和 AI 总结。
 
 ---
 
@@ -1024,7 +1022,7 @@ OpenAI 兼容 API
 .html / .htm，若实现文本提取
 ```
 
-解析后可总结（m9 起）：
+解析后可总结（m9 起，epub 自 m10 起）：
 
 ```text
 .pdf
@@ -1034,6 +1032,7 @@ OpenAI 兼容 API
 .ppt
 .xlsx
 .xls
+.epub（m10，内置本地解析器）
 ```
 
 白名单文档解析生成 `{stem}.parsed.md` 后，总结输入改为：
@@ -1041,8 +1040,6 @@ OpenAI 兼容 API
 ```text
 {stem}.parsed.md
 ```
-
-仍不可总结：`.epub`（MinerU 不支持，等待其他解析器）。
 
 ---
 
@@ -1376,12 +1373,16 @@ AI 总结只写：
 
 ---
 
-### 15.2 解析策略（m9 起）
+### 15.2 解析策略（m9 起，m10 扩展 epub）
 
 m9 起白名单文档（.pdf/.docx/.doc/.pptx/.ppt/.xlsx/.xls）可在资产详情页发起
 MinerU 解析，生成 `{stem}.parsed.md` 后进入全文/向量索引并可用于 AI 总结。
 
-解析前（以及仍不支持的 .epub）这些文件只能：
+m10 起 `.epub` 一并纳入白名单：固定路由到内置本地解析器（标准库解
+zip + OPF spine，无需远端服务与 token，秒级完成），产物同为
+`{stem}.parsed.md`，后续链路与 MinerU 完全一致。
+
+解析前这些文件只能：
 
 ```text
 作为 Asset 管理
@@ -1393,21 +1394,33 @@ MinerU 解析，生成 `{stem}.parsed.md` 后进入全文/向量索引并可用�
 UI 显示：
 
 ```text
-待解析（pdf/office 白名单，可发起解析）
-等待文档解析模块（.epub）
+待解析（pdf/office/epub 白名单，均可发起解析）
 ```
 
 ---
 
-### 15.3 解析器抽象（m9）
+### 15.3 解析器抽象（m9，m10 扩展）
 
 文档解析走 provider 抽象（`app/services/parsers/`），不再使用 CLI 命令模板：
 
 ```text
-DocumentParser 接口：submit（提交+上传）→ poll（轮询）→ fetch（取回产物）
-注册表 PARSERS = {"mineru": MineruParser}，[parse].provider 切换
+DocumentParser 接口：submit（提交+上传/校验）→ poll（轮询）→ fetch（取回产物）
+                    → to_markdown（产物字节 → markdown 文本）
+注册表 PARSERS = {"mineru": MineruParser, "epub": EpubParser}，
+[parse].provider 切换（管 pdf/office）
 新增解析器实现同一接口并注册即可（doc2x / Textin / 本地 CLI 均可）
 ```
+
+m10 起按扩展名路由（`get_parser_for_extension`）：
+
+```text
+.epub → 内置 EpubParser（本地解析：submit=结构校验、poll=查源文件、
+        fetch=现算 markdown；无状态，重启后重算即恢复）
+其余白名单后缀 → [parse].provider（现 mineru）
+```
+
+产物留档：MinerU 结果 zip 留档 backups/（PRODUCT_BACKUP_SUFFIX=".zip"）；
+epub 产物即 markdown 文本，不留档（覆盖重解析有 .bak.md）。
 
 输出：
 
@@ -1979,6 +1992,7 @@ task_timeout_seconds = 7200
 transcribe_command = 'mytool transcribe "{input}" --output "{output}"'
 
 [parse]
+# provider 只管 pdf/office；.epub 固定路由到内置本地解析器（无需 token）
 enabled = false
 provider = "mineru"
 
@@ -2082,7 +2096,8 @@ app/
 │   ├── parse_service.py
 │   ├── parsers/
 │   │   ├── base.py
-│   │   └── mineru_parser.py
+│   │   ├── mineru_parser.py
+│   │   └── epub_parser.py
 │   ├── note_service.py
 │   ├── search_service.py
 │   ├── fts_service.py
@@ -2829,6 +2844,30 @@ pdf / office 白名单文档可在详情页发起解析，任务中心可查进�
 
 ---
 
+### M10：EPUB 内容索引（内置本地解析器）
+
+目标：
+
+```text
+内置 EpubParser（标准库 only：zipfile + ElementTree + html.parser，零新增依赖）
+接口扩展：DocumentParser 增加 to_markdown；按扩展名路由（.epub 固定本地）
+epub = zip 容器：container.xml → OPF manifest/spine → XHTML 按阅读顺序转 markdown
+本地解析形态：submit=结构校验、poll=查源文件、fetch=现算（无状态，重启重算即恢复）
+DRM（encryption.xml）与坏 zip 明确报错；200MB 上限只属于 MinerU，本地不设限
+.epub 并入可解析白名单与总结输入切换；UI 文案区分本地（秒级）/远端（分钟级）
+```
+
+完成标志：
+
+```text
+.epub 资产可在详情页发起解析（无需 MinerU token），数秒完成任务成功
+{stem}.parsed.md 生成并进入全文/向量索引；AI 总结输入为解析结果
+覆盖重解析旧结果自动备份（.bak.md）；epub 不产生 zip 留档
+DRM / 损坏 epub 失败原因中文可读，任务可重试
+```
+
+---
+
 ## 29. 验收标准
 
 ### 29.1 知识库
@@ -2948,7 +2987,7 @@ AI 总结不会覆盖 notes.md
 重建或清空后统计自动刷新
 ```
 
-### 29.10 文档解析（m9）
+### 29.10 文档解析（m9 起，m10 扩展 epub）
 
 验收：
 
@@ -2962,6 +3001,15 @@ pdf / office 白名单文档可在详情页发起解析，任务中心可查进�
 应用重启后未完结的解析任务恢复轮询，不产生孤儿任务
 设置页可编辑解析配置，token 来源红绿灯与测试 API 可用（不消耗额度）
 明文 token 绝不出现在 UI 与 TOML 中
+```
+
+m10 增补（epub）：
+
+```text
+.epub 可在详情页发起解析（无需 MinerU token），本地解析数秒完成
+{stem}.parsed.md 进入索引与搜索；AI 总结输入为解析结果
+epub 不产生 zip 留档；覆盖重解析旧结果备份为 .bak.md
+DRM（加密书）与损坏 epub 给出中文失败原因，任务可重试
 ```
 
 ---
@@ -3063,20 +3111,19 @@ UTF-8 优先
 
 ## 31. 后续阶段规划
 
-第一阶段（M0-M8）完成后，后续阶段按顺序推进。文档解析已由 M9（MinerU）
-完成，剩余：
+第一阶段（M0-M8）完成后，后续阶段按顺序推进。文档解析已由 M9（MinerU）、
+EPUB 索引已由 M10（内置本地解析器）完成，剩余：
 
 ```text
-1. EPUB 内容索引（MinerU 不支持 epub，需接入其他解析器）
-2. sidecar 目录 .kb
-3. 应用内笔记编辑
-4. transcript JSON segments
-5. 音频字幕级跳转
-6. TTS 模块接入
-7. 混合搜索排序
-8. 标签系统
-9. 收藏与稍后处理
-10. 批量任务
+1. sidecar 目录 .kb
+2. 应用内笔记编辑
+3. transcript JSON segments
+4. 音频字幕级跳转
+5. TTS 模块接入
+6. 混合搜索排序
+7. 标签系统
+8. 收藏与稍后处理
+9. 批量任务
 ```
 
 ### 待实现（暂缓）
@@ -3309,4 +3356,5 @@ M0 项目骨架
 → M7 设置和任务中心
 → M8 体验优化
 → M9 文档解析接入（MinerU）
+→ M10 EPUB 内容索引（内置本地解析器）
 ```

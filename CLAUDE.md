@@ -80,6 +80,7 @@ docs/PRD.md          # 唯一权威 spec
 - [x] M7 补完：配置 UI 化（2026-08-16 完成，表单写回 config.toml / 环境变量检测 / 连通性测试 / 明文 Key 打码 / dimension 变更告警）
 - [x] M8 体验优化（2026-08-16 完成，状态徽章/搜索高亮/大文本折叠/错误提示/排序分页/统一导航 + 最近打开/向量状态卡片）
 - [x] M9 文档解析接入 MinerU（2026-08-20 代码落地，验收步骤见 docs/讨论/qwen-prdv1/m9-parse.md §8）：解析器 provider 抽象（parsers/）+ 批量上传 batch-of-1 + 重启恢复轮询 + parsed.md 进索引 + PDF 总结输入切换
+- [x] M10 EPUB 内容索引（2026-08-21 代码落地，脚本验证已通过，UI 验收步骤见 docs/讨论/qwen-prdv1/m10-epub.md §3）：内置本地 EpubParser（标准库 only）+ to_markdown 接口扩展 + 按扩展名路由（.epub 免 token）+ parsed.md 全链路复用
 
 里程碑详细目标见 [docs/PRD.md](./docs/PRD.md) §28。
 

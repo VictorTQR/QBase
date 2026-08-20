@@ -157,6 +157,19 @@
     - 覆盖备份：重解析前旧 `{stem}.parsed.md` 复制为 `.knowledge/backups/{stem}.{时间戳}.bak.md`，与总结备份同目录同风格
     - 扫描层零改动：`.parsed.md` 后缀 M2 起已在 `ARTIFACT_SUFFIXES`，产物落盘后重扫自动绑定 kind=parsed
     - 测试用 mock（附录 A，纯标准库端口 8793，token=mock-token）：覆盖 未启用/无 token/连通测试/成功链路/覆盖备份/失败路径/重启恢复/epub 拒绝/200MB 拒绝
+- M10 EPUB 内容索引（内置本地解析器）- 代码已落地（2026-08-21），附录 A 验证脚本已跑通（合成 EPUB3/EPUB2/latin-1/坏 zip/DRM + 全链路），UI 手动验收步骤见讨论稿 m10-epub.md §3
+  - 依据：讨论稿 qwen-prdv1/m10-epub.md（选型：手写 zipfile + 标准库，不引 ebooklib；.epub 固定路由内置解析器，不看 [parse].provider）
+  - 落地内容：
+    - 新增 `app/services/parsers/epub_parser.py`：`EpubParser` 本地解析器——submit=结构校验（zip/container.xml/OPF/spine，DRM 拒绝）、poll=查源文件（done 时 `full_zip_url=local://<路径>` 伪协议指针，parse_service 轮询循环零改动）、fetch=现算 markdown（幂等无状态，重启重算即恢复）、`to_markdown`=utf-8 解码；核心 `_epub_to_markdown`：container.xml → OPF manifest/spine 阅读顺序 → XHTML 逐章 `html.parser` 流式转 markdown（h1-h6/列表/引用/代码块/表格简化映射，href 百分号解码，BOM/XML 声明探测编码，spine 为空回退全量内容文件按路径排序）
+    - `base.py`：`DocumentParser` 增抽象方法 `to_markdown(raw)` + 类属性 `PRODUCT_BACKUP_SUFFIX`（产物留档后缀，None 不留档）与 `max_file_bytes`（None 不限制）；MinerU 的 `_extract_full_md` 从 parse_service 挪入 `MineruParser.to_markdown`，200MB 上限改为 MinerU 类属性（本地解析不设限）
+    - `parsers/__init__.py`：注册 `epub`；新增 `get_parser_for_extension(config, ext)` 按扩展名路由（`.epub` → EpubParser，其余 → `[parse].provider`）
+    - `parse_service.py`：`PARSEABLE_EXTENSIONS` 增 `.epub`（总结输入切换/详情页卡片自动覆盖）；`start_parsing`/`run_parse_task` 改按扩展名路由实例化；产物留档按 `PRODUCT_BACKUP_SUFFIX` 条件化（epub 不产生 zip 留档）；任务 `params.provider` 记实际解析器名；失败/超限文案不写死 MinerU
+    - UI：`asset_detail.py` parse_ready 校验改 `get_parser_for_extension` 探测（epub 免 token，mineru 缺 token 展示 ValueError 文案），文案区分本地（秒级）/远端（分钟级）；`settings.py` 解析器行注明 epub 内置本地；`library_service.py` 配置模板 `[parse]` 注释补 epub 路由说明
+  - 决策记录：
+    - fetch 返回 markdown utf-8 字节、`to_markdown` 负责产物→文本转换：base 接口保持「fetch=原始产物字节」语义，epub 不伪造 zip
+    - DRM（`META-INF/encryption.xml`）与坏 zip 在 submit 即报中文错误，不进任务线程才失败
+    - epub 产物不留档 zip（产物即 md 文本，覆盖重解析已有 `.bak.md` 备份链路）
+    - 验证脚本（讨论稿附录 A）：EPUB3 spine 顺序/实体/列表/斜体/代码块/引用/表格断言、EPUB2+latin-1+子目录、坏 zip/DRM 报错、parse_service 全链路（无 MinerU token 下任务 success → parsed.md 进 FTS → 无 zip 留档 → 覆盖备份生成），2026-08-21 全部通过
 
 ## 项目文档
 
