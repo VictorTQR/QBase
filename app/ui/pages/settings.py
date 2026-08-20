@@ -227,7 +227,10 @@ def settings_page() -> None:
             parse_enabled = ui.switch(
                 "启用文档解析", value=bool(parse_config.get("enabled", False))
             )
-            ui.label(f"解析器：{parse_provider}").classes("text-sm text-gray-600")
+            ui.label(
+                f"解析器：{parse_provider}（pdf/office）；.epub 由内置本地解析器处理，"
+                "无需 token"
+            ).classes("text-sm text-gray-600")
 
             parse_base_url = ui.input(
                 "Base URL",

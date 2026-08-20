@@ -1,18 +1,18 @@
-"""文档解析任务服务：submit → poll 循环 → 下载 zip → 写 {stem}.parsed.md
-→ 自动重扫 + 重建全文索引（成功后动作对齐转录/总结）。
+"""文档解析任务服务：submit → poll 循环 → fetch 产物 → to_markdown
+→ 写 {stem}.parsed.md → 自动重扫 + 重建全文索引（成功后动作对齐转录/总结）。
 
-与转录任务的模型差异：解析是分钟级远程异步任务，batch_id 持久化进
-任务 params_json，应用重启后 resume_running_parse_tasks() 恢复轮询
-（MinerU 结果接口幂等），不产生孤儿任务。
+与转录任务的模型差异：远端解析（MinerU）是分钟级异步任务，batch_id 持久化
+进任务 params_json，应用重启后 resume_running_parse_tasks() 恢复轮询
+（MinerU 结果接口幂等），不产生孤儿任务；本地解析（epub，m10）秒级无状态，
+fetch 现算，重启后重算即可。解析器按扩展名路由（.epub → 内置本地解析器，
+其余 → [parse].provider）。
 """
 
 from __future__ import annotations
 
-import io
 import json
 import threading
 import time
-import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -23,14 +23,22 @@ from app.repositories import task_repository
 from app.repositories.asset_repository import get_asset_by_id
 from app.services.config_service import get_parse_config
 from app.services.index_service import rebuild_fulltext_index
-from app.services.parsers import get_parser
+from app.services.parsers import get_parser_for_extension
 from app.services.parsers.base import ParseSubmission
-from app.services.parsers.mineru_parser import MAX_FILE_BYTES
 from app.services.scanner_service import scan_current_library
 from app.state import get_db_path, state
 
-# 可解析后缀白名单（epub 不被 MinerU 支持、图片留给未来 provider）
-PARSEABLE_EXTENSIONS = {".pdf", ".docx", ".doc", ".pptx", ".ppt", ".xlsx", ".xls"}
+# 可解析后缀白名单（.epub 走内置本地解析器、图片留给未来 provider）
+PARSEABLE_EXTENSIONS = {
+    ".pdf",
+    ".docx",
+    ".doc",
+    ".pptx",
+    ".ppt",
+    ".xlsx",
+    ".xls",
+    ".epub",
+}
 PARSED_SUFFIX = ".parsed.md"
 
 # 正在执行的解析任务守卫：防止 resume 与新任务对同一 task 重复起线程
@@ -52,18 +60,6 @@ def _backup_dir() -> Path:
     return backup_dir
 
 
-def _extract_full_md(zip_bytes: bytes) -> str:
-    """从 MinerU 结果 zip 提取 full.md 文本；缺失则抛错。"""
-    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        names = zf.namelist()
-        target = next((n for n in names if n.endswith("full.md")), None)
-
-        if target is None:
-            raise ValueError(f"解析结果 zip 中没有 full.md：{names[:10]}")
-
-        return zf.read(target).decode("utf-8", errors="replace")
-
-
 def start_parsing(asset_id: str) -> str:
     """创建并启动解析任务（前置校验 + 并发去重，对齐 start_transcription）。"""
     conn = get_conn(get_db_path())
@@ -79,11 +75,6 @@ def start_parsing(asset_id: str) -> str:
         if ext not in PARSEABLE_EXTENSIONS:
             raise ValueError(f"当前不支持解析 {ext} 文件")
 
-        size = Path(asset["absolute_path"]).stat().st_size
-
-        if size > MAX_FILE_BYTES:
-            raise ValueError("文件超过 MinerU 单文件 200MB 上限，无法解析")
-
         if task_repository.count_running_tasks(
             conn, asset_id=asset_id, task_type="parse"
         ) > 0:
@@ -94,14 +85,22 @@ def start_parsing(asset_id: str) -> str:
         if not config.get("enabled"):
             raise ValueError("文档解析未启用，请在设置页开启 [parse]")
 
-        # provider 未注册 / token 缺失在此即抛 ValueError
-        get_parser(config)
+        # 按扩展名路由（.epub 本地免 token；其余 provider 未注册/token 缺失在此即抛）
+        parser = get_parser_for_extension(config, ext)
+
+        size = Path(asset["absolute_path"]).stat().st_size
+
+        if parser.max_file_bytes and size > parser.max_file_bytes:
+            raise ValueError(
+                f"文件超过 {parser.name} 单文件 "
+                f"{parser.max_file_bytes // (1024 * 1024)}MB 上限，无法解析"
+            )
 
         parsed = _parsed_path(asset["absolute_path"])
         params = {
             "asset_id": asset_id,
             "input": asset["absolute_path"],
-            "provider": config["provider"],
+            "provider": parser.name,  # 实际使用的解析器（epub 固定本地）
             # submission 字段提交成功后回写，重启恢复轮询的凭据
         }
 
@@ -135,7 +134,7 @@ def _spawn_task_thread(task_id: str) -> None:
 
 
 def run_parse_task(task_id: str) -> None:
-    """后台执行解析任务：提交 → 轮询 → 下载 → 写 parsed.md → 刷新索引。"""
+    """后台执行解析任务：提交 → 轮询 → 取回产物 → 写 parsed.md → 刷新索引。"""
     conn = get_conn(get_db_path())
 
     try:
@@ -158,7 +157,8 @@ def run_parse_task(task_id: str) -> None:
             return
 
         config = get_parse_config()
-        parser = get_parser(config)
+        asset_ext = Path(asset["absolute_path"]).suffix.lower()
+        parser = get_parser_for_extension(config, asset_ext)
         params = json.loads(task["params_json"]) if task["params_json"] else {}
 
         task_repository.update_task(
@@ -205,7 +205,7 @@ def run_parse_task(task_id: str) -> None:
 
             if state_obj.state == "failed":
                 raise ValueError(
-                    f"MinerU 解析失败：{state_obj.err_msg or '未给出原因'}"
+                    f"{parser.name} 解析失败：{state_obj.err_msg or '未给出原因'}"
                 )
 
             if time.monotonic() > deadline:
@@ -216,9 +216,9 @@ def run_parse_task(task_id: str) -> None:
 
             time.sleep(interval)
 
-        # ── 阶段 3：下载 + 落盘 ──
-        zip_bytes = parser.fetch(state_obj)
-        md_text = _extract_full_md(zip_bytes)
+        # ── 阶段 3：取回产物 + 落盘 ──
+        raw = parser.fetch(state_obj)
+        md_text = parser.to_markdown(raw)
 
         parsed = _parsed_path(asset["absolute_path"])
         backup_dir = _backup_dir()
@@ -229,7 +229,11 @@ def run_parse_task(task_id: str) -> None:
             backup_md = backup_dir / f"{parsed.stem}.{timestamp}.bak.md"
             backup_md.write_text(parsed.read_text(encoding="utf-8"), encoding="utf-8")
 
-        (backup_dir / (parsed.name + ".zip")).write_bytes(zip_bytes)
+        if parser.PRODUCT_BACKUP_SUFFIX:
+            # 产物留档（MinerU 结果 zip；本地解析产物即 md 文本，不留档）
+            product = backup_dir / (parsed.name + parser.PRODUCT_BACKUP_SUFFIX)
+            product.write_bytes(raw)
+
         parsed.write_text(md_text, encoding="utf-8")
 
         # ── 阶段 4：刷新索引（对齐转录/总结）──

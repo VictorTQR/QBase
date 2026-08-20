@@ -15,6 +15,8 @@
 from __future__ import annotations
 
 import httpx
+import io
+import zipfile
 from pathlib import Path
 
 from app.services.config_service import get_api_key
@@ -32,6 +34,8 @@ MAX_FILE_BYTES = 200 * 1024 * 1024
 
 class MineruParser(DocumentParser):
     name = "mineru"
+    PRODUCT_BACKUP_SUFFIX = ".zip"  # 结果 zip 留档 backups/
+    max_file_bytes = MAX_FILE_BYTES
 
     def __init__(self, config: dict):
         self.base_url = (
@@ -127,6 +131,21 @@ class MineruParser(DocumentParser):
             raise ValueError(f"下载解析结果失败：HTTP {resp.status_code}")
 
         return resp.content
+
+    def to_markdown(self, raw: bytes) -> str:
+        return _extract_full_md(raw)
+
+
+def _extract_full_md(zip_bytes: bytes) -> str:
+    """从 MinerU 结果 zip 提取 full.md 文本；缺失则抛错。"""
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+        target = next((n for n in names if n.endswith("full.md")), None)
+
+        if target is None:
+            raise ValueError(f"解析结果 zip 中没有 full.md：{names[:10]}")
+
+        return zf.read(target).decode("utf-8", errors="replace")
 
     def _unwrap(self, resp: httpx.Response, action: str) -> dict:
         """校验响应状态与业务码，返回 data 段。"""

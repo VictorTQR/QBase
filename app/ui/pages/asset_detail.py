@@ -14,6 +14,7 @@ from app.services import (
     transcription_service,
 )
 from app.services.parse_service import PARSEABLE_EXTENSIONS, start_parsing
+from app.services.parsers import get_parser_for_extension
 from app.state import get_db_path, state
 from app.ui.components import render_derived_badges
 from app.ui.layout import breadcrumb, page_frame, require_library
@@ -238,19 +239,16 @@ def asset_detail_page(asset_id: str) -> None:
                 if not parse_config.get("enabled"):
                     parse_hint = "文档解析未启用，请前往设置页开启。"
                 else:
-                    token = config_service.get_api_key(
-                        str(parse_config.get("token_env", ""))
-                    )
-
-                    if not token:
-                        parse_hint = (
-                            f"MinerU token 未配置（{parse_config.get('token_env')} "
-                            "未设置），请前往设置页检查。"
-                        )
-                    else:
-                        parse_ready = True
+                    # 按扩展名路由实例化（.epub 本地免 token；mineru 缺 token 抛
+                    # ValueError，文案直接展示）
+                    get_parser_for_extension(parse_config, asset_ext)
+                    parse_ready = True
+            except ValueError as exc:
+                parse_hint = f"{exc}，请前往设置页检查。"
             except Exception:
                 parse_hint = "无法读取解析配置，请前往设置页检查。"
+
+            parse_is_local = asset_ext == ".epub"
 
             async def start_parsing_task():
                 try:
@@ -281,6 +279,11 @@ def asset_detail_page(asset_id: str) -> None:
                 if has_parsed:
                     ui.label(
                         "当前已检测到解析结果。重新解析会覆盖（旧结果自动备份）。"
+                    ).classes("text-sm text-gray-600")
+                elif parse_ready and parse_is_local:
+                    ui.label(
+                        "本地解析为 Markdown（内置 EPUB 解析器，无需远端服务，"
+                        "通常数秒完成）。"
                     ).classes("text-sm text-gray-600")
                 elif parse_ready:
                     ui.label(

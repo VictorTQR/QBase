@@ -46,9 +46,10 @@ transcribe_cwd = "../QVoice"
 transcribe_timeout_seconds = 14400
 
 [parse]
-# 文档解析（m9，MinerU）。使用前到 https://mineru.net「API 管理」页创建 token，
+# 文档解析（m9/m10）。使用前到 https://mineru.net「API 管理」页创建 token，
 # 设置环境变量 MINERU_API_TOKEN（或写入 .knowledge/secrets.toml 的 [keys]），
 # 再把 enabled 改为 true。
+# .epub 不走 MinerU：固定路由到内置本地解析器（无需 token，秒级完成）。
 enabled = false
 provider = "mineru"
 
