@@ -7,172 +7,161 @@ from nicegui import run, ui
 from app.database import get_conn
 from app.services import index_service, search_service, vector_service
 from app.state import get_db_path, state
-from app.ui.layout import page_header, require_library
+from app.ui.components import render_derived_badges
+from app.ui.layout import page_frame, require_library
+from app.ui.tokens import C
 from app.utils import highlight_snippet, notify_error
-
-
-def _render_derived_badges(result: dict):
-    """渲染派生完成度徽章。"""
-    badges = result.get("derived_badges", {}) or {}
-    if badges.get("has_transcript"):
-        ui.badge("转录", color="green").classes("text-xs")
-    if badges.get("has_summary"):
-        ui.badge("总结", color="blue").classes("text-xs")
-    if badges.get("has_note"):
-        ui.badge("笔记", color="purple").classes("text-xs")
-    if badges.get("has_parsed"):
-        ui.badge("已解析", color="teal").classes("text-xs")
-    if badges.get("has_meta"):
-        ui.badge("元数据", color="grey-6").classes("text-xs")
 
 
 @ui.page("/search")
 def search_page():
-    page_header("搜索", active_nav="search")
-    if not require_library():
-        return
+    with page_frame("搜索", active_nav="search"):
+        if not require_library():
+            return
 
-    with ui.row().classes("items-center gap-3 mt-3 w-full"):
-        query_input = ui.input(placeholder="输入搜索关键词…").classes("flex-1")
-        fulltext_btn = ui.button("全文搜索")
-        filename_btn = ui.button("文件名搜索").props("outline")
-        vector_btn = ui.button("语义搜索").props("outline color=teal")
+        with ui.row().classes("items-center gap-3 mt-3 w-full"):
+            query_input = ui.input(
+                label="搜索关键词", placeholder="输入搜索关键词…"
+            ).classes("flex-1")
+            fulltext_btn = ui.button("全文搜索")
+            filename_btn = ui.button("文件名搜索").props("outline")
+            vector_btn = ui.button("语义搜索").props("outline color=teal")
 
-    with ui.row().classes("items-center gap-3 mt-2"):
-        rebuild_button = ui.button("重建全文索引", icon="refresh")
-        rebuild_vector_button = ui.button("重建向量索引", icon="bubble_chart")
-        ui.label(
-            "首次使用全文搜索前先重建全文索引；首次语义搜索前先重建向量索引。"
-        ).classes("text-xs text-gray-500")
-        ui.label("重建向量索引会调用 Embedding API，可能产生费用。").classes(
-            "text-xs text-orange-600"
-        )
-
-    results_container = ui.column().classes("w-full mt-4")
-
-    def render_results(results: list[dict], mode: str):
-        results_container.clear()
-        with results_container:
-            if not results:
-                ui.label("未找到相关结果。").classes("text-gray-500 mt-4")
-                return
-            ui.label(f"共 {len(results)} 条结果").classes(
-                "text-sm text-gray-600 mb-2"
+        with ui.row().classes("items-center gap-3 mt-2"):
+            rebuild_button = ui.button("重建全文索引", icon="refresh")
+            rebuild_vector_button = ui.button("重建向量索引", icon="bubble_chart")
+            ui.label(
+                "首次使用全文搜索前先重建全文索引；首次语义搜索前先重建向量索引。"
+            ).classes("text-xs text-gray-600")
+            ui.label("重建向量索引会调用 Embedding API，可能产生费用。").classes(
+                "text-xs text-orange-600"
             )
-            for result in results:
-                with ui.card().classes("w-full p-3 mb-2"):
-                    with ui.row().classes("items-center gap-2"):
-                        if result.get("asset_id"):
-                            ui.link(
-                                result["asset_title"],
-                                f"/assets/{result['asset_id']}",
-                            ).classes("text-blue-600 font-medium")
+
+        results_container = ui.column().classes("w-full mt-4")
+
+        def render_results(results: list[dict], mode: str):
+            results_container.clear()
+            with results_container:
+                if not results:
+                    ui.label("未找到相关结果。").classes("text-gray-600 mt-4")
+                    return
+                ui.label(f"共 {len(results)} 条结果").classes(
+                    "text-sm text-gray-600 mb-2"
+                )
+                for result in results:
+                    with ui.card().classes("w-full p-3 mb-2"):
+                        with ui.row().classes("items-center gap-2"):
+                            if result.get("asset_id"):
+                                ui.link(
+                                    result["asset_title"],
+                                    f"/assets/{result['asset_id']}",
+                                ).classes("text-blue-600 font-medium")
+                            else:
+                                ui.label(result["asset_title"]).classes("font-medium")
+                            ui.badge(result["kind"], color=C.NEUTRAL).classes("text-xs")
+                            if result.get("asset_type"):
+                                ui.badge(
+                                    result["asset_type"], color=C.ASSET_TYPE
+                                ).classes("text-xs")
+                            render_derived_badges(result)
+
+                        snippet = result.get("snippet", "")
+                        words = result.get("highlight_words", [])
+                        if words and mode != "vector" and snippet:
+                            highlighted = highlight_snippet(snippet, words)
+                            ui.html(
+                                f'<p class="text-sm mt-2 whitespace-pre-wrap">{highlighted}</p>'
+                            ).classes("w-full")
                         else:
-                            ui.label(result["asset_title"]).classes("font-medium")
-                        ui.badge(result["kind"], color="grey").classes("text-xs")
-                        if result.get("asset_type"):
-                            ui.badge(
-                                result["asset_type"], color="blue-grey"
-                            ).classes("text-xs")
-                        _render_derived_badges(result)
+                            ui.label(snippet).classes(
+                                "text-sm mt-2 whitespace-pre-wrap text-gray-600"
+                            )
 
-                    snippet = result.get("snippet", "")
-                    words = result.get("highlight_words", [])
-                    if words and mode != "vector" and snippet:
-                        highlighted = highlight_snippet(snippet, words)
-                        ui.html(
-                            f'<p class="text-sm mt-2 whitespace-pre-wrap">{highlighted}</p>'
-                        ).classes("w-full")
-                    else:
-                        ui.label(snippet).classes(
-                            "text-sm mt-2 whitespace-pre-wrap text-gray-600"
+                        if result.get("distance") is not None:
+                            ui.label(f"distance: {result['distance']:.4f}").classes(
+                                "text-xs text-gray-600"
+                            )
+                        ui.label(result.get("relative_path", "")).classes(
+                            "text-xs text-gray-600 mt-1"
                         )
 
-                    if result.get("distance") is not None:
-                        ui.label(f"distance: {result['distance']:.4f}").classes(
-                            "text-xs text-gray-500"
-                        )
-                    ui.label(result.get("relative_path", "")).classes(
-                        "text-xs text-gray-400 mt-1"
-                    )
-
-    async def handle_fulltext():
-        query = query_input.value.strip()
-        if not query:
-            ui.notify("请输入搜索关键词", type="warning")
-            return
-        try:
-            conn = get_conn(get_db_path())
+        async def handle_fulltext():
+            query = query_input.value.strip()
+            if not query:
+                ui.notify("请输入搜索关键词", type="warning")
+                return
             try:
-                results = search_service.search_fulltext(conn, query)
-            finally:
-                conn.close()
-            render_results(results, "fulltext")
-        except Exception as exc:
-            notify_error(exc)
+                conn = get_conn(get_db_path())
+                try:
+                    results = search_service.search_fulltext(conn, query)
+                finally:
+                    conn.close()
+                render_results(results, "fulltext")
+            except Exception as exc:
+                notify_error(exc)
 
-    async def handle_filename():
-        query = query_input.value.strip()
-        if not query:
-            ui.notify("请输入搜索关键词", type="warning")
-            return
-        try:
-            conn = get_conn(get_db_path())
+        async def handle_filename():
+            query = query_input.value.strip()
+            if not query:
+                ui.notify("请输入搜索关键词", type="warning")
+                return
             try:
-                results = search_service.search_filename(conn, query)
-            finally:
-                conn.close()
-            render_results(results, "filename")
-        except Exception as exc:
-            notify_error(exc)
+                conn = get_conn(get_db_path())
+                try:
+                    results = search_service.search_filename(conn, query)
+                finally:
+                    conn.close()
+                render_results(results, "filename")
+            except Exception as exc:
+                notify_error(exc)
 
-    async def handle_vector():
-        query = query_input.value.strip()
-        if not query:
-            ui.notify("请输入搜索关键词", type="warning")
-            return
-        try:
-            conn = get_conn(get_db_path())
+        async def handle_vector():
+            query = query_input.value.strip()
+            if not query:
+                ui.notify("请输入搜索关键词", type="warning")
+                return
             try:
-                results = search_service.search_vector(conn, query)
+                conn = get_conn(get_db_path())
+                try:
+                    results = search_service.search_vector(conn, query)
+                finally:
+                    conn.close()
+                render_results(results, "vector")
+            except Exception as exc:
+                notify_error(exc)
+
+        async def handle_rebuild():
+            rebuild_button.disable()
+            try:
+                stats = await run.io_bound(index_service.rebuild_fulltext_index)
+                ui.notify(
+                    "全文索引重建完成："
+                    f"{stats['sources']} 个来源，{stats['chunks']} 个片段",
+                    type="positive",
+                )
+            except Exception as exc:
+                notify_error(exc)
             finally:
-                conn.close()
-            render_results(results, "vector")
-        except Exception as exc:
-            notify_error(exc)
+                rebuild_button.enable()
 
-    async def handle_rebuild():
-        rebuild_button.disable()
-        try:
-            stats = await run.io_bound(index_service.rebuild_fulltext_index)
-            ui.notify(
-                "全文索引重建完成："
-                f"{stats['sources']} 个来源，{stats['chunks']} 个片段",
-                type="positive",
-            )
-        except Exception as exc:
-            notify_error(exc)
-        finally:
-            rebuild_button.enable()
+        async def handle_rebuild_vector():
+            rebuild_vector_button.disable()
+            try:
+                stats = await run.io_bound(vector_service.rebuild_vector_index)
+                ui.notify(
+                    "向量索引重建完成："
+                    f"总片段 {stats['total_chunks']}，"
+                    f"缓存命中 {stats['cache_hits']}，新调用 {stats['embedded']}",
+                    type="positive",
+                )
+            except Exception as exc:
+                notify_error(exc)
+            finally:
+                rebuild_vector_button.enable()
 
-    async def handle_rebuild_vector():
-        rebuild_vector_button.disable()
-        try:
-            stats = await run.io_bound(vector_service.rebuild_vector_index)
-            ui.notify(
-                "向量索引重建完成："
-                f"总片段 {stats['total_chunks']}，"
-                f"缓存命中 {stats['cache_hits']}，新调用 {stats['embedded']}",
-                type="positive",
-            )
-        except Exception as exc:
-            notify_error(exc)
-        finally:
-            rebuild_vector_button.enable()
-
-    fulltext_btn.on_click(handle_fulltext)
-    filename_btn.on_click(handle_filename)
-    vector_btn.on_click(handle_vector)
-    rebuild_button.on_click(handle_rebuild)
-    rebuild_vector_button.on_click(handle_rebuild_vector)
-    query_input.on("keydown.enter", handle_fulltext)
+        fulltext_btn.on_click(handle_fulltext)
+        filename_btn.on_click(handle_filename)
+        vector_btn.on_click(handle_vector)
+        rebuild_button.on_click(handle_rebuild)
+        rebuild_vector_button.on_click(handle_rebuild_vector)
+        query_input.on("keydown.enter", handle_fulltext)
