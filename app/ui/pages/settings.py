@@ -96,6 +96,17 @@ def settings_page() -> None:
 
         llm_config = config.get("llm", {}).get("summary", {})
         embedding_config = original_embedding
+        parse_config = config.get("parse", {})
+
+        if not isinstance(parse_config, dict):
+            parse_config = {}
+
+        parse_provider = str(parse_config.get("provider", "mineru") or "mineru")
+        parse_mineru = parse_config.get(parse_provider)
+
+        if not isinstance(parse_mineru, dict):
+            parse_mineru = {}
+
         index_config = config.get("index", {})
         task_config = config.get("task", {})
         library_config = config.get("library", {})
@@ -208,6 +219,56 @@ def settings_page() -> None:
                 test_embedding_button = ui.button(
                     "测试 Embedding API", icon="cable"
                 )
+
+        # ── 文档解析配置（m9，当前仅 mineru）──
+        with ui.card().classes("w-full p-4 mt-4"):
+            ui.label("文档解析配置").classes("text-lg font-semibold")
+
+            parse_enabled = ui.switch(
+                "启用文档解析", value=bool(parse_config.get("enabled", False))
+            )
+            ui.label(f"解析器：{parse_provider}").classes("text-sm text-gray-600")
+
+            parse_base_url = ui.input(
+                "Base URL",
+                value=str(parse_mineru.get("base_url", "https://mineru.net")),
+            ).classes("w-full")
+            parse_model_version = ui.select(
+                ["vlm", "pipeline"],
+                label="model_version",
+                value=str(parse_mineru.get("model_version", "vlm")),
+            ).classes("w-48")
+            parse_token_env = ui.input(
+                "Token 密钥名（token_env）",
+                value=str(parse_mineru.get("token_env", "MINERU_API_TOKEN")),
+            ).classes("w-full")
+            _render_key_status(
+                key_status, str(parse_mineru.get("token_env", ""))
+            )
+
+            with ui.row().classes("w-full gap-3"):
+                parse_timeout = ui.number(
+                    "timeout 秒（单任务整体超时）",
+                    value=int(parse_mineru.get("timeout_seconds", 1800) or 1800),
+                    min=1,
+                    step=60,
+                ).classes("w-56")
+                parse_poll_interval = ui.number(
+                    "轮询间隔秒",
+                    value=int(
+                        parse_mineru.get("poll_interval_seconds", 10) or 10
+                    ),
+                    min=1,
+                    step=1,
+                ).classes("w-40")
+
+            ui.label(
+                "token 到 https://mineru.net「API 管理」页创建；"
+                "测试 API 只校验 token，不消耗解析额度。"
+            ).classes("text-xs text-gray-600 mt-2")
+
+            with ui.row().classes("mt-3 gap-3"):
+                test_parse_button = ui.button("测试解析 API", icon="cable")
 
         # ── 索引配置 ──
         with ui.card().classes("w-full p-4 mt-4"):
@@ -390,6 +451,19 @@ def settings_page() -> None:
                     "batch_size": int(embedding_batch_size.value or 16),
                     "timeout": int(embedding_timeout.value or 120),
                 },
+                "parse": {
+                    "enabled": bool(parse_enabled.value),
+                    "provider": parse_provider,
+                    parse_provider: {
+                        "base_url": str(parse_base_url.value or "").strip(),
+                        "model_version": str(parse_model_version.value or "vlm"),
+                        "token_env": str(parse_token_env.value or "").strip(),
+                        "timeout_seconds": int(parse_timeout.value or 1800),
+                        "poll_interval_seconds": int(
+                            parse_poll_interval.value or 10
+                        ),
+                    },
+                },
                 "index": {
                     "chunk_max_chars": int(chunk_max_chars.value or 800),
                     "chunk_overlap": int(chunk_overlap.value or 100),
@@ -464,6 +538,23 @@ def settings_page() -> None:
             finally:
                 test_embedding_button.enable()
 
+        async def handle_test_parse():
+            test_parse_button.disable()
+            try:
+                result = await run.io_bound(
+                    config_service.test_connection,
+                    "parse",
+                    build_patch(),
+                )
+                if result.get("ok"):
+                    ui.notify(result.get("message", "连接成功"), type="positive")
+                else:
+                    ui.notify(result.get("message", "连接失败"), type="negative")
+            except Exception as exc:
+                notify_error(exc)
+            finally:
+                test_parse_button.enable()
+
         async def handle_rebuild_fts():
             rebuild_fts_button.disable()
             try:
@@ -514,6 +605,7 @@ def settings_page() -> None:
         save_button.on_click(handle_save)
         test_llm_button.on_click(handle_test_llm)
         test_embedding_button.on_click(handle_test_embedding)
+        test_parse_button.on_click(handle_test_parse)
         rebuild_fts_button.on_click(handle_rebuild_fts)
         rebuild_vector_button.on_click(handle_rebuild_vector)
         clear_cache_button.on_click(handle_clear_cache)

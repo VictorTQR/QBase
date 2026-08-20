@@ -239,6 +239,31 @@ def get_summary_llm_config() -> dict:
     return result
 
 
+def get_parse_config() -> dict:
+    """读取文档解析配置（[parse] + provider 子表展平，enabled=false 不校验）。"""
+    config = load_config()
+    parse = config.get("parse")
+
+    if not isinstance(parse, dict):
+        parse = {}
+
+    provider = str(parse.get("provider", "mineru")).strip() or "mineru"
+    provider_config = parse.get(provider)
+
+    if not isinstance(provider_config, dict):
+        provider_config = {}
+
+    return {
+        "enabled": bool(parse.get("enabled", False)),
+        "provider": provider,
+        "timeout_seconds": int(provider_config.get("timeout_seconds", 1800) or 1800),
+        "poll_interval_seconds": int(
+            provider_config.get("poll_interval_seconds", 10) or 10
+        ),
+        **provider_config,
+    }
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 配置写回 / 校验 / 环境检测 / 连通性测试（m7-config-ui）
 # ──────────────────────────────────────────────────────────────────────────
@@ -402,6 +427,43 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
         if chunk_chars > max_input_chars:
             raise ConfigError("LLM chunk_chars 不应大于 max_input_chars")
 
+    # ── parse ──
+    parse = cfg.get("parse", {})
+
+    if parse.get("enabled"):
+        # 惰性导入避免与 parsers 包循环依赖（mineru_parser 导入本模块的 get_api_key）
+        from app.services.parsers import PARSERS
+
+        provider = str(parse.get("provider", "")).strip() or "mineru"
+
+        if provider not in PARSERS:
+            raise ConfigError(
+                f"解析器未注册：{provider}（可用：{'、'.join(sorted(PARSERS))}）"
+            )
+
+        provider_cfg = parse.get(provider)
+
+        if not isinstance(provider_cfg, dict):
+            provider_cfg = {}
+
+        if provider == "mineru":
+            model_version = str(provider_cfg.get("model_version", "vlm")).strip()
+
+            if model_version not in {"pipeline", "vlm"}:
+                raise ConfigError(
+                    "parse model_version 仅支持 pipeline / vlm"
+                )
+
+        timeout_seconds = int(provider_cfg.get("timeout_seconds", 1800))
+
+        if timeout_seconds < 1:
+            raise ConfigError("parse timeout_seconds 必须大于等于 1")
+
+        poll_interval_seconds = int(provider_cfg.get("poll_interval_seconds", 10))
+
+        if poll_interval_seconds < 1:
+            raise ConfigError("parse poll_interval_seconds 必须大于等于 1")
+
     return cfg
 
 
@@ -423,6 +485,15 @@ def get_key_status(config: dict[str, Any] | None = None) -> dict[str, dict]:
     llm_summary = config.get("llm", {}).get("summary", {})
     if llm_summary.get("api_key_env"):
         key_names.add(str(llm_summary["api_key_env"]))
+
+    parse = config.get("parse", {})
+
+    if isinstance(parse, dict):
+        parse_provider = str(parse.get("provider", "mineru") or "mineru")
+        provider_cfg = parse.get(parse_provider)
+
+        if isinstance(provider_cfg, dict) and provider_cfg.get("token_env"):
+            key_names.add(str(provider_cfg["token_env"]))
 
     secrets = load_secrets()
 
@@ -497,6 +568,9 @@ def test_connection(
 
     if kind == "llm":
         return _test_llm_connection(config)
+
+    if kind == "parse":
+        return _test_parse_connection(config)
 
     return {"ok": False, "message": f"不支持的测试类型：{kind}"}
 
@@ -629,3 +703,52 @@ def _test_llm_connection(config: dict[str, Any]) -> dict[str, Any]:
 
     except Exception as exc:
         return {"ok": False, "message": f"LLM API 请求失败：{exc}"}
+
+
+def _test_parse_connection(config: dict[str, Any]) -> dict[str, Any]:
+    """测试 MinerU 连通性：用一个不存在的 batch_id 查结果接口。
+
+    401/403 = token 无效；其余（通常 404 或 code!=0）说明服务可达且 token 通过认证。
+    不提交真实解析任务，不消耗页数额度。
+    """
+    parse = config.get("parse", {})
+
+    if not parse.get("enabled"):
+        return {"ok": False, "message": "文档解析未启用"}
+
+    provider = str(parse.get("provider", "mineru") or "mineru")
+    provider_cfg = parse.get(provider)
+
+    if not isinstance(provider_cfg, dict):
+        provider_cfg = {}
+
+    base_url = (
+        str(provider_cfg.get("base_url", "")).strip().rstrip("/")
+        or "https://mineru.net"
+    )
+    token_env = str(provider_cfg.get("token_env", "")).strip()
+    token = get_api_key(token_env) if token_env else ""
+
+    if token_env and not token:
+        return {"ok": False, "message": f"环境变量 {token_env} 未设置"}
+
+    if not token:
+        return {"ok": False, "message": "未配置解析 token（token_env）"}
+
+    try:
+        response = httpx.get(
+            f"{base_url}/api/v4/extract-results/batch/qbase-connectivity-test",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=15,
+        )
+
+        if response.status_code in (401, 403):
+            return {
+                "ok": False,
+                "message": f"MinerU token 无效或已过期：HTTP {response.status_code}",
+            }
+
+        return {"ok": True, "message": "MinerU API 连接成功（token 有效）"}
+
+    except Exception as exc:
+        return {"ok": False, "message": f"MinerU API 请求失败：{exc}"}

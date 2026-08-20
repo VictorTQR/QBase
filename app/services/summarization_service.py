@@ -16,6 +16,7 @@ from app.repositories.asset_repository import get_asset_by_id
 from app.services.config_service import get_summary_llm_config
 from app.services.index_service import rebuild_fulltext_index
 from app.services.llm_service import summarize_text
+from app.services.parse_service import PARSEABLE_EXTENSIONS
 from app.services.scanner_service import scan_current_library
 from app.state import get_db_path, state
 from app.utils import read_text_for_index
@@ -26,7 +27,7 @@ def utcnow_iso() -> str:
 
 
 def get_summary_input_text(conn, asset: dict) -> str:
-    """获取总结输入文本：音视频取转录；.md/.txt 文档取原文。"""
+    """获取总结输入文本：音视频取转录；.md/.txt 文档取原文；白名单文档取解析结果。"""
     asset_type = asset["type"]
     asset_path = Path(asset["absolute_path"])
 
@@ -49,7 +50,20 @@ def get_summary_input_text(conn, asset: dict) -> str:
         if ext in {".md", ".txt"}:
             return read_text_for_index(str(asset_path))
 
-        raise ValueError(f"当前不支持对 {ext} 文件生成总结，需要文档解析模块")
+        if ext in PARSEABLE_EXTENSIONS:
+            parsed_artifact = None
+
+            for artifact in list_artifacts_by_asset(conn, asset["id"]):
+                if artifact["kind"] == "parsed" and artifact["status"] == "active":
+                    parsed_artifact = artifact
+                    break
+
+            if parsed_artifact is None:
+                raise ValueError("该文档尚未解析，请先在详情页生成解析")
+
+            return read_text_for_index(parsed_artifact["absolute_path"])
+
+        raise ValueError(f"当前不支持对 {ext} 文件生成总结")
 
     raise ValueError(f"不支持对 {asset_type} 类型生成总结")
 

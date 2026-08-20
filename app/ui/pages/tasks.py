@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from nicegui import run, ui
 
 from app.database import get_conn
@@ -30,6 +32,7 @@ STATUS_LABELS = {
 TYPE_LABELS = {
     "transcription": "转录",
     "summarization": "总结",
+    "parse": "解析",
 }
 
 
@@ -74,6 +77,19 @@ def tasks_page() -> None:
                 if task["command"]:
                     ui.label("命令：").classes("font-semibold mt-2")
                     ui.code(task["command"]).classes("w-full")
+                elif task["type"] == "parse":
+                    # API 任务无 CLI 命令，展示 provider 替代空白命令区
+                    provider = "-"
+
+                    try:
+                        params = json.loads(task["params_json"] or "{}")
+                        provider = params.get("provider", "-")
+                    except Exception:
+                        pass
+
+                    ui.label(f"解析器：{provider}（API 任务，无本地命令）").classes(
+                        "mt-2"
+                    )
 
                 if task["params_json"]:
                     ui.label("参数：").classes("font-semibold mt-2")
@@ -216,6 +232,19 @@ def tasks_page() -> None:
 
                         ui.notify(
                             f"已创建新总结任务：{new_task_id[:8]}",
+                            type="positive",
+                        )
+
+                    elif task["type"] == "parse" and task["asset_id"]:
+                        from app.services.parse_service import start_parsing
+
+                        new_task_id = await run.io_bound(
+                            start_parsing,
+                            task["asset_id"],
+                        )
+
+                        ui.notify(
+                            f"已创建新解析任务：{new_task_id[:8]}",
                             type="positive",
                         )
 

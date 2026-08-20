@@ -18,6 +18,7 @@ from app.services.library_service import (
     open_library,
 )
 from app.services.index_service import rebuild_fulltext_index
+from app.services.parse_service import start_parsing
 from app.services.scanner_service import scan_current_library
 from app.services.search_service import search
 from app.services.summarization_service import start_summarization
@@ -118,6 +119,20 @@ def api_start_summarization(asset_id: str) -> dict:
 
     try:
         task_id = start_summarization(asset_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {"task_id": task_id, "status": "pending"}
+
+
+@router.post("/assets/{asset_id}/parse")
+def api_start_parsing(asset_id: str) -> dict:
+    """触发生成文档解析任务。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    try:
+        task_id = start_parsing(asset_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

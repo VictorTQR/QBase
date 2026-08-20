@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 from nicegui import run, ui
+from pathlib import Path
 
 from app.database import get_conn
 from app.repositories.artifact_repository import list_artifacts_by_asset
 from app.repositories.asset_repository import get_asset_by_id
-from app.services import summarization_service, transcription_service
+from app.services import (
+    config_service,
+    summarization_service,
+    transcription_service,
+)
+from app.services.parse_service import PARSEABLE_EXTENSIONS, start_parsing
 from app.state import get_db_path, state
 from app.ui.components import render_derived_badges
 from app.ui.layout import breadcrumb, page_frame, require_library
@@ -207,6 +213,89 @@ def asset_detail_page(asset_id: str) -> None:
         kinds = {artifact["kind"] for artifact in artifacts}
         has_transcript = "transcript" in kinds
         has_summary = "summary" in kinds
+        has_parsed = "parsed" in kinds
+
+        # 文档解析卡片（仅白名单文档类型，m9）
+        asset_ext = Path(asset["relative_path"]).suffix.lower()
+        can_parse = asset["type"] == "document" and asset_ext in PARSEABLE_EXTENSIONS
+
+        if can_parse:
+            parse_ready = False
+            parse_hint = ""
+
+            try:
+                parse_config = config_service.get_parse_config()
+
+                if not parse_config.get("enabled"):
+                    parse_hint = "文档解析未启用，请前往设置页开启。"
+                else:
+                    token = config_service.get_api_key(
+                        str(parse_config.get("token_env", ""))
+                    )
+
+                    if not token:
+                        parse_hint = (
+                            f"MinerU token 未配置（{parse_config.get('token_env')} "
+                            "未设置），请前往设置页检查。"
+                        )
+                    else:
+                        parse_ready = True
+            except Exception:
+                parse_hint = "无法读取解析配置，请前往设置页检查。"
+
+            async def start_parsing_task():
+                try:
+                    task_id = await run.io_bound(start_parsing, asset["id"])
+                    ui.notify(
+                        f"解析任务已创建：{task_id[:8]}。请查看任务中心。",
+                        type="positive",
+                    )
+                    parse_button.disable()
+                except Exception as exc:
+                    notify_error(exc)
+
+            with ui.dialog() as overwrite_parse_dialog:
+                with ui.card():
+                    ui.label("已存在解析结果，是否重新解析？（旧结果会自动备份）")
+                    with ui.row().classes("gap-2 mt-3"):
+                        ui.button("取消", on_click=overwrite_parse_dialog.close)
+
+                        async def confirm_overwrite_parse():
+                            overwrite_parse_dialog.close()
+                            await start_parsing_task()
+
+                        ui.button("覆盖并解析", on_click=confirm_overwrite_parse)
+
+            with ui.card().classes("w-full p-4 mt-4"):
+                ui.label("文档解析").classes("text-lg font-semibold")
+
+                if has_parsed:
+                    ui.label(
+                        "当前已检测到解析结果。重新解析会覆盖（旧结果自动备份）。"
+                    ).classes("text-sm text-gray-600")
+                elif parse_ready:
+                    ui.label(
+                        "调用 MinerU 解析为 Markdown（远端异步任务，约需 1-5 分钟）。"
+                    ).classes("text-sm text-gray-600")
+                else:
+                    ui.label(parse_hint).classes("text-sm text-orange-600")
+
+                with ui.row().classes("gap-3 mt-3"):
+                    if parse_ready:
+                        parse_button = ui.button(
+                            "重新解析" if has_parsed else "生成解析",
+                            icon="description",
+                            on_click=lambda: (
+                                overwrite_parse_dialog.open()
+                                if has_parsed
+                                else start_parsing_task()
+                            ),
+                        )
+                    else:
+                        ui.button("生成解析", icon="description").props("disable")
+                    ui.link("任务中心", "/tasks").classes(
+                        "flex items-center text-blue-600"
+                    )
 
         # 转录操作卡片（仅音频/视频）
         if asset["type"] in {"audio", "video"}:
@@ -294,12 +383,17 @@ def asset_detail_page(asset_id: str) -> None:
             else:
                 summarize_hint = "需要先生成转录，才能生成总结。"
         elif asset["type"] == "document":
-            ext = asset["relative_path"].lower()
-            if ext.endswith(".md") or ext.endswith(".txt"):
+            if asset_ext in {".md", ".txt"}:
                 can_summarize = True
                 summarize_hint = "将基于文档原文生成总结。"
+            elif asset_ext in PARSEABLE_EXTENSIONS:
+                if has_parsed:
+                    can_summarize = True
+                    summarize_hint = "将基于解析结果生成总结。"
+                else:
+                    summarize_hint = "需要先生成解析，才能生成总结。"
             else:
-                summarize_hint = "当前文档格式暂不支持总结，需要文档解析模块。"
+                summarize_hint = "当前文档格式暂不支持总结。"
 
         with ui.card().classes("w-full p-4 mt-4"):
             ui.label("AI 总结").classes("text-lg font-semibold")

@@ -44,7 +44,22 @@ transcribe_command = [
 # transcribe_cwd 支持绝对路径 / ~ 开头（用户主目录）/ 相对路径（相对 QBase 应用根目录）
 transcribe_cwd = "../QVoice"
 transcribe_timeout_seconds = 14400
-parse_command = []
+
+[parse]
+# 文档解析（m9，MinerU）。使用前到 https://mineru.net「API 管理」页创建 token，
+# 设置环境变量 MINERU_API_TOKEN（或写入 .knowledge/secrets.toml 的 [keys]），
+# 再把 enabled 改为 true。
+enabled = false
+provider = "mineru"
+
+[parse.mineru]
+base_url = "https://mineru.net"
+token_env = "MINERU_API_TOKEN"
+# pipeline：经典多模块流水线，更快；vlm：端到端模型，复杂版面/公式/表格更强
+model_version = "vlm"
+# 单任务整体超时（提交+轮询+下载），秒
+timeout_seconds = 1800
+poll_interval_seconds = 10
 
 [llm.summary]
 # AI 总结（m6）。使用前填好 base_url / model，再把 enabled 改为 true。
@@ -112,6 +127,11 @@ def open_library(path_str: str) -> dict:
     state.library_root = root
     add_recent_library(str(root))
     logger.info("已打开知识库：{}", root)
+
+    # 恢复未完结的远程解析任务（幂等；未打开过解析功能时无任务可恢复）
+    from app.services.parse_service import resume_running_parse_tasks
+
+    resume_running_parse_tasks()
 
     return {
         "library_root": str(root),
