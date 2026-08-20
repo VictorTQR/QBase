@@ -37,7 +37,8 @@ transcribe_command = [
   "transcribe",
   "{input}",
 ]
-transcribe_cwd = "E:/Code/00Code/GitBank/QVoice"
+# transcribe_cwd 支持绝对路径 / ~ 开头（用户主目录）/ 相对路径（相对 QBase 应用根目录）
+transcribe_cwd = "../QVoice"
 transcribe_timeout_seconds = 14400
 parse_command = []
 

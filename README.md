@@ -82,7 +82,7 @@ open_browser = true
 ```toml
 [cli]
 transcribe_command = ["uv", "run", "qvoice", "transcribe", "{input}", "--output", "{output}"]
-transcribe_cwd = "E:/Code/00Code/GitBank/QVoice"
+transcribe_cwd = "../QVoice"
 transcribe_timeout_seconds = 14400
 
 [embedding]
@@ -106,6 +106,8 @@ chunk_chars = 6000
 ```
 
 > **密钥管理**：配置里只写环境变量名（`api_key_env`），实际密钥通过系统环境变量提供（如 `set SILICONFLOW_API_KEY=xxx`，或在 shell 配置中持久化），各知识库自动继承，无需逐库填明文。
+>
+> **转录 CLI 路径**：`transcribe_cwd` 支持绝对路径、`~` 开头（用户主目录）与相对路径（相对 QBase 应用根目录，默认 `"../QVoice"` 即同级仓库）；目录不存在时发起转录会立即提示错误。
 >
 > **注意**：当前设置页为**只读展示**，修改配置需手动编辑上述 `config.toml` 文件。
 

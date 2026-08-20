@@ -114,6 +114,13 @@
     - 配置唯一真相来源 = `.knowledge/config.toml`；保存走「加载原配置 → deep merge patch → 清理 None → 校验 → 写回」，未编辑字段与未来新增字段均保留（已验收 `future_test_field` 保留）
     - 环境变量安全：测试连通性时 `_get_api_key` 只读 `api_key_env` 对应环境变量，不读取/展示明文 Key
     - 验收（mock，零 API 费用）：GET 返回打码配置 + 明文警告 + 空 key_status；PUT 改 model 写回成功且未知字段保留；test-connection embedding/llm 经 `api_key_env` override 命中 mock 返回 200；缺失环境变量明确报错；校验失败（dimension=0）返回 HTTP 400 中文错误；dimension/model 变更告警为前端逻辑（已代码确认）
+- M8 后补丁：transcribe_cwd 相对路径 + 子进程 UTF-8 输出（2026-08-20）
+  - `app/services/config_service.py`：新增 `_resolve_cli_cwd`，`transcribe_cwd` 支持绝对路径 / `~` 展开（用户主目录）/ 相对路径（相对 QBase 应用根目录）；目录不存在时抛 `ValueError`，经既有 `ValueError → HTTP 400` 转换，点转录即时提示，无需到任务中心翻日志
+  - `app/services/library_service.py`：`DEFAULT_LIBRARY_CONFIG` 的 `transcribe_cwd` 默认值由硬编码绝对路径改为 `"../QVoice"`（同级仓库相对路径）。仅影响新开的库，已有库的 config.toml 需手动改
+  - `app/services/cli_runner.py`：子进程注入 `PYTHONUTF8=1`。修复中文 Windows 下管道输出回退 GBK 导致的 `UnicodeEncodeError`（QVoice 用 rich 打印含 `✗` 的失败信息即崩，退出码 1 且真实错误被掩盖），并与父进程 `encoding="utf-8"` 解码对齐，中文输出不再乱码；非 Python CLI 忽略该变量，无副作用
+  - 决策记录：
+    - 相对路径基准选 QBase 应用根（`Path(__file__).parents[2]`）而非知识库目录/进程 CWD——QVoice 与 QBase 为同级仓库，`../QVoice` 最贴合实际布局，且不受应用启动目录影响
+    - `{input}` 保持绝对路径传入（子进程 cwd 会切到 CLI 项目目录，相对输入会指错位置）
 
 ## 项目文档
 

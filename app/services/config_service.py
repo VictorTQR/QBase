@@ -83,6 +83,24 @@ def get_api_key(key_name: str) -> str:
     return load_secrets().get(key_name, "")
 
 
+def _resolve_cli_cwd(raw: str | None) -> str | None:
+    """解析 transcribe_cwd。
+
+    支持三种写法：绝对路径；~ 开头（用户主目录）；相对路径（相对 QBase 应用根目录，
+    即本文件上两级，便于 QVoice 与 QBase 同级仓库时写 "../QVoice"）。
+    """
+    if not raw:
+        return None
+
+    path = Path(raw).expanduser()
+
+    if not path.is_absolute():
+        base = Path(__file__).resolve().parents[2]
+        path = base / path
+
+    return str(path.resolve())
+
+
 def get_transcribe_cli_config() -> dict:
     """读取转录 CLI 配置。"""
     config = load_config()
@@ -96,7 +114,11 @@ def get_transcribe_cli_config() -> dict:
             "请在 .knowledge/config.toml 的 [cli] 中以数组格式配置。"
         )
 
-    cwd = cli_config.get("transcribe_cwd") or None
+    cwd = _resolve_cli_cwd(cli_config.get("transcribe_cwd"))
+
+    if cwd is not None and not Path(cwd).is_dir():
+        raise ValueError(f"transcribe_cwd 目录不存在：{cwd}")
+
     timeout = int(cli_config.get("transcribe_timeout_seconds", 14400))
 
     return {

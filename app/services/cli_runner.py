@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass
 
@@ -53,6 +54,9 @@ def run_cli_command(
             encoding="utf-8",
             errors="replace",
             timeout=timeout,
+            # 强制子进程 Python 以 UTF-8 输出，与本函数的 utf-8 解码对齐；
+            # 否则管道输出在中文 Windows 上回退 GBK，✗ 等字符直接触发 UnicodeEncodeError
+            env={**os.environ, "PYTHONUTF8": "1"},
         )
 
         return CliResult(
