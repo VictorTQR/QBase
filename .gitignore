@@ -33,3 +33,6 @@ parse.backup/
 
 # App-level local user data (recents, etc.)
 data/
+
+
+.zcode
