@@ -338,13 +338,15 @@ def get_vector_stats() -> dict:
         row = conn.execute("SELECT COUNT(*) AS c FROM assets").fetchone()
         stats["total_assets"] = row["c"] if row else 0
 
+        # 重建会对全部 chunks 向量化（跳过空白片段），统计口径保持一致
         row = conn.execute(
-            "SELECT COUNT(DISTINCT asset_id) AS c FROM chunks WHERE kind='vector'"
+            "SELECT COUNT(DISTINCT asset_id) AS c FROM chunks"
+            " WHERE TRIM(content) <> ''"
         ).fetchone()
         stats["indexed_assets"] = row["c"] if row else 0
 
         chunk_rows = conn.execute(
-            "SELECT COUNT(*) AS c FROM chunks WHERE kind='vector'"
+            "SELECT COUNT(*) AS c FROM chunks WHERE TRIM(content) <> ''"
         ).fetchone()
         chunk_rows = chunk_rows["c"] if chunk_rows else 0
 
