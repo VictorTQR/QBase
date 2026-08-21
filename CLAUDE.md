@@ -83,6 +83,7 @@ docs/PRD.md          # 唯一权威 spec
 - [x] M10 EPUB 内容索引（2026-08-21 代码落地，脚本验证已通过，UI 验收步骤见 docs/讨论/qwen-prdv1/m10-epub.md §3）：内置本地 EpubParser（标准库 only）+ to_markdown 接口扩展 + 按扩展名路由（.epub 免 token）+ parsed.md 全链路复用
 - [x] M11 sidecar 目录 .kb（2026-08-21 代码落地，验收步骤见 docs/讨论/qwen-prdv1/m11-sidecar.md §3）：<原始文件名>.kb/ 目录识别（目录名精确绑定，无歧义）+ 总结/解析跟随现状写入（有目录才归集）+ 转录平铺不变（{output} 变量预留）；后补：详情页「创建 .kb 派生目录」按钮（service + REST + UI，只建目录不移动文件）
 - [x] M12 transcript JSON segments（2026-08-21 代码落地，冒烟验证见讨论稿 m12-segments.md 附录 A，UI 验收步骤见 §3）：详情页 json 转录分段视图（时间戳/说话人/100 段分页）+ 判定统一 is_transcript_json_name（修复 m11 遗留：sidecar transcript.json 此前不命中后缀判定，索引/总结输入读入原始 JSON）
+- [x] M13 音频/视频播放器与字幕级跳转（2026-08-21 代码落地，UI 验收步骤见讨论稿 m13-audio-seek.md §3）：详情页「播放」卡片（原生 ui.audio/ui.video，NiceGUI 自动托管本地文件 Range 流式）+ json 转录分段时间戳点击跳转（seek + play）；源文件缺失/无播放器降级纯文本；不做反向同步，API/服务层零改动
 
 里程碑详细目标见 [docs/PRD.md](./docs/PRD.md) §28。
 
