@@ -115,9 +115,14 @@ _ALLOWED_ORDER_COLUMNS = {"title", "mtime", "size", "type"}
 
 
 def _build_asset_filters(
-    asset_type: str | None, keyword: str | None
+    asset_type: str | None,
+    keyword: str | None,
+    tag_names: list[str] | None = None,
 ) -> tuple[str, list]:
-    """构造类型与文件名（标题/相对路径）筛选条件。"""
+    """构造类型、文件名（标题/相对路径）与标签筛选条件。
+
+    标签为多选 OR 语义：资产带任一所选标签即保留。
+    """
     clauses: list[str] = []
     params: list = []
 
@@ -132,6 +137,17 @@ def _build_asset_filters(
         )
         params.extend([like_pattern, like_pattern])
 
+    if tag_names:
+        placeholders = ", ".join("?" * len(tag_names))
+        clauses.append(
+            "EXISTS("
+            "SELECT 1 FROM asset_tags at "
+            "JOIN tags t ON t.id = at.tag_id "
+            f"WHERE at.asset_id = a.id AND t.name IN ({placeholders})"
+            ")"
+        )
+        params.extend(tag_names)
+
     where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     return where_clause, params
 
@@ -144,12 +160,14 @@ def list_assets(
     order_by: str = "mtime",
     order_dir: str = "DESC",
     keyword: str | None = None,
+    tag_names: list[str] | None = None,
 ) -> list[dict]:
-    """获取资产列表，附带派生文件状态（徽章）并支持筛选、排序与分页。
+    """获取资产列表，附带派生文件状态（徽章）与标签，支持筛选、排序与分页。
 
     order_by: "title" / "mtime" / "size" / "type"
     order_dir: "ASC" / "DESC"
     keyword: 文件名关键词，命中标题或相对路径
+    tag_names: 标签多选（OR）；行内 tags 为标签名列表，展示顺序由 UI 排序
     """
     if order_by not in _ALLOWED_ORDER_COLUMNS:
         order_by = "mtime"
@@ -158,10 +176,14 @@ def list_assets(
 
     base_columns = """
       a.id, a.title, a.type, a.relative_path, a.absolute_path,
-      a.size, a.mtime, a.parse_status, a.created_at, a.updated_at
+      a.size, a.mtime, a.parse_status, a.created_at, a.updated_at,
+      (SELECT group_concat(t.name, ',')
+         FROM asset_tags at
+         JOIN tags t ON t.id = at.tag_id
+        WHERE at.asset_id = a.id) AS tags_csv
     """
 
-    where_clause, params = _build_asset_filters(asset_type, keyword)
+    where_clause, params = _build_asset_filters(asset_type, keyword, tag_names)
 
     rows = conn.execute(
         f"""
@@ -174,15 +196,23 @@ def list_assets(
         params + [limit, offset],
     ).fetchall()
 
-    return [dict(row) for row in rows]
+    assets = []
+    for row in rows:
+        asset = dict(row)
+        tags_csv = asset.pop("tags_csv", None) or ""
+        asset["tags"] = [name for name in tags_csv.split(",") if name]
+        assets.append(asset)
+
+    return assets
 
 
 def count_assets(
     conn: sqlite3.Connection,
     asset_type: str | None = None,
     keyword: str | None = None,
+    tag_names: list[str] | None = None,
 ) -> int:
-    where_clause, params = _build_asset_filters(asset_type, keyword)
+    where_clause, params = _build_asset_filters(asset_type, keyword, tag_names)
     row = conn.execute(
         f"SELECT COUNT(*) AS cnt FROM assets a {where_clause}",
         params,
@@ -207,7 +237,10 @@ def get_asset_by_id(conn: sqlite3.Connection, asset_id: str) -> dict | None:
 
 
 def delete_missing_assets(conn: sqlite3.Connection, seen_paths: set[str]) -> int:
-    """删除已不存在文件的 asset 记录，返回删除数量。"""
+    """删除已不存在文件的 asset 记录，返回删除数量。
+
+    同步清理 asset_tags 绑定与零引用标签（全库无外键，清理走显式 SQL）。
+    """
     rows = conn.execute("SELECT id, relative_path FROM assets").fetchall()
 
     missing_ids = [
@@ -218,6 +251,13 @@ def delete_missing_assets(conn: sqlite3.Connection, seen_paths: set[str]) -> int
         conn.executemany(
             "DELETE FROM assets WHERE id = ?",
             [(asset_id,) for asset_id in missing_ids],
+        )
+        conn.executemany(
+            "DELETE FROM asset_tags WHERE asset_id = ?",
+            [(asset_id,) for asset_id in missing_ids],
+        )
+        conn.execute(
+            "DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM asset_tags)"
         )
 
     return len(missing_ids)

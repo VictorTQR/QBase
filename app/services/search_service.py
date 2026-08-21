@@ -1,4 +1,7 @@
-"""搜索服务：文件名搜索 + 全文搜索（FTS5 + LIKE 兜底）+ 向量语义搜索（m5）+ 综合搜索（m14，RRF 融合）。"""
+"""搜索服务：文件名搜索 + 全文搜索（FTS5 + LIKE 兜底）+ 向量语义搜索（m5）+ 综合搜索（m14，RRF 融合）。
+
+m15 起四种模式均支持标签过滤（tag_names，多选 OR：资产带任一所选标签即保留）。
+"""
 
 from __future__ import annotations
 
@@ -8,6 +11,53 @@ import sqlite3
 from app.database import get_conn
 from app.state import get_db_path
 from app.utils import escape_like
+
+
+def _tag_filter_sql(
+    assets_ref: str, tag_names: list[str] | None
+) -> tuple[str, list]:
+    """构造标签过滤 EXISTS 片段，供各搜索模式复用。
+
+    assets_ref 为 assets 表在当前查询中的引用（别名或表名）；
+    未选标签时返回 ("", [])。
+    """
+    if not tag_names:
+        return "", []
+
+    placeholders = ", ".join("?" * len(tag_names))
+    clause = (
+        "EXISTS("
+        "SELECT 1 FROM asset_tags at "
+        "JOIN tags t ON t.id = at.tag_id "
+        f"WHERE at.asset_id = {assets_ref}.id AND t.name IN ({placeholders})"
+        ")"
+    )
+    return clause, list(tag_names)
+
+
+def _asset_ids_with_any_tag(
+    conn: sqlite3.Connection, asset_ids: list[str], tag_names: list[str] | None
+) -> set[str]:
+    """筛选出带任一所选标签的资产 ID 集合（供向量路回表后过滤）。"""
+    if not tag_names:
+        return set(asset_ids)
+
+    if not asset_ids:
+        return set()
+
+    asset_ph = ", ".join("?" * len(asset_ids))
+    tag_ph = ", ".join("?" * len(tag_names))
+    rows = conn.execute(
+        f"""
+        SELECT DISTINCT at.asset_id
+        FROM asset_tags at
+        JOIN tags t ON t.id = at.tag_id
+        WHERE at.asset_id IN ({asset_ph}) AND t.name IN ({tag_ph})
+        """,
+        asset_ids + list(tag_names),
+    ).fetchall()
+
+    return {str(row["asset_id"]) for row in rows}
 
 
 def build_fts_query(query: str) -> str | None:
@@ -81,22 +131,30 @@ def _get_derived_badges(conn, asset_id: str | None) -> dict:
     return dict(row) if row else {}
 
 
-def search_filename(conn, query: str, limit: int = 50) -> list[dict]:
-    """文件名搜索：命中标题或相对路径。"""
+def search_filename(
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int = 50,
+    tag_names: list[str] | None = None,
+) -> list[dict]:
+    """文件名搜索：命中标题或相对路径，可按标签过滤（OR）。"""
     like_pattern = f"%{escape_like(query)}%"
+    tag_clause, tag_params = _tag_filter_sql("assets", tag_names)
+
+    tag_and = f" AND {tag_clause}" if tag_clause else ""
 
     rows = conn.execute(
-        """
+        f"""
         SELECT
           id AS asset_id, title AS asset_title,
           type AS asset_type, relative_path
         FROM assets
-        WHERE title LIKE ? ESCAPE '\\'
-           OR relative_path LIKE ? ESCAPE '\\'
+        WHERE (title LIKE ? ESCAPE '\\'
+           OR relative_path LIKE ? ESCAPE '\\'){tag_and}
         ORDER BY title
         LIMIT ?
         """,
-        (like_pattern, like_pattern, limit),
+        (like_pattern, like_pattern, *tag_params, limit),
     ).fetchall()
 
     return [
@@ -114,17 +172,24 @@ def search_filename(conn, query: str, limit: int = 50) -> list[dict]:
     ]
 
 
-def search_fulltext(conn, query: str, limit: int = 50) -> list[dict]:
-    """全文内容搜索：先 FTS5，再 LIKE 兜底（中文子串更可靠）。"""
+def search_fulltext(
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int = 50,
+    tag_names: list[str] | None = None,
+) -> list[dict]:
+    """全文内容搜索：先 FTS5，再 LIKE 兜底（中文子串更可靠），可按标签过滤（OR）。"""
     results: list[dict] = []
     seen_chunk_ids: set[str] = set()
 
     fts_query = build_fts_query(query)
+    tag_clause, tag_params = _tag_filter_sql("a", tag_names)
+    tag_and = f" AND {tag_clause}" if tag_clause else ""
 
     if fts_query:
         try:
             rows = conn.execute(
-                """
+                f"""
                 SELECT
                   c.id AS chunk_id, c.asset_id AS asset_id, c.kind AS kind,
                   c.relative_path AS relative_path, c.content AS content,
@@ -132,11 +197,11 @@ def search_fulltext(conn, query: str, limit: int = 50) -> list[dict]:
                 FROM chunks_fts f
                 JOIN chunks c ON c.rowid = f.rowid
                 LEFT JOIN assets a ON a.id = c.asset_id
-                WHERE chunks_fts MATCH ?
+                WHERE chunks_fts MATCH ?{tag_and}
                 ORDER BY rank
                 LIMIT ?
                 """,
-                (fts_query, limit),
+                (fts_query, *tag_params, limit),
             ).fetchall()
 
             for row in rows:
@@ -170,18 +235,18 @@ def search_fulltext(conn, query: str, limit: int = 50) -> list[dict]:
     like_pattern = f"%{escape_like(query)}%"
 
     rows = conn.execute(
-        """
+        f"""
         SELECT
           c.id AS chunk_id, c.asset_id AS asset_id, c.kind AS kind,
           c.relative_path AS relative_path, c.content AS content,
           a.title AS asset_title, a.type AS asset_type
         FROM chunks c
         LEFT JOIN assets a ON a.id = c.asset_id
-        WHERE c.content LIKE ? ESCAPE '\\'
+        WHERE c.content LIKE ? ESCAPE '\\'{tag_and}
         ORDER BY c.id
         LIMIT ?
         """,
-        (like_pattern, limit),
+        (like_pattern, *tag_params, limit),
     ).fetchall()
 
     for row in rows:
@@ -207,15 +272,33 @@ def search_fulltext(conn, query: str, limit: int = 50) -> list[dict]:
     return results
 
 
-def search_vector(conn, query: str, limit: int = 20) -> list[dict]:
-    """向量语义搜索：LanceDB 命中后回查资产标题。"""
+def search_vector(
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int = 20,
+    tag_names: list[str] | None = None,
+) -> list[dict]:
+    """向量语义搜索：LanceDB 命中后回查资产标题，可按标签过滤（OR）。
+
+    标签过滤发生在 top-K 候选回表之后，过滤后结果可能少于 limit
+    （候选集本身有限，属预期行为，不算降级）。
+    """
     from app.services import vector_service
 
     hits = vector_service.search_vectors(query, limit=limit)
 
+    asset_ids = [str(hit["asset_id"]) for hit in hits if hit.get("asset_id")]
+    kept_asset_ids = _asset_ids_with_any_tag(conn, asset_ids, tag_names)
+
     results = []
 
     for hit in hits:
+        # 标签过滤与 SQL 路径的 EXISTS 语义一致：无资产绑定的命中在有
+        # 过滤时一并排除
+        if tag_names:
+            if not hit.get("asset_id") or str(hit["asset_id"]) not in kept_asset_ids:
+                continue
+
         asset_title = hit["relative_path"]
         asset_type = None
 
@@ -298,9 +381,12 @@ def _rrf_fuse(
 
 
 def search_hybrid(
-    conn, query: str, limit: int = 50
+    conn,
+    query: str,
+    limit: int = 50,
+    tag_names: list[str] | None = None,
 ) -> tuple[list[dict], str | None]:
-    """综合搜索：全文 + 向量 RRF 融合（m14）。
+    """综合搜索：全文 + 向量 RRF 融合（m14），可按标签过滤（m15）。
 
     单路不可用（索引缺失 / Embedding 未启用或调用失败）时降级为另一路，
     返回 (结果, 降级原因)；两路都参与时原因为 None。
@@ -311,12 +397,16 @@ def search_hybrid(
     reasons: list[str] = []
 
     try:
-        fulltext_results = search_fulltext(conn, query, limit=candidate_limit)
+        fulltext_results = search_fulltext(
+            conn, query, limit=candidate_limit, tag_names=tag_names
+        )
     except RuntimeError as exc:
         reasons.append(f"全文搜索未参与本次融合：{exc}")
 
     try:
-        vector_results = search_vector(conn, query, limit=candidate_limit)
+        vector_results = search_vector(
+            conn, query, limit=candidate_limit, tag_names=tag_names
+        )
     except Exception as exc:
         reasons.append(f"向量搜索未参与本次融合：{exc}")
 
@@ -324,7 +414,12 @@ def search_hybrid(
     return results, "；".join(reasons) if reasons else None
 
 
-def search(query: str, mode: str, limit: int = 50) -> list[dict]:
+def search(
+    query: str,
+    mode: str,
+    limit: int = 50,
+    tag_names: list[str] | None = None,
+) -> list[dict]:
     """统一搜索入口。mode: filename / fulltext / vector / hybrid。"""
     query = query.strip()
 
@@ -335,15 +430,17 @@ def search(query: str, mode: str, limit: int = 50) -> list[dict]:
 
     try:
         if mode == "filename":
-            return search_filename(conn, query, limit=limit)
+            return search_filename(conn, query, limit=limit, tag_names=tag_names)
 
         if mode == "vector":
-            return search_vector(conn, query, limit=limit)
+            return search_vector(conn, query, limit=limit, tag_names=tag_names)
 
         if mode == "hybrid":
-            results, _ = search_hybrid(conn, query, limit=limit)
+            results, _ = search_hybrid(
+                conn, query, limit=limit, tag_names=tag_names
+            )
             return results
 
-        return search_fulltext(conn, query, limit=limit)
+        return search_fulltext(conn, query, limit=limit, tag_names=tag_names)
     finally:
         conn.close()

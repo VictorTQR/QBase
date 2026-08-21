@@ -1,4 +1,4 @@
-"""资产列表页：扫描 / 刷新、类型与文件名过滤、排序、分页、派生状态徽章、打开文件与目录。"""
+"""资产列表页：扫描 / 刷新、类型与文件名与标签过滤、排序、分页、派生状态徽章、标签列、打开文件与目录。"""
 
 from __future__ import annotations
 
@@ -6,10 +6,11 @@ import asyncio
 
 from nicegui import run, ui
 
-from app.ui.tokens import CLS
+from app.ui.tokens import C, CLS
 from app.database import get_conn
 from app.repositories.asset_repository import count_assets, list_assets
 from app.services.scanner_service import scan_current_library
+from app.services.tag_service import get_all_tags
 from app.state import get_db_path, state
 from app.ui.components import render_derived_badges
 from app.ui.layout import page_frame, require_library
@@ -50,6 +51,12 @@ async def assets_page():
                 value="全部",
                 label="类型",
             ).classes("w-32")
+            tag_filter = ui.select(
+                options=[],
+                label="标签",
+                multiple=True,
+                clearable=True,
+            ).classes("w-56")
             sort_select = ui.select(
                 list(SORT_OPTIONS.keys()),
                 value="修改时间 ↓",
@@ -84,6 +91,20 @@ async def assets_page():
 
             return handler
 
+        async def load_tag_options():
+            """加载全部标签名作为筛选项（库未建标签表等异常时静默为空）。"""
+            def _load():
+                return [tag["name"] for tag in get_all_tags()]
+
+            try:
+                names = await run.io_bound(_load)
+            except Exception:
+                names = []
+
+            # 修改 options 后需 update() 才会同步到客户端
+            tag_filter.options = names
+            tag_filter.update()
+
         async def load_assets():
             list_container.clear()
             with list_container:
@@ -99,11 +120,14 @@ async def assets_page():
             selected_type = type_filter.value
             asset_type = selected_type if selected_type != "全部" else None
             keyword = (name_filter.value or "").strip() or None
+            tag_names = [t for t in (tag_filter.value or []) if t] or None
 
             def _load():
                 conn = get_conn(get_db_path())
                 try:
-                    total = count_assets(conn, asset_type, keyword=keyword)
+                    total = count_assets(
+                        conn, asset_type, keyword=keyword, tag_names=tag_names
+                    )
                     rows = list_assets(
                         conn,
                         limit=PAGE_SIZE,
@@ -112,6 +136,7 @@ async def assets_page():
                         order_by=order_by,
                         order_dir=order_dir,
                         keyword=keyword,
+                        tag_names=tag_names,
                     )
                 finally:
                     conn.close()
@@ -128,7 +153,7 @@ async def assets_page():
             list_container.clear()
             with list_container:
                 if not assets:
-                    if keyword or asset_type:
+                    if keyword or asset_type or tag_names:
                         ui.label("没有匹配的资产。").classes("text-gray-600")
                     else:
                         ui.label("暂无资产。请点击「扫描 / 刷新」。").classes(
@@ -136,17 +161,18 @@ async def assets_page():
                         )
                     return
 
-                with ui.row().classes(CLS["table_head"]).style("min-width: 900px"):
+                with ui.row().classes(CLS["table_head"]).style("min-width: 1040px"):
                     ui.label("标题").classes("w-56")
                     ui.label("类型").classes("w-16")
                     ui.label("路径").classes("flex-1")
+                    ui.label("标签").classes("w-40")
                     ui.label("状态").classes("w-48")
                     ui.label("大小").classes("w-20 text-right")
                     ui.label("修改时间").classes("w-32")
                     ui.label("操作").classes("w-36")
 
                 for asset in assets:
-                    with ui.row().classes(CLS["table_row"]).style("min-width: 900px"):
+                    with ui.row().classes(CLS["table_row"]).style("min-width: 1040px"):
                         ui.link(
                             asset["title"],
                             f"/assets/{asset['id']}",
@@ -156,6 +182,15 @@ async def assets_page():
                         ui.label(asset["relative_path"]).classes(
                             "flex-1 truncate"
                         ).tooltip(asset["relative_path"])
+
+                        tags = sorted(asset.get("tags") or [])
+                        with ui.row().classes("w-40 gap-1 flex-wrap"):
+                            for name in tags[:3]:
+                                ui.badge(name, color=C.TAG).classes("text-xs")
+                            if len(tags) > 3:
+                                ui.badge(
+                                    f"+{len(tags) - 3}", color=C.NEUTRAL
+                                ).classes("text-xs")
 
                         with ui.row().classes("w-48 gap-1 flex-wrap"):
                             render_derived_badges(asset)
@@ -199,6 +234,8 @@ async def assets_page():
 
                 current_page["value"] = 0
                 await load_assets()
+                # 扫描会清理已删资产及其标签绑定，筛选项随之刷新
+                await load_tag_options()
             except Exception as exc:
                 notify_error(exc)
             finally:
@@ -237,9 +274,11 @@ async def assets_page():
 
         scan_button.on_click(handle_scan)
         type_filter.on_value_change(handle_filter_or_sort_change)
+        tag_filter.on_value_change(handle_filter_or_sort_change)
         sort_select.on_value_change(handle_filter_or_sort_change)
         name_filter.on_value_change(lambda: schedule_name_filter_reload())
         prev_btn.on_click(handle_prev)
         next_btn.on_click(handle_next)
 
+        await load_tag_options()
         await load_assets()

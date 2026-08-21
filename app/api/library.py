@@ -5,12 +5,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.database import get_conn
 from app.repositories.artifact_repository import list_artifacts_by_asset
 from app.repositories.asset_repository import count_assets, get_asset_by_id, list_assets
+from app.repositories.tag_repository import get_tags_for_asset
 from app.repositories.task_repository import get_task, list_tasks
 from app.services.library_service import (
     close_library,
@@ -23,6 +24,7 @@ from app.services.parse_service import start_parsing
 from app.services.scanner_service import scan_current_library
 from app.services.search_service import search, search_hybrid
 from app.services.summarization_service import start_summarization
+from app.services.tag_service import get_all_tags, set_asset_tags
 from app.services.transcription_service import start_transcription
 from app.services.vector_service import rebuild_vector_index
 from app.state import get_db_path
@@ -32,6 +34,10 @@ router = APIRouter(prefix="/api")
 
 class OpenLibraryRequest(BaseModel):
     path: str
+
+
+class SetAssetTagsRequest(BaseModel):
+    tags: list[str]
 
 
 @router.post("/library/open")
@@ -79,7 +85,7 @@ def api_list_assets(type: str | None = None, limit: int = 1000) -> dict:
 
 @router.get("/assets/{asset_id}")
 def api_get_asset(asset_id: str) -> dict:
-    """获取单个资产详情及其派生文件。"""
+    """获取单个资产详情及其派生文件与标签。"""
     if get_library_status().get("opened") is not True:
         raise HTTPException(status_code=400, detail="未打开知识库")
 
@@ -93,9 +99,40 @@ def api_get_asset(asset_id: str) -> dict:
         return {
             "asset": asset,
             "artifacts": list_artifacts_by_asset(conn, asset_id),
+            "tags": get_tags_for_asset(conn, asset_id),
         }
     finally:
         conn.close()
+
+
+@router.get("/tags")
+def api_list_tags() -> dict:
+    """全部标签 + 使用数（m15）。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    return {"items": get_all_tags()}
+
+
+@router.put("/assets/{asset_id}/tags")
+def api_set_asset_tags(asset_id: str, req: SetAssetTagsRequest) -> dict:
+    """整体替换资产标签（m15）：不存在的标签名自动创建，零引用标签自动清理。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    conn = get_conn(get_db_path())
+    try:
+        if get_asset_by_id(conn, asset_id) is None:
+            raise HTTPException(status_code=404, detail="资产不存在")
+    finally:
+        conn.close()
+
+    try:
+        tags = set_asset_tags(asset_id, req.tags)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {"tags": tags}
 
 
 @router.post("/assets/{asset_id}/transcribe")
@@ -184,8 +221,16 @@ def api_get_task(task_id: str) -> dict:
 
 
 @router.get("/search")
-def api_search(q: str, mode: str = "hybrid", limit: int = 50) -> dict:
-    """搜索：mode 为 filename / fulltext / vector / hybrid（全文+向量 RRF 融合）。"""
+def api_search(
+    q: str,
+    mode: str = "hybrid",
+    limit: int = 50,
+    tag: list[str] = Query(default=[]),
+) -> dict:
+    """搜索：mode 为 filename / fulltext / vector / hybrid（全文+向量 RRF 融合）。
+
+    tag 为可重复的标签过滤参数（m15，多选 OR）：&tag=AI&tag=播客。
+    """
     if get_library_status().get("opened") is not True:
         raise HTTPException(status_code=400, detail="未打开知识库")
 
@@ -194,6 +239,8 @@ def api_search(q: str, mode: str = "hybrid", limit: int = 50) -> dict:
             status_code=400,
             detail="mode 仅支持 filename / fulltext / vector / hybrid",
         )
+
+    tag_names = [t.strip() for t in tag if t.strip()] or None
 
     try:
         if mode == "hybrid":
@@ -204,7 +251,9 @@ def api_search(q: str, mode: str = "hybrid", limit: int = 50) -> dict:
 
             conn = get_conn(get_db_path())
             try:
-                items, degraded_reason = search_hybrid(conn, q, limit=limit)
+                items, degraded_reason = search_hybrid(
+                    conn, q, limit=limit, tag_names=tag_names
+                )
             finally:
                 conn.close()
 
@@ -215,7 +264,11 @@ def api_search(q: str, mode: str = "hybrid", limit: int = 50) -> dict:
                 "degraded_reason": degraded_reason,
             }
 
-        return {"query": q, "mode": mode, "items": search(q, mode, limit=limit)}
+        return {
+            "query": q,
+            "mode": mode,
+            "items": search(q, mode, limit=limit, tag_names=tag_names),
+        }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

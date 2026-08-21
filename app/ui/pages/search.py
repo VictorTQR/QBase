@@ -1,4 +1,4 @@
-"""搜索页：文件名 + 全文 + 语义 + 综合（RRF 融合）搜索，命中高亮，派生徽章，统一错误提示。"""
+"""搜索页：文件名 + 全文 + 语义 + 综合（RRF 融合）搜索，标签过滤，命中高亮，派生徽章，统一错误提示。"""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from nicegui import run, ui
 
 from app.database import get_conn
 from app.services import index_service, search_service, vector_service
+from app.services.tag_service import get_all_tags
 from app.state import get_db_path, state
 from app.ui.components import render_derived_badges
 from app.ui.layout import page_frame, require_library
@@ -38,7 +39,24 @@ def search_page():
                 "text-xs text-orange-600"
             )
 
+        # 标签过滤（m15）：对四种搜索模式生效，多选 OR
+        try:
+            tag_options = [tag["name"] for tag in get_all_tags()]
+        except Exception:
+            tag_options = []
+
+        with ui.row().classes("items-center gap-3 mt-2"):
+            tag_filter = ui.select(
+                options=tag_options,
+                label="标签（过滤结果，任一命中）",
+                multiple=True,
+                clearable=True,
+            ).classes("w-72")
+
         results_container = ui.column().classes("w-full mt-4")
+
+        def selected_tag_names() -> list[str] | None:
+            return [t for t in (tag_filter.value or []) if t] or None
 
         def render_results(
             results: list[dict], mode: str, degraded_reason: str | None = None
@@ -120,7 +138,7 @@ def search_page():
                 conn = get_conn(get_db_path())
                 try:
                     results, degraded_reason = search_service.search_hybrid(
-                        conn, query
+                        conn, query, tag_names=selected_tag_names()
                     )
                 finally:
                     conn.close()
@@ -136,7 +154,9 @@ def search_page():
             try:
                 conn = get_conn(get_db_path())
                 try:
-                    results = search_service.search_fulltext(conn, query)
+                    results = search_service.search_fulltext(
+                        conn, query, tag_names=selected_tag_names()
+                    )
                 finally:
                     conn.close()
                 render_results(results, "fulltext")
@@ -151,7 +171,9 @@ def search_page():
             try:
                 conn = get_conn(get_db_path())
                 try:
-                    results = search_service.search_filename(conn, query)
+                    results = search_service.search_filename(
+                        conn, query, tag_names=selected_tag_names()
+                    )
                 finally:
                     conn.close()
                 render_results(results, "filename")
@@ -166,7 +188,9 @@ def search_page():
             try:
                 conn = get_conn(get_db_path())
                 try:
-                    results = search_service.search_vector(conn, query)
+                    results = search_service.search_vector(
+                        conn, query, tag_names=selected_tag_names()
+                    )
                 finally:
                     conn.close()
                 render_results(results, "vector")

@@ -77,8 +77,22 @@ CREATE TABLE IF NOT EXISTS embedding_cache (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS tags (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS asset_tags (
+  asset_id TEXT NOT NULL,
+  tag_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (asset_id, tag_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_artifacts_asset_id ON artifacts(asset_id);
 CREATE INDEX IF NOT EXISTS idx_artifacts_kind ON artifacts(kind);
+CREATE INDEX IF NOT EXISTS idx_asset_tags_tag_id ON asset_tags(tag_id);
 """
 
 

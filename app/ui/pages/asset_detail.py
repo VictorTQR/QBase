@@ -1,4 +1,4 @@
-"""资产详情页：原始文件信息、派生文件列表、文本预览/分段、转录与总结操作。"""
+"""资产详情页：原始文件信息、标签、派生文件列表、文本预览/分段、转录与总结操作。"""
 
 from __future__ import annotations
 
@@ -8,11 +8,13 @@ from pathlib import Path
 from app.database import get_conn
 from app.repositories.artifact_repository import list_artifacts_by_asset
 from app.repositories.asset_repository import get_asset_by_id
+from app.repositories.tag_repository import get_tags_for_asset, list_tags
 from app.rules import is_transcript_json_name, sidecar_dir_of
 from app.services import (
     config_service,
     library_service,
     summarization_service,
+    tag_service,
     transcription_service,
 )
 from app.services.parse_service import PARSEABLE_EXTENSIONS, start_parsing
@@ -278,6 +280,8 @@ def asset_detail_page(asset_id: str) -> None:
         try:
             asset = get_asset_by_id(conn, asset_id)
             artifacts = list_artifacts_by_asset(conn, asset_id) if asset else []
+            tags = get_tags_for_asset(conn, asset_id) if asset else []
+            all_tag_names = [tag["name"] for tag in list_tags(conn)]
         finally:
             conn.close()
 
@@ -319,6 +323,54 @@ def asset_detail_page(asset_id: str) -> None:
             else:
                 parse_status_label = asset["parse_status"]
             ui.label(f"解析状态：{parse_status_label}").classes("text-sm text-gray-600")
+
+            # 标签（m15）：徽章展示 + 多选编辑（可输入新名称），保存后就地刷新
+            tag_state = {"tags": tags}
+            tag_list_container = ui.row().classes(
+                "items-center gap-1 mt-2 flex-wrap"
+            )
+
+            def render_tag_list():
+                tag_list_container.clear()
+                with tag_list_container:
+                    ui.label("标签：").classes("text-sm text-gray-600")
+                    if tag_state["tags"]:
+                        for name in tag_state["tags"]:
+                            ui.badge(name, color=C.TAG).classes("text-xs")
+                    else:
+                        ui.label("暂无标签").classes("text-sm text-gray-600")
+
+            render_tag_list()
+
+            with ui.row().classes("items-center gap-2 mt-2"):
+                tag_editor = ui.select(
+                    options=sorted(all_tag_names),
+                    value=list(tags),
+                    multiple=True,
+                    clearable=True,
+                    with_input=True,
+                    new_value_mode="add-unique",
+                    label="编辑标签（可选或输入新名称）",
+                ).classes("w-72")
+                tag_save_button = ui.button("保存标签").props("dense")
+
+            async def handle_save_tags():
+                tag_save_button.disable()
+                try:
+                    names = await run.io_bound(
+                        tag_service.set_asset_tags,
+                        asset_id,
+                        list(tag_editor.value or []),
+                    )
+                    tag_state["tags"] = names
+                    render_tag_list()
+                    ui.notify("标签已保存", type="positive")
+                except Exception as exc:
+                    notify_error(exc)
+                finally:
+                    tag_save_button.enable()
+
+            tag_save_button.on_click(handle_save_tags)
 
             with ui.row().classes("gap-2 mt-3"):
                 ui.button(

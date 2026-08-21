@@ -24,6 +24,9 @@ class C:
     META = "grey-6"
     PENDING = "orange"
 
+    # 标签徽章（m15）
+    TAG = "indigo"
+
     # 通用状态
     SUCCESS = "green"
     ERROR = "red"
