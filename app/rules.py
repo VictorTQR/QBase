@@ -1,5 +1,7 @@
 """文件类型与忽略规则。"""
 
+from pathlib import Path
+
 AUDIO_EXTENSIONS = {
     ".mp3",
     ".m4a",
@@ -130,3 +132,59 @@ def explicit_artifact_stem(filename: str) -> str:
             return filename[: -len(suffix)]
 
     return filename
+
+
+# ── sidecar 目录（m11）─────────────────────────────────────────────────────
+# <原始文件完整文件名>.kb/ 目录：内部派生文件用固定文件名（无 stem 前缀），
+# 目录名即绑定键，按 relative_path 精确绑定资产，天然无歧义。
+SIDECAR_DIR_SUFFIX = ".kb"
+
+# sidecar 目录内文件名 -> kind（精确匹配；未列出的文件忽略）。
+SIDECAR_FILE_KINDS = {
+    "transcript.json": "transcript",
+    "transcript.txt": "transcript",
+    "summary.md": "summary",
+    "notes.md": "note",
+    "parsed.md": "parsed",
+    "meta.json": "meta",
+}
+
+
+def is_sidecar_dir(dir_name: str) -> bool:
+    """判断目录名是否为 <原始文件名>.kb 形式的 sidecar 目录（裸 ".kb" 不算）。"""
+    return (
+        dir_name.lower().endswith(SIDECAR_DIR_SUFFIX)
+        and len(dir_name) > len(SIDECAR_DIR_SUFFIX)
+    )
+
+
+def sidecar_asset_filename(dir_name: str) -> str:
+    """episode-001.mp3.kb -> episode-001.mp3（去掉 .kb 即原始文件完整文件名）。"""
+    return dir_name[: -len(SIDECAR_DIR_SUFFIX)]
+
+
+def sidecar_file_kind(filename: str) -> str | None:
+    """sidecar 目录内文件名 -> kind；未识别命名返回 None。"""
+    return SIDECAR_FILE_KINDS.get(filename.lower())
+
+
+def sidecar_dir_of(asset_path) -> Path:
+    """资产路径 -> 对应 sidecar 目录路径（episode.mp3 -> episode.mp3.kb）。"""
+    asset_path = Path(asset_path)
+    return asset_path.parent / (asset_path.name + SIDECAR_DIR_SUFFIX)
+
+
+def derived_output_path(asset_path, filename: str) -> Path:
+    """应用生成派生产物的写入路径（m11 跟随现状策略）。
+
+    资产旁已存在 <完整文件名>.kb/ 目录时写入其中（filename 原名，如 summary.md）；
+    否则与资产同目录平铺（stem.filename，如 episode-001.summary.md）。
+    """
+    asset_path = Path(asset_path)
+
+    sidecar_dir = sidecar_dir_of(asset_path)
+
+    if sidecar_dir.is_dir():
+        return sidecar_dir / filename
+
+    return asset_path.with_name(f"{asset_path.stem}.{filename}")

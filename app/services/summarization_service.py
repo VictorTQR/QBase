@@ -13,6 +13,7 @@ from app.database import get_conn
 from app.repositories import task_repository
 from app.repositories.artifact_repository import list_artifacts_by_asset
 from app.repositories.asset_repository import get_asset_by_id
+from app.rules import derived_output_path
 from app.services.config_service import get_summary_llm_config
 from app.services.index_service import rebuild_fulltext_index
 from app.services.llm_service import summarize_text
@@ -127,7 +128,8 @@ def start_summarization(asset_id: str) -> str:
         if not input_text.strip():
             raise ValueError("输入文本为空，无法生成总结")
 
-        summary_path = str(Path(asset["absolute_path"]).with_suffix(".summary.md"))
+        # m11 跟随现状：资产旁存在 <name>.kb/ 目录时写入其中，否则平铺
+        summary_path = str(derived_output_path(asset["absolute_path"], "summary.md"))
 
         task_id = task_repository.create_task(
             conn,
@@ -190,7 +192,7 @@ def run_summarization_task(task_id: str) -> None:
         input_text = get_summary_input_text(conn, asset)
         summary_content = summarize_text(input_text, llm_config)
 
-        summary_path = Path(asset["absolute_path"]).with_suffix(".summary.md")
+        summary_path = derived_output_path(asset["absolute_path"], "summary.md")
 
         backup_existing_summary(summary_path)
 

@@ -11,6 +11,7 @@ from loguru import logger
 from app.database import get_conn
 from app.repositories import task_repository
 from app.repositories.asset_repository import get_asset_by_id
+from app.rules import sidecar_dir_of
 from app.services.cli_runner import build_command, run_cli_command, tail
 from app.services.config_service import get_transcribe_cli_config
 from app.services.index_service import rebuild_fulltext_index
@@ -23,9 +24,14 @@ TRANSCRIPT_OUTPUT_SUFFIXES = (".transcript.json", ".transcript.txt", ".txt")
 
 
 def _candidate_outputs(asset_path: str) -> list[Path]:
-    """按优先级列出可能的转录输出路径。"""
+    """按优先级列出可能的转录输出路径（平铺在前，.kb 目录内候选殿后）。"""
     path = Path(asset_path)
-    return [path.with_suffix(suffix) for suffix in TRANSCRIPT_OUTPUT_SUFFIXES]
+    sidecar_dir = sidecar_dir_of(path)
+    return [
+        *[path.with_suffix(suffix) for suffix in TRANSCRIPT_OUTPUT_SUFFIXES],
+        sidecar_dir / "transcript.json",
+        sidecar_dir / "transcript.txt",
+    ]
 
 
 def _find_transcript_output(asset_path: str) -> Path | None:
@@ -67,6 +73,9 @@ def start_transcription(asset_id: str) -> str:
             cli_config["command"],
             {
                 "input": asset["absolute_path"],
+                # {output} 预留（m11）：默认模板不含该变量；QVoice 确认支持
+                # 指定输出路径后，模板配置 {output} 即可生效
+                "output": str(expected_output),
             },
         )
 
@@ -131,6 +140,7 @@ def run_transcription_task(task_id: str) -> None:
             cli_config["command"],
             {
                 "input": asset["absolute_path"],
+                "output": str(_candidate_outputs(asset["absolute_path"])[0]),
             },
         )
 

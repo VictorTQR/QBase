@@ -21,6 +21,7 @@ from loguru import logger
 from app.database import get_conn
 from app.repositories import task_repository
 from app.repositories.asset_repository import get_asset_by_id
+from app.rules import derived_output_path
 from app.services.config_service import get_parse_config
 from app.services.index_service import rebuild_fulltext_index
 from app.services.parsers import get_parser_for_extension
@@ -47,8 +48,9 @@ _live_lock = threading.Lock()
 
 
 def _parsed_path(asset_path: str) -> Path:
-    """paper.pdf -> paper.parsed.md（与 rules.ARTIFACT_SUFFIXES 的绑定键一致）。"""
-    return Path(asset_path).with_suffix(PARSED_SUFFIX)
+    """paper.pdf -> paper.parsed.md；m11 跟随现状：存在 <name>.kb/ 目录时写
+    入其中（parsed.md 原名），平铺时与 rules.ARTIFACT_SUFFIXES 的绑定键一致。"""
+    return derived_output_path(asset_path, "parsed.md")
 
 
 def _backup_dir() -> Path:
@@ -222,16 +224,21 @@ def run_parse_task(task_id: str) -> None:
 
         parsed = _parsed_path(asset["absolute_path"])
         backup_dir = _backup_dir()
+        # 留档命名基座用资产 stem：.kb 模式下 parsed.stem 恒为 "parsed"，会跨资产撞名
+        asset_stem = Path(asset["absolute_path"]).stem
 
         if parsed.exists():
             # 覆盖重解析前，旧 parsed.md 一并留档（对齐总结覆盖备份策略）
             timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            backup_md = backup_dir / f"{parsed.stem}.{timestamp}.bak.md"
+            backup_md = backup_dir / f"{asset_stem}.{timestamp}.bak.md"
             backup_md.write_text(parsed.read_text(encoding="utf-8"), encoding="utf-8")
 
         if parser.PRODUCT_BACKUP_SUFFIX:
-            # 产物留档（MinerU 结果 zip；本地解析产物即 md 文本，不留档）
-            product = backup_dir / (parsed.name + parser.PRODUCT_BACKUP_SUFFIX)
+            # 产物留档（MinerU 结果 zip；本地解析产物即 md 文本，不留档）；
+            # 用平铺产物名，两种写入模式的留档名保持一致
+            product = backup_dir / (
+                f"{asset_stem}{PARSED_SUFFIX}{parser.PRODUCT_BACKUP_SUFFIX}"
+            )
             product.write_bytes(raw)
 
         parsed.write_text(md_text, encoding="utf-8")
