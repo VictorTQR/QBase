@@ -170,6 +170,18 @@
     - DRM（`META-INF/encryption.xml`）与坏 zip 在 submit 即报中文错误，不进任务线程才失败
     - epub 产物不留档 zip（产物即 md 文本，覆盖重解析已有 `.bak.md` 备份链路）
     - 验证脚本（讨论稿附录 A）：EPUB3 spine 顺序/实体/列表/斜体/代码块/引用/表格断言、EPUB2+latin-1+子目录、坏 zip/DRM 报错、parse_service 全链路（无 MinerU token 下任务 success → parsed.md 进 FTS → 无 zip 留档 → 覆盖备份生成），2026-08-21 全部通过
+- M11 sidecar 目录 .kb - 代码已落地（2026-08-21），验收步骤见讨论稿 m11-sidecar.md §3，待开发人员手动执行
+  - 依据：讨论稿 qwen-prdv1/m11-sidecar.md（与用户讨论定稿，决策不再开放：写入跟随现状 opt-in / 转录按不支持指定输出路径设计 + {output} 预留 / 不做归集工具）
+  - 落地内容：
+    - `app/rules.py`：新增 sidecar 命名规则——`SIDECAR_DIR_SUFFIX`（".kb"）、`SIDECAR_FILE_KINDS`（目录内固定文件名 -> kind）、`is_sidecar_dir` / `sidecar_asset_filename` / `sidecar_file_kind` / `sidecar_dir_of`，以及写入策略 helper `derived_output_path`（.kb 目录存在 -> 目录内原名；否则平铺 stem.filename）
+    - `app/services/scanner_service.py`：`collect_files` 返回 (普通文件, sidecar 文件) 二元组，os.walk 时摘出 .kb 目录单独收集（不递归、跳过隐藏与未识别命名）且不再下钻；绑定阶段 sidecar 候选按 `relative_path.lower()` 精确映射资产（目录名去掉 .kb 即完整文件名，含扩展名），未命中计孤儿
+    - `app/services/summarization_service.py`：两处写入路径改 `derived_output_path(asset, "summary.md")`
+    - `app/services/parse_service.py`：`_parsed_path` 改 `derived_output_path(asset, "parsed.md")`；覆盖备份（.bak.md）与产物留档（.zip）命名基座改为资产 stem——.kb 模式下 parsed.stem 恒为 "parsed" 会跨资产撞名，平铺模式命名不变
+    - `app/services/transcription_service.py`：`_candidate_outputs` 追加 `.kb/transcript.json`、`.kb/transcript.txt` 候选（平铺之后）；`build_command` 变量表增 `output`（默认模板不含 {output}，纯预留）
+  - 决策记录：
+    - `.kb\` 目录内容永不产生资产记录——顺带修复现状 bug：`<name>.kb` 不以 `.` 开头不被 should_ignore_dir 忽略，内部无 stem 前缀的 summary.md / transcript.txt 不命中平铺后缀规则，此前会误入 assets 表
+    - 平铺与 .kb 同 kind 产物并存时均识别为 active（artifacts 按 relative_path 唯一），不引入优先级特判；索引/向量/总结输入/详情页全部走 artifacts 表，下游零改动
+    - UI / API / index_service / vector_service / search_service 零改动
 
 ## 项目文档
 
