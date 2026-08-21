@@ -217,13 +217,28 @@ async def assets_page():
             current_page["value"] = 0
             await load_assets()
 
-        # 输入防抖：停止输入 0.3 秒后再查询，避免每个按键都触发加载
-        name_debounce = ui.timer(0.3, handle_filter_or_sort_change, active=False)
+        name_debounce: dict = {"handle": None, "task": None}
+
+        def fire_name_filter_reload():
+            name_debounce["handle"] = None
+            # 持有 task 引用，避免任务被垃圾回收
+            name_debounce["task"] = asyncio.create_task(
+                handle_filter_or_sort_change()
+            )
+
+        def schedule_name_filter_reload():
+            # 输入防抖：停止输入 0.3 秒后再查询，避免每个按键都触发加载
+            # （当前 NiceGUI 的 Timer 无 restart()，用事件循环句柄实现）
+            if name_debounce["handle"] is not None:
+                name_debounce["handle"].cancel()
+            name_debounce["handle"] = asyncio.get_running_loop().call_later(
+                0.3, fire_name_filter_reload
+            )
 
         scan_button.on_click(handle_scan)
         type_filter.on_value_change(handle_filter_or_sort_change)
         sort_select.on_value_change(handle_filter_or_sort_change)
-        name_filter.on_value_change(lambda: name_debounce.restart())
+        name_filter.on_value_change(lambda: schedule_name_filter_reload())
         prev_btn.on_click(handle_prev)
         next_btn.on_click(handle_next)
 
