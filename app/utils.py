@@ -13,7 +13,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from app.rules import TRANSCRIPT_JSON_SUFFIX
+from app.rules import is_transcript_json_name
 
 
 def escape_like(value: str) -> str:
@@ -85,8 +85,75 @@ def open_folder(path_str: str) -> None:
 
 
 def _is_transcript_json(path: Path) -> bool:
-    """判断文件是否是 QVoice JSON 转录（.transcript.json）。"""
-    return path.name.lower().endswith(TRANSCRIPT_JSON_SUFFIX)
+    """判断文件是否是 QVoice JSON 转录（平铺 .transcript.json / sidecar transcript.json）。"""
+    return is_transcript_json_name(path.name)
+
+
+def _num_seconds(value) -> float | None:
+    """时间字段归一化：非负数值转 float，其余（缺失/字符串/负数）返回 None。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value < 0:
+        return None
+    return float(value)
+
+
+def load_transcript_segments(path_str: str | Path) -> dict:
+    """解析 QVoice JSON 转录为结构化分段（m12 详情页分段视图数据源）。
+
+    返回 {duration, language, segments}：segments 每项 {start, end, text, speaker}，
+    无文本的段跳过，start/end 缺失或非数值时为 None，speaker 空串归一为 None；
+    duration 缺失时用最后一段的 end 推导。解析失败抛 ValueError，由调用方回退。
+    """
+    path = Path(path_str)
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"无法解析转录 JSON：{path}（{exc}）") from exc
+
+    if not isinstance(data, dict):
+        raise ValueError(f"转录 JSON 结构不符合预期：{path}")
+
+    segments = []
+    for seg in data.get("segments") or []:
+        if not isinstance(seg, dict):
+            continue
+        text = str(seg.get("text") or "").strip()
+        if not text:
+            continue
+        segments.append(
+            {
+                "start": _num_seconds(seg.get("start")),
+                "end": _num_seconds(seg.get("end")),
+                "text": text,
+                "speaker": str(seg.get("speaker") or "").strip() or None,
+            }
+        )
+
+    duration = _num_seconds(data.get("duration"))
+    if duration is None:
+        ends = [seg["end"] for seg in segments if seg["end"] is not None]
+        duration = max(ends) if ends else None
+
+    return {
+        "duration": duration,
+        "language": str(data.get("language") or "").strip() or None,
+        "segments": segments,
+    }
+
+
+def format_clock(seconds: float | None) -> str:
+    """秒数格式化为 MM:SS（不足 1 小时）或 H:MM:SS；无效值返回空串。"""
+    if seconds is None or seconds < 0:
+        return ""
+    total = int(round(seconds))
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
 
 
 def extract_transcript_json_text(path_str: str | Path) -> str:

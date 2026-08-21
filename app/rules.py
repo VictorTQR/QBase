@@ -64,6 +64,17 @@ ARTIFACT_SUFFIXES = [
 ]
 
 
+def is_transcript_json_name(filename: str) -> bool:
+    """判断文件名是否为 QVoice JSON 转录（m12 统一判定）。
+
+    平铺形态 <stem>.transcript.json（后缀匹配）与 sidecar 目录内固定名
+    transcript.json（无 stem 前缀）均命中。平铺库中独立存在的 transcript.json
+    不命中任何资产/产物规则，精确匹配收紧无副作用。
+    """
+    lower = filename.lower()
+    return lower == "transcript.json" or lower.endswith(TRANSCRIPT_JSON_SUFFIX)
+
+
 def classify_extension(ext: str) -> str | None:
     """根据扩展名判断资产类型。"""
     ext = ext.lower()

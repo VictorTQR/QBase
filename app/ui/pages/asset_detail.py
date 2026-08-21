@@ -8,7 +8,7 @@ from pathlib import Path
 from app.database import get_conn
 from app.repositories.artifact_repository import list_artifacts_by_asset
 from app.repositories.asset_repository import get_asset_by_id
-from app.rules import sidecar_dir_of
+from app.rules import is_transcript_json_name, sidecar_dir_of
 from app.services import (
     config_service,
     library_service,
@@ -22,8 +22,10 @@ from app.ui.components import render_derived_badges
 from app.ui.layout import breadcrumb, page_frame, require_library
 from app.ui.tokens import C
 from app.utils import (
+    format_clock,
     human_size,
     human_time,
+    load_transcript_segments,
     notify_error,
     open_file,
     open_folder,
@@ -46,16 +48,25 @@ TEXT_ARTIFACT_KINDS = {"transcript", "summary", "note", "parsed"}
 SEGMENT_SIZE = 10000
 FULL_TEXT_THRESHOLD = 50000
 
+# 转录分段视图每页段数（长转录避免一次渲染数千节点，m12）
+SEGMENTS_PER_PAGE = 100
+
 
 def is_text_artifact(artifact: dict) -> bool:
     if artifact["kind"] not in TEXT_ARTIFACT_KINDS:
         return False
-    path = artifact["relative_path"].lower()
+    name = Path(artifact["relative_path"]).name
+    lower_name = name.lower()
     return (
-        path.endswith(".txt")
-        or path.endswith(".md")
-        or path.endswith(".transcript.json")
+        lower_name.endswith(".txt")
+        or lower_name.endswith(".md")
+        or is_transcript_json_name(name)
     )
+
+
+def is_json_transcript(artifact: dict) -> bool:
+    """产物是否为 QVoice JSON 转录（平铺 .transcript.json / sidecar transcript.json）。"""
+    return is_transcript_json_name(Path(artifact["absolute_path"]).name)
 
 
 def _make_open_handler(fn, path: str):
@@ -164,6 +175,78 @@ def _render_segment(container, segment_state: dict):
 
             seg_prev.on_click(go_prev)
             seg_next.on_click(go_next)
+
+
+def _render_transcript_segments(artifact: dict):
+    """渲染 json 转录的分段视图（m12）：时间戳 + 说话人 + 文本，分页浏览。
+
+    segments 缺失或解析失败时回退纯文本预览（_render_text_section）。
+    """
+    try:
+        data = load_transcript_segments(artifact["absolute_path"])
+    except Exception:
+        _render_text_section(artifact)
+        return
+
+    segments = data["segments"]
+    if not segments:
+        _render_text_section(artifact)
+        return
+
+    info_parts = [f"共 {len(segments)} 段"]
+    if data["duration"] is not None:
+        info_parts.append(f"时长 {format_clock(data['duration'])}")
+    if data["language"]:
+        info_parts.append(f"语言 {data['language']}")
+    ui.label(" · ".join(info_parts)).classes("text-xs text-gray-600 mt-2")
+
+    state = {"page": 0}
+    total_pages = (len(segments) + SEGMENTS_PER_PAGE - 1) // SEGMENTS_PER_PAGE
+    list_container = ui.column().classes("w-full mt-1")
+
+    def render_page():
+        list_container.clear()
+        offset = state["page"] * SEGMENTS_PER_PAGE
+
+        with list_container:
+            with ui.column().classes(
+                "w-full bg-gray-50 p-3 rounded divide-y max-h-[60vh] overflow-y-auto"
+            ):
+                for seg in segments[offset : offset + SEGMENTS_PER_PAGE]:
+                    with ui.row().classes("w-full items-start gap-2 py-1"):
+                        timestamp = format_clock(seg["start"])
+                        if timestamp:
+                            ui.label(timestamp).classes(
+                                "text-xs font-mono text-gray-600 pt-0.5 shrink-0"
+                            )
+                        if seg["speaker"]:
+                            ui.badge(seg["speaker"], color=C.NEUTRAL).props("outline")
+                        ui.label(seg["text"]).classes(
+                            "text-sm whitespace-pre-wrap text-gray-700 flex-1"
+                        )
+
+            with ui.row().classes("items-center gap-3 mt-2"):
+                page_prev = ui.button("← 上一页").props("outline size=sm")
+                ui.label(f"第 {state['page'] + 1} / {total_pages} 页").classes(
+                    "text-sm text-gray-600"
+                )
+                page_next = ui.button("下一页 →").props("outline size=sm")
+
+                page_prev.disabled = state["page"] <= 0
+                page_next.disabled = state["page"] + 1 >= total_pages
+
+                def go_page_prev():
+                    state["page"] = max(0, state["page"] - 1)
+                    render_page()
+
+                def go_page_next():
+                    state["page"] = min(total_pages - 1, state["page"] + 1)
+                    render_page()
+
+                page_prev.on_click(go_page_prev)
+                page_next.on_click(go_page_next)
+
+    render_page()
 
 
 @ui.page("/assets/{asset_id}")
@@ -526,4 +609,7 @@ def asset_detail_page(asset_id: str) -> None:
                                 ).props("dense size=sm")
 
                             if is_text_artifact(artifact):
-                                _render_text_section(artifact)
+                                if is_json_transcript(artifact):
+                                    _render_transcript_segments(artifact)
+                                else:
+                                    _render_text_section(artifact)
