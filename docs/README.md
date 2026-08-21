@@ -188,6 +188,16 @@
   - `app/api/library.py`：新增 `POST /api/assets/{asset_id}/sidecar-dir`（同 transcribe / summarize / parse 模式，ValueError → 400）
   - `app/ui/pages/asset_detail.py`：派生文件区新增状态行——未启用时显示「创建 .kb 派生目录」按钮 + 平铺提示，创建成功后按钮禁用、状态改「已启用」；已启用时只显示状态
   - 冒烟（临时脚本，已通过）：未启用时 `derived_output_path` 平铺 → `create_sidecar_dir` 建目录 → 启用后跟随写入 `.kb/parsed.md` → 重复调用幂等 → 未知资产 ValueError「资产不存在」
+- M12 transcript JSON segments - 代码已落地（2026-08-21），附录 A 冒烟验证 32 项已通过，UI 手动验收步骤见讨论稿 m12-segments.md §3，待开发人员手动执行
+  - 依据：讨论稿 qwen-prdv1/m12-segments.md（范围 = 解析 + 详情页分段展示；播放器/点击跳转属 M13、segments 不入库、不加 API 端点）
+  - 落地内容：
+    - `app/rules.py`：`is_transcript_json_name`——平铺 `.transcript.json` 后缀与 sidecar 固定名 `transcript.json`（精确匹配）统一判定，大小写不敏感
+    - `app/utils.py`：`_is_transcript_json` 改走 rules helper；新增 `load_transcript_segments`（归一化 segments[{start,end,text,speaker}] + duration/language——无文本段跳过、非数值时间置 None、speaker 空串归 None、duration 缺失用末段 end 推导，失败抛 ValueError）与 `format_clock`（MM:SS / H:MM:SS，无效值空串）
+    - `app/ui/pages/asset_detail.py`：`is_text_artifact` 改用统一判定；json 转录 tab 渲染 `_render_transcript_segments`——信息行（段数/时长/语言，有才显示）+ 100 段/页分页列表（`[MM:SS]` 时间戳 + 说话人徽章 + 文本）+ 上一页/下一页；异常或空 segments 回退 `_render_text_section`
+  - 决策记录：
+    - 顺带修复 m11 遗留：sidecar `transcript.json` 无 stem 前缀，不命中 `.transcript.json` 后缀判定 → 索引/向量/总结输入读入原始 JSON 文本、详情页无预览；判定统一后四条链路自动纠正，已有库需手动重建全文索引
+    - json 转录默认分段视图替换「纯文本预览 + 展开全文」：分段视图信息严格包含纯文本，原始 JSON 可「文件」按钮外部打开；txt 转录不变
+    - segments 按需解析不入库（文件即事实源）；无 REST 端点（NiceGUI 服务端渲染直接读文件）
 
 ## 项目文档
 

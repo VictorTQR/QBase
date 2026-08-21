@@ -129,7 +129,7 @@ TTS 朗读
 在应用内明文存储和输入 API Key（密钥通过环境变量或库级 .knowledge/secrets.toml 提供，不明文存储）
 ```
 
-其中文档解析与 sidecar 目录已实现（M9-M11）；文件监听与笔记编辑暂缓（见 §31 待实现）。
+其中文档解析、sidecar 目录与转录分段视图已实现（M9-M12）；文件监听与笔记编辑暂缓（见 §31 待实现）。
 
 ---
 
@@ -541,7 +541,7 @@ m11 起同时识别 sidecar 目录形态 `episode-001.mp3.kb\`（见 §9.4），
 
 `.transcript.json` 是结构化转录（QVoice `-f json` 产物），读取时提取纯文本：
 优先顶层 `text` 字段，为空则按行拼接 `segments[].text`。时间轴 / 说话人字段
-第一阶段仅保留在原文件中，不做字幕跳转。
+m12 起在详情页分段视图展示（§28 M12），点击跳转仍属后续（§31）。
 
 但第一阶段也可以多个都识别为 transcript artifact，并在 UI 中提示存在多个转录文件。
 
@@ -842,8 +842,9 @@ JSON 结构：
  language?, duration?, speakers?, segments: [{start, end, text, speaker?}]}
 ```
 
-第一阶段只提取其中的纯文本（`text` 优先，回退 `segments[].text`）用于索引、
-总结与预览；不做时间轴、字幕、点击跳转。
+索引、总结与预览沿用纯文本提取（`text` 优先，回退 `segments[].text`）；m12 起
+详情页对 json 转录增加分段视图（时间戳 / 说话人，§28 M12），点击跳转仍属
+后续（§31）。
 
 ---
 
@@ -2914,6 +2915,31 @@ DRM / 损坏 epub 失败原因中文可读，任务可重试
 
 ---
 
+### M12：transcript JSON segments（结构化转录分段视图）
+
+目标：
+
+```text
+判定统一：文件名 transcript.json（sidecar 固定名）或后缀 .transcript.json
+（平铺）均按 QVoice JSON 转录处理——修复 m11 遗留的 sidecar 识别缺口
+（索引 / 向量 / 总结输入此前读入原始 JSON、详情页无预览）
+utils 新增 load_transcript_segments：归一化 segments[{start,end,text,speaker}]
+与 duration / language（缺失项安全降级），按需解析不入库（文件即事实源）
+详情页 json 转录 tab 分段视图：[MM:SS] 说话人 文本 每段一行，100 段/页
+分页，信息行显示段数 / 时长 / 语言；segments 缺失或解析失败回退纯文本预览
+txt 转录、索引分块策略、搜索行为不变；不做播放器与点击跳转（M13）
+```
+
+完成标志：
+
+```text
+json 转录（平铺与 .kb 内）详情页显示时间戳 / 说话人分段视图，可翻页浏览
+.kb 内 json 转录进入索引 / 总结的是提取文本而非 JSON 原文（重建索引后生效）
+txt 转录预览行为与之前完全一致；异常 JSON 不白屏
+```
+
+---
+
 ## 29. 验收标准
 
 ### 29.1 知识库
@@ -3076,6 +3102,19 @@ DRM（加密书）与损坏 epub 给出中文失败原因，任务可重试
 
 ---
 
+### 29.12 transcript JSON segments（m12）
+
+验收：
+
+```text
+json 转录（平铺与 .kb 内）详情页显示分段视图：时间戳 / 说话人 / 文本，
+长转录分页浏览，信息行显示段数 / 时长 / 语言
+sidecar transcript.json 与平铺同待遇：预览 / 索引 / 总结输入均为提取文本
+txt 转录预览行为不变；segments 缺失 / 损坏 JSON 回退纯文本或明确提示
+```
+
+---
+
 ## 30. 风险与应对
 
 ### 30.1 API 成本
@@ -3174,17 +3213,16 @@ UTF-8 优先
 ## 31. 后续阶段规划
 
 第一阶段（M0-M8）完成后，后续阶段按顺序推进。文档解析已由 M9（MinerU）、
-EPUB 索引已由 M10（内置本地解析器）、sidecar 目录已由 M11（跟随现状策略）
-完成，剩余：
+EPUB 索引已由 M10（内置本地解析器）、sidecar 目录已由 M11（跟随现状策略）、
+transcript JSON 分段视图已由 M12（详情页分段展示 + 判定统一）完成，剩余：
 
 ```text
-1. transcript JSON segments
-2. 音频字幕级跳转
-3. TTS 模块接入
-4. 混合搜索排序
-5. 标签系统
-6. 收藏与稍后处理
-7. 批量任务
+1. 音频字幕级跳转
+2. TTS 模块接入
+3. 混合搜索排序
+4. 标签系统
+5. 收藏与稍后处理
+6. 批量任务
 ```
 
 ### 待实现（暂缓）
@@ -3420,4 +3458,5 @@ M0 项目骨架
 → M9 文档解析接入（MinerU）
 → M10 EPUB 内容索引（内置本地解析器）
 → M11 sidecar 目录 .kb
+→ M12 transcript JSON segments
 ```
