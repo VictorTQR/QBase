@@ -14,6 +14,7 @@ from app.repositories.asset_repository import count_assets, get_asset_by_id, lis
 from app.repositories.task_repository import get_task, list_tasks
 from app.services.library_service import (
     close_library,
+    create_sidecar_dir,
     get_library_status,
     open_library,
 )
@@ -137,6 +138,18 @@ def api_start_parsing(asset_id: str) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return {"task_id": task_id, "status": "pending"}
+
+
+@router.post("/assets/{asset_id}/sidecar-dir")
+def api_create_sidecar_dir(asset_id: str) -> dict:
+    """创建 <完整文件名>.kb 派生目录（m11 跟随现状 opt-in，只建目录不移动文件）。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    try:
+        return create_sidecar_dir(asset_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/tasks")

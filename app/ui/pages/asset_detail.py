@@ -8,8 +8,10 @@ from pathlib import Path
 from app.database import get_conn
 from app.repositories.artifact_repository import list_artifacts_by_asset
 from app.repositories.asset_repository import get_asset_by_id
+from app.rules import sidecar_dir_of
 from app.services import (
     config_service,
+    library_service,
     summarization_service,
     transcription_service,
 )
@@ -432,6 +434,44 @@ def asset_detail_page(asset_id: str) -> None:
 
         # 派生文件（多 tab 展示：每个派生文件一个 tab）
         ui.label("派生文件").classes("text-xl font-semibold mt-6")
+
+        # sidecar 派生目录（m11 跟随现状）：详情页一键创建，免去手动建目录；
+        # 已启用时只显示状态，不提供删除/移动操作
+        sidecar_dir = sidecar_dir_of(asset["absolute_path"])
+        sidecar_enabled_text = (
+            f"已启用 .kb 派生目录（{sidecar_dir.name}），新生成的总结/解析将写入其中。"
+        )
+        sidecar_state_label = ui.label().classes("text-sm text-gray-600 mt-1")
+
+        if sidecar_dir.is_dir():
+            sidecar_state_label.set_text(sidecar_enabled_text)
+        else:
+            sidecar_state_label.set_text(
+                "未启用 .kb 派生目录：新生成的总结/解析将平铺在源文件旁。"
+            )
+
+            async def create_sidecar_dir():
+                try:
+                    await run.io_bound(
+                        library_service.create_sidecar_dir, asset["id"]
+                    )
+                except Exception as exc:
+                    notify_error(exc)
+                    return
+
+                ui.notify(
+                    f"已创建 {sidecar_dir.name}，后续总结/解析将写入其中",
+                    type="positive",
+                )
+                sidecar_state_label.set_text(sidecar_enabled_text)
+                create_sidecar_btn.disable()
+
+            with ui.row().classes("mt-1"):
+                create_sidecar_btn = ui.button(
+                    "创建 .kb 派生目录",
+                    icon="create_new_folder",
+                    on_click=create_sidecar_dir,
+                ).props("dense outline")
 
         if not artifacts:
             ui.label("暂无派生文件。").classes("text-gray-600")

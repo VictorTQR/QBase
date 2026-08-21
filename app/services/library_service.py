@@ -6,9 +6,11 @@ from pathlib import Path
 
 from loguru import logger
 
-from app.database import init_db
+from app.database import get_conn, init_db
+from app.repositories.asset_repository import get_asset_by_id
+from app.rules import sidecar_dir_of
 from app.services.recent_library_service import add_recent_library
-from app.state import state
+from app.state import get_db_path, state
 
 DEFAULT_LIBRARY_CONFIG = """# 知识库级配置（打开知识库时生成，可在设置页修改）
 
@@ -155,3 +157,33 @@ def get_library_status() -> dict:
         "library_root": str(root),
         "db_exists": (root / ".knowledge" / "db.sqlite").exists(),
     }
+
+
+def create_sidecar_dir(asset_id: str) -> dict:
+    """创建资产的 <完整文件名>.kb 派生目录（m11 跟随现状的 opt-in 动作）。
+
+    只创建空目录，不移动任何已有平铺产物；此后新生成的总结/解析写入目录内。
+    """
+    if state.library_root is None:
+        raise ValueError("未打开知识库")
+
+    conn = get_conn(get_db_path())
+
+    try:
+        asset = get_asset_by_id(conn, asset_id)
+    finally:
+        conn.close()
+
+    if asset is None:
+        raise ValueError("资产不存在")
+
+    sidecar_dir = sidecar_dir_of(asset["absolute_path"])
+
+    try:
+        sidecar_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ValueError(f"创建目录失败：{exc}") from exc
+
+    logger.info("已创建 sidecar 派生目录：{}", sidecar_dir)
+
+    return {"sidecar_dir": str(sidecar_dir), "sidecar_name": sidecar_dir.name}
