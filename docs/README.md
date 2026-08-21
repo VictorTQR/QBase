@@ -217,6 +217,21 @@
     - k=60 取 RRF 论文标准值，两路等权，不做权重调参 / 分数归一化 / 资产级聚合 / 过滤（§16.6 维持未实现现状）
     - 向量路捕获任意异常降级（Embedding 未启用 ValueError / API 失败同路径处理）；全文路仅捕获 RuntimeError（FTS 索引缺失提示），其他数据库错误照常上抛
     - 搜索页各 handler 维持直接同步调用的既有模式（m5 起语义搜索即如此），不在本里程碑引入 run.io_bound
+- M15 标签系统（手动打标 + 列表/搜索标签筛选）- 代码已落地（2026-08-21），验收步骤见讨论稿 m15-tags.md §3，待开发人员手动执行
+  - 依据：讨论稿 qwen-prdv1/m15-tags.md（范围 = 标签数据模型 + 详情页手动打标 + 列表标签列与筛选 + 四种搜索模式标签过滤；纯手动、扁平、无管理页，AI 打标/层级/颜色/tags.json 双写明确不做）
+  - 落地内容：
+    - `app/database.py`：SCHEMA 追加 tags / asset_tags 两表 + idx_asset_tags_tag_id 索引（IF NOT EXISTS，老库幂等）；不声明外键，与 artifacts/chunks 现状一致
+    - 新增 `app/repositories/tag_repository.py`：make_tag_id（uuid5 同名同 ID，对齐 make_asset_id 方案）/ list_tags（LEFT JOIN 聚合 usage）/ get_tags_for_asset / set_asset_tags（全量替换：缺失标签先建 → 删旧绑定重插 → delete_orphan_tags 清零引用；调用方 commit）
+    - 新增 `app/services/tag_service.py`：normalize_tag_names（trim、去重保序，逐条校验非空/不含半角逗号/≤30 字符，单资产 ≤20 个，违规中文 ValueError）+ get_all_tags / get_asset_tags / set_asset_tags（资产不存在抛 ValueError）
+    - `app/repositories/asset_repository.py`：_build_asset_filters 增 tag_names（EXISTS + IN，OR 语义）；list_assets 增 tags_csv 子查询列（行 dict 拆 tags 列表）与 tag_names 透传，count_assets 同步；delete_missing_assets 删资产时一并清 asset_tags 并清零引用标签
+    - `app/services/search_service.py`：_tag_filter_sql（各模式复用的 EXISTS 片段）+ _asset_ids_with_any_tag（向量路 top-K 回表后按标签过滤）；filename/fulltext（FTS 与 LIKE 兜底两路）/vector/hybrid 四模式均支持 tag_names，hybrid 降级逻辑不变
+    - `app/api/library.py`：GET /api/tags（全部标签 + usage）、PUT /api/assets/{id}/tags（整体替换，SetAssetTagsRequest）、GET /api/assets/{id} 响应增 tags、GET /api/search 增可重复 tag 参数（FastAPI Query）
+    - UI：tokens.C 增 TAG=indigo；assets.py 工具栏标签多选筛选（io_bound 加载选项，扫描完成后重载）+ 表格标签列（≤3 徽章，超出 +N，min-width 900→1040）；asset_detail.py 基本信息卡标签行（徽章/暂无标签）+ 编辑控件（with_input + new_value_mode="add-unique"，可输新名称）+ 保存后 tag_list_container 局部刷新；search.py 标签多选筛选，四个 handler 与回车触发均读取传参
+  - 决策记录：
+    - 标签仅存 SQLite（.knowledge 可删重建属已知限制，不做 tags.json 双写）；扫描与索引重建不触碰标签表
+    - 向量路过滤发生在 top-K 候选回表之后，过滤后结果可能少于 limit（候选集有限，预期行为不算降级）
+    - 列表 tags 列用 group_concat 逗号聚合（因此标签名禁半角逗号），group_concat 不保序，展示顺序由 UI 排序
+    - 范围外：AI 建议标签、批量自动打标（留待「批量任务」里程碑）、标签层级/颜色/别名、标签管理页、搜索结果卡展示标签徽章、按标签统计报表
 
 ## 项目文档
 

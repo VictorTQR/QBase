@@ -85,6 +85,7 @@ docs/PRD.md          # 唯一权威 spec
 - [x] M12 transcript JSON segments（2026-08-21 代码落地，冒烟验证见讨论稿 m12-segments.md 附录 A，UI 验收步骤见 §3）：详情页 json 转录分段视图（时间戳/说话人/100 段分页）+ 判定统一 is_transcript_json_name（修复 m11 遗留：sidecar transcript.json 此前不命中后缀判定，索引/总结输入读入原始 JSON）
 - [x] M13 音频/视频播放器与字幕级跳转（2026-08-21 代码落地，UI 验收步骤见讨论稿 m13-audio-seek.md §3）：详情页「播放」卡片（原生 ui.audio/ui.video，NiceGUI 自动托管本地文件 Range 流式）+ json 转录分段时间戳点击跳转（seek + play）；源文件缺失/无播放器降级纯文本；不做反向同步，API/服务层零改动
 - [x] M14 混合搜索排序（2026-08-21 代码落地，RRF 融合逻辑自测通过，UI 验收步骤见讨论稿 m14-hybrid-search.md §3）：搜索服务 search_hybrid（全文+向量两路 RRF，k=60，chunk 级去重，双命中合并标注来源）+ 搜索页「综合搜索」主按钮（回车触发）+ REST mode=hybrid（响应附 degraded_reason）；单路不可用降级为另一路并提示，不报错
+- [x] M15 标签系统（2026-08-21 代码落地，验收步骤见讨论稿 m15-tags.md §3）：tags/asset_tags 两表（仅 SQLite，uuid5 稳定标签 ID）+ 详情页手动打标（PUT 整体替换、零引用自动清理）+ 列表标签列与多选筛选（OR）+ 四种搜索模式标签过滤（向量路 top-K 回表后过滤）；纯手动、扁平、无管理页
 
 里程碑详细目标见 [docs/PRD.md](./docs/PRD.md) §28。
 

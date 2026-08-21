@@ -129,7 +129,8 @@ TTS 朗读
 ```
 
 其中文档解析、sidecar 目录、转录分段视图与播放器字幕级跳转已实现
-（M9-M13）；文件监听与笔记编辑暂缓（见 §31 待实现）。
+（M9-M13）；简单扁平标签已实现（M15，复杂标签体系仍不做）；文件监听、
+笔记编辑与 TTS 暂缓（见 §31 待实现）。
 
 ---
 
@@ -737,6 +738,7 @@ System Volume Information/
 总结状态
 笔记状态
 索引状态
+标签（m15，行内徽章，最多 3 个，超出折叠 +N）
 ```
 
 支持：
@@ -747,6 +749,7 @@ System Volume Information/
 按名称排序
 按修改时间排序
 关键词过滤
+按标签过滤（m15，多选，任一命中，可与类型/关键词叠加）
 ```
 
 ---
@@ -767,6 +770,7 @@ System Volume Information/
 总结状态
 笔记状态
 任务状态
+标签（m15，基本信息卡内徽章展示 + 多选编辑，可输入新名称）
 ```
 
 操作按钮：
@@ -1596,8 +1600,9 @@ document text，仅限可读文本
 支持：
 
 ```text
-按类型过滤：audio / video / document
-按来源过滤：transcript / summary / note / document
+按类型过滤：audio / video / document（未实现）
+按来源过滤：transcript / summary / note / document（未实现）
+按标签过滤（m15 已实现）：多选，任一命中（OR），四种模式均生效
 ```
 
 ---
@@ -1978,6 +1983,33 @@ CREATE TABLE embedding_cache (
 );
 ```
 
+### 19.6 tags（m15）
+
+```sql
+CREATE TABLE tags (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
+```
+
+标签 ID 由名称经 uuid5 稳定生成（同名重建得到同 ID）；仅存 SQLite，
+扫描与索引重建不触碰本表。
+
+### 19.7 asset_tags（m15）
+
+```sql
+CREATE TABLE asset_tags (
+  asset_id TEXT NOT NULL,
+  tag_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (asset_id, tag_id)
+);
+```
+
+不声明外键（与 artifacts/chunks 一致），资产删除时由
+`delete_missing_assets` 显式清理绑定并顺带删除零引用标签。
+
 ---
 
 ## 20. 配置设计
@@ -2199,6 +2231,7 @@ app/
 ```text
 搜索框
 类型过滤
+标签过滤（m15，多选，任一命中）
 目录过滤
 刷新按钮
 新建/打开库
@@ -2207,7 +2240,7 @@ app/
 主体：
 
 ```text
-资产表格
+资产表格（m15 起含标签列：行内徽章，最多 3 个，超出折叠 +N）
 ```
 
 每行操作：
@@ -2244,6 +2277,7 @@ app/
 类型
 路径
 状态
+标签（m15，徽章展示 + 多选编辑保存）
 操作按钮
 ```
 
@@ -2306,8 +2340,8 @@ hash，可选
 
 ```text
 搜索框
-模式切换：文件名 / 全文 / 语义
-过滤器：类型、来源
+模式切换：文件名 / 全文 / 语义 / 综合（m14，默认）
+过滤器：标签（m15 已实现，多选任一命中，四种模式均生效）；类型、来源（未实现）
 结果列表
 ```
 
@@ -2382,12 +2416,14 @@ GET  /api/library/status
 
 ```text
 GET /api/assets
-GET /api/assets/{asset_id}
+GET /api/assets/{asset_id}（m15 起响应含 tags）
 GET /api/assets/{asset_id}/artifacts
 POST /api/assets/{asset_id}/transcribe
 POST /api/assets/{asset_id}/summarize
 POST /api/assets/{asset_id}/reindex
 POST /api/assets/{asset_id}/sidecar-dir（m11，创建 .kb 派生目录）
+PUT /api/assets/{asset_id}/tags（m15，整体替换：缺失自动创建、零引用自动清理）
+GET /api/tags（m15，全部标签 + 使用数）
 ```
 
 ---
@@ -2399,6 +2435,7 @@ GET /api/search?q=keyword&mode=filename
 GET /api/search?q=keyword&mode=fulltext
 GET /api/search?q=keyword&mode=vector
 GET /api/search?q=keyword&mode=hybrid（m14，全文+向量 RRF 融合）
+GET /api/search?q=…&tag=AI&tag=播客（m15，可重复 tag 参数，多选 OR，四种模式均生效）
 ```
 
 hybrid 响应额外携带 `degraded_reason` 字段：某一路不可用降级时为原因
@@ -2999,6 +3036,35 @@ json 转录分段视图时间戳可点击：跳转播放器到该段时间并自
 
 ---
 
+### M15：标签系统（手动打标 + 筛选）
+
+目标：
+
+```text
+标签数据模型：tags / asset_tags 两张表（仅 SQLite，随 .knowledge 可删重建，
+属已知限制；扫描与索引重建不触碰标签表）
+详情页手动打标：徽章展示 + 多选编辑（可输入新名称），PUT 整体替换；
+新标签自动创建，零引用标签自动删除
+资产列表：标签列（行内徽章，最多 3 个，超出折叠 +N）+ 多选标签筛选
+（任一命中），可与类型 / 文件名筛选叠加
+四种搜索模式（文件名 / 全文 / 语义 / 综合）均支持标签过滤（OR）；
+向量路过滤发生在 top-K 回表之后，结果可能少于 limit（预期行为）
+标签名约束：非空、不含半角逗号、单个 ≤30 字符、单资产 ≤20 个
+REST：GET /api/tags、PUT /api/assets/{id}/tags、GET /api/search 增 tag 参数
+纯手动打标，不做 AI 建议、层级、颜色与标签管理页
+```
+
+完成标志：
+
+```text
+详情页打标保存后徽章即时刷新，刷新页面仍在
+列表与搜索的标签筛选均为多选 OR，可与既有筛选叠加
+删除已打标资产对应文件后扫描，绑定一并清理，零引用标签从筛选下拉消失
+未打标资产与未选标签时，既有列表 / 搜索行为完全不变
+```
+
+---
+
 ## 29. 验收标准
 
 ### 29.1 知识库
@@ -3200,6 +3266,19 @@ json 转录分段视图时间戳可点击，点击后播放器跳转到该段时
 
 ---
 
+### 29.15 标签系统（m15）
+
+验收：
+
+```text
+详情页可查看与编辑资产标签；新标签自动创建，零引用标签自动清理
+资产列表展示标签列，并支持多选标签（任一命中）筛选，可与类型/文件名叠加
+四种搜索模式（文件名/全文/语义/综合）均支持按标签过滤
+标签仅存 SQLite：扫描与索引重建不丢失；删除 .knowledge 目录会丢失（已知限制）
+```
+
+---
+
 ## 30. 风险与应对
 
 ### 30.1 API 成本
@@ -3301,12 +3380,12 @@ UTF-8 优先
 EPUB 索引已由 M10（内置本地解析器）、sidecar 目录已由 M11（跟随现状策略）、
 transcript JSON 分段视图已由 M12（详情页分段展示 + 判定统一）、音频/视频
 播放器与字幕级跳转已由 M13（原生播放器 + 分段时间戳点击跳转）、混合搜索
-排序已由 M14（全文 + 向量 RRF 融合）完成，剩余：
+排序已由 M14（全文 + 向量 RRF 融合）、标签系统已由 M15（简单扁平标签：
+手动打标 + 列表/搜索标签筛选）完成，剩余：
 
 ```text
-1. 标签系统
-2. 收藏与稍后处理
-3. 批量任务
+1. 收藏与稍后处理
+2. 批量任务
 ```
 
 ### 待实现（暂缓）
@@ -3520,6 +3599,9 @@ sidecar 目录
 打包 exe
 ```
 
+注记：标签系统（简单扁平版）已由 M15 实现，PDF 内容解析已由 M9（MinerU）
+实现，sidecar 目录已由 M11 实现；其余项维持不做（DOCX 解析仍未实现）。
+
 ---
 
 ## 35. 结论
@@ -3543,4 +3625,6 @@ M0 项目骨架
 → M11 sidecar 目录 .kb
 → M12 transcript JSON segments
 → M13 音频/视频播放器与字幕级跳转
+→ M14 混合搜索排序（全文 + 向量 RRF 融合）
+→ M15 标签系统（手动打标 + 筛选）
 ```
