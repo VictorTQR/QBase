@@ -206,6 +206,17 @@
     - 不加 REST 端点：NiceGUI SourceElement 传入本地 Path 自动注册媒体路由（HTTP Range 流式，进度条可拖动，元素销毁自动移除），播放能力完全在 UI 层闭合
     - 降级路径保持 m12 行为：无播放器（文档资产 / 源文件缺失）或段 start 缺失时时间戳为纯文本；txt 转录无结构化时间戳，不提供跳转
     - 反向同步（播放中高亮/滚动当前段）、倍速、字幕文件加载明确不做（讨论稿决策 6/7），需要时再立任务
+- M14 混合搜索排序（全文 + 向量 RRF 融合）- 代码已落地（2026-08-21），RRF 融合逻辑自测通过（双命中合并/排序/无 chunk_id 不误合并），UI 手动验收步骤见讨论稿 m14-hybrid-search.md §3，待开发人员手动执行
+  - 依据：讨论稿 qwen-prdv1/m14-hybrid-search.md（范围 = 仅全文+向量两路融合，文件名搜索保持独立；「综合搜索」为主按钮且回车触发；向量不可用降级为纯全文+提示不报错）
+  - 落地内容：
+    - `app/services/vector_service.py`：`search_vectors` 返回值补 `chunk_id`（取 LanceDB 记录 id 字段）
+    - `app/services/search_service.py`：`search_fulltext` / `search_vector` 输出补 `chunk_id`（融合去重键）；新增 `_rrf_fuse`（score = Σ 1/(60+rank)，同 chunk 双命中合并——保留全文路片段/高亮词、distance 取向量路；chunk_id 缺失时按「路前缀-名次」生成独立键不误合并）与 `search_hybrid`（两路各取 top 50，各自 try/except 降级并汇总原因，返回 `(结果, 降级原因)`）；统一入口 `search` mode 增加 hybrid
+    - `app/api/library.py`：`GET /api/search` mode 增加 hybrid（默认值同步改为 hybrid，与 UI 默认动作一致），hybrid 响应附 `degraded_reason` 字段
+    - `app/ui/pages/search.py`：「综合搜索」实心主按钮，「全文搜索」降为 outline，回车改触发综合搜索；结果卡片增来源徽章（全文=blue / 语义=teal / 双命中=green）与 rrf_score（与 distance 同行展示）；降级时结果区顶部橙色提示
+  - 决策记录：
+    - k=60 取 RRF 论文标准值，两路等权，不做权重调参 / 分数归一化 / 资产级聚合 / 过滤（§16.6 维持未实现现状）
+    - 向量路捕获任意异常降级（Embedding 未启用 ValueError / API 失败同路径处理）；全文路仅捕获 RuntimeError（FTS 索引缺失提示），其他数据库错误照常上抛
+    - 搜索页各 handler 维持直接同步调用的既有模式（m5 起语义搜索即如此），不在本里程碑引入 run.io_bound
 
 ## 项目文档
 
