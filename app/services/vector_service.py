@@ -435,6 +435,7 @@ def search_vectors(query: str, limit: int = 20) -> list[dict]:
 
     return [
         {
+            "chunk_id": row.get("id"),
             "asset_id": row.get("asset_id"),
             "artifact_id": row.get("artifact_id"),
             "kind": row.get("kind"),

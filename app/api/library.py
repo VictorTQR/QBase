@@ -21,7 +21,7 @@ from app.services.library_service import (
 from app.services.index_service import rebuild_fulltext_index
 from app.services.parse_service import start_parsing
 from app.services.scanner_service import scan_current_library
-from app.services.search_service import search
+from app.services.search_service import search, search_hybrid
 from app.services.summarization_service import start_summarization
 from app.services.transcription_service import start_transcription
 from app.services.vector_service import rebuild_vector_index
@@ -184,17 +184,37 @@ def api_get_task(task_id: str) -> dict:
 
 
 @router.get("/search")
-def api_search(q: str, mode: str = "fulltext", limit: int = 50) -> dict:
-    """搜索：mode 为 filename / fulltext / vector。"""
+def api_search(q: str, mode: str = "hybrid", limit: int = 50) -> dict:
+    """搜索：mode 为 filename / fulltext / vector / hybrid（全文+向量 RRF 融合）。"""
     if get_library_status().get("opened") is not True:
         raise HTTPException(status_code=400, detail="未打开知识库")
 
-    if mode not in ("filename", "fulltext", "vector"):
+    if mode not in ("filename", "fulltext", "vector", "hybrid"):
         raise HTTPException(
-            status_code=400, detail="mode 仅支持 filename / fulltext / vector"
+            status_code=400,
+            detail="mode 仅支持 filename / fulltext / vector / hybrid",
         )
 
     try:
+        if mode == "hybrid":
+            q = q.strip()
+
+            if not q:
+                return {"query": q, "mode": mode, "items": [], "degraded_reason": None}
+
+            conn = get_conn(get_db_path())
+            try:
+                items, degraded_reason = search_hybrid(conn, q, limit=limit)
+            finally:
+                conn.close()
+
+            return {
+                "query": q,
+                "mode": mode,
+                "items": items,
+                "degraded_reason": degraded_reason,
+            }
+
         return {"query": q, "mode": mode, "items": search(q, mode, limit=limit)}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

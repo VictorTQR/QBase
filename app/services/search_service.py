@@ -1,4 +1,4 @@
-"""搜索服务：文件名搜索 + 全文搜索（FTS5 + LIKE 兜底）+ 向量语义搜索（m5）。"""
+"""搜索服务：文件名搜索 + 全文搜索（FTS5 + LIKE 兜底）+ 向量语义搜索（m5）+ 综合搜索（m14，RRF 融合）。"""
 
 from __future__ import annotations
 
@@ -149,6 +149,7 @@ def search_fulltext(conn, query: str, limit: int = 50) -> list[dict]:
                 seen_chunk_ids.add(row["chunk_id"])
                 results.append(
                     {
+                        "chunk_id": row["chunk_id"],
                         "asset_id": row["asset_id"],
                         "asset_title": row["asset_title"] or row["relative_path"],
                         "asset_type": row["asset_type"],
@@ -193,6 +194,7 @@ def search_fulltext(conn, query: str, limit: int = 50) -> list[dict]:
         seen_chunk_ids.add(row["chunk_id"])
         results.append(
             {
+                "chunk_id": row["chunk_id"],
                 "asset_id": row["asset_id"],
                 "asset_title": row["asset_title"] or row["relative_path"],
                 "asset_type": row["asset_type"],
@@ -229,6 +231,7 @@ def search_vector(conn, query: str, limit: int = 20) -> list[dict]:
 
         results.append(
             {
+                "chunk_id": hit.get("chunk_id"),
                 "asset_id": hit["asset_id"],
                 "asset_title": asset_title,
                 "asset_type": asset_type,
@@ -244,8 +247,85 @@ def search_vector(conn, query: str, limit: int = 20) -> list[dict]:
     return results
 
 
+RRF_K = 60
+
+
+def _rrf_fuse(
+    fulltext_results: list[dict], vector_results: list[dict], limit: int = 50
+) -> list[dict]:
+    """RRF 融合全文+向量结果：score = Σ 1/(RRF_K + rank)，同 chunk 去重合并。
+
+    双命中条目保留全文路的片段与高亮词（有字面命中信息），distance 取向量路。
+    """
+    merged: dict[object, dict] = {}
+
+    def entry_key(item: dict, prefix: str, rank: int):
+        chunk_id = item.get("chunk_id")
+        return chunk_id if chunk_id else f"{prefix}-{rank}"
+
+    for rank, item in enumerate(fulltext_results, start=1):
+        key = entry_key(item, "fulltext", rank)
+        entry = merged.get(key)
+
+        if entry is None:
+            entry = {**item, "sources": []}
+            merged[key] = entry
+
+        entry["rrf_score"] = entry.get("rrf_score", 0.0) + 1.0 / (RRF_K + rank)
+
+        if "fulltext" not in entry["sources"]:
+            entry["sources"].append("fulltext")
+
+    for rank, item in enumerate(vector_results, start=1):
+        key = entry_key(item, "vector", rank)
+        entry = merged.get(key)
+
+        if entry is None:
+            entry = {**item, "sources": []}
+            merged[key] = entry
+        elif item.get("distance") is not None:
+            entry["distance"] = item["distance"]
+
+        entry["rrf_score"] = entry.get("rrf_score", 0.0) + 1.0 / (RRF_K + rank)
+
+        if "vector" not in entry["sources"]:
+            entry["sources"].append("vector")
+
+    ranked = sorted(
+        merged.values(), key=lambda e: e["rrf_score"], reverse=True
+    )
+    return ranked[:limit]
+
+
+def search_hybrid(
+    conn, query: str, limit: int = 50
+) -> tuple[list[dict], str | None]:
+    """综合搜索：全文 + 向量 RRF 融合（m14）。
+
+    单路不可用（索引缺失 / Embedding 未启用或调用失败）时降级为另一路，
+    返回 (结果, 降级原因)；两路都参与时原因为 None。
+    """
+    candidate_limit = max(limit, 50)
+    fulltext_results: list[dict] = []
+    vector_results: list[dict] = []
+    reasons: list[str] = []
+
+    try:
+        fulltext_results = search_fulltext(conn, query, limit=candidate_limit)
+    except RuntimeError as exc:
+        reasons.append(f"全文搜索未参与本次融合：{exc}")
+
+    try:
+        vector_results = search_vector(conn, query, limit=candidate_limit)
+    except Exception as exc:
+        reasons.append(f"向量搜索未参与本次融合：{exc}")
+
+    results = _rrf_fuse(fulltext_results, vector_results, limit=limit)
+    return results, "；".join(reasons) if reasons else None
+
+
 def search(query: str, mode: str, limit: int = 50) -> list[dict]:
-    """统一搜索入口。mode: filename / fulltext / vector。"""
+    """统一搜索入口。mode: filename / fulltext / vector / hybrid。"""
     query = query.strip()
 
     if not query:
@@ -259,6 +339,10 @@ def search(query: str, mode: str, limit: int = 50) -> list[dict]:
 
         if mode == "vector":
             return search_vector(conn, query, limit=limit)
+
+        if mode == "hybrid":
+            results, _ = search_hybrid(conn, query, limit=limit)
+            return results
 
         return search_fulltext(conn, query, limit=limit)
     finally:
