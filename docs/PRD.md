@@ -602,7 +602,8 @@ episode-001.mp3.kb\
 summary.md → summary、notes.md → note、parsed.md → parsed、meta.json → meta；
 未识别命名与隐藏文件忽略，不递归子目录
 写入策略 = 跟随现状（opt-in）：资产旁已存在 .kb\ 目录时，应用生成的总结 /
-解析产物写入目录内（文件名无 stem 前缀）；否则维持平铺。手动建目录即启用
+解析产物写入目录内（文件名无 stem 前缀）；否则维持平铺。手动建目录，或在
+详情页点「创建 .kb 派生目录」按钮即启用（只建空目录，不移动已有平铺产物）
 转录产物维持平铺（QVoice 输出路径能力未确认）；{output} 变量已预留进命令
 模板替换，CLI 后产物查找候选包含 .kb 内位置
 不做归集 / 迁移工具：旧平铺产物永久识别，手动移动 + 刷新即完成迁移
@@ -776,6 +777,7 @@ System Volume Information/
 生成总结
 刷新当前资产
 重新索引当前资产
+创建 .kb 派生目录（m11，未启用 sidecar 时显示）
 ```
 
 音频/视频详情页：
@@ -2378,6 +2380,7 @@ GET /api/assets/{asset_id}/artifacts
 POST /api/assets/{asset_id}/transcribe
 POST /api/assets/{asset_id}/summarize
 POST /api/assets/{asset_id}/reindex
+POST /api/assets/{asset_id}/sidecar-dir（m11，创建 .kb 派生目录）
 ```
 
 ---

@@ -182,6 +182,12 @@
     - `.kb\` 目录内容永不产生资产记录——顺带修复现状 bug：`<name>.kb` 不以 `.` 开头不被 should_ignore_dir 忽略，内部无 stem 前缀的 summary.md / transcript.txt 不命中平铺后缀规则，此前会误入 assets 表
     - 平铺与 .kb 同 kind 产物并存时均识别为 active（artifacts 按 relative_path 唯一），不引入优先级特判；索引/向量/总结输入/详情页全部走 artifacts 表，下游零改动
     - UI / API / index_service / vector_service / search_service 零改动
+- M11 后补丁：详情页创建 .kb 派生目录按钮（2026-08-21）
+  - 背景：用户反馈手动去资源管理器建目录不便，opt-in 动作应用内化
+  - `app/services/library_service.py`：新增 `create_sidecar_dir(asset_id)`——校验库 / 资产后 mkdir `<完整文件名>.kb`（exist_ok 幂等），OSError 转 ValueError 中文提示；只建空目录，不移动已有平铺产物（「不做归集」决策不变）
+  - `app/api/library.py`：新增 `POST /api/assets/{asset_id}/sidecar-dir`（同 transcribe / summarize / parse 模式，ValueError → 400）
+  - `app/ui/pages/asset_detail.py`：派生文件区新增状态行——未启用时显示「创建 .kb 派生目录」按钮 + 平铺提示，创建成功后按钮禁用、状态改「已启用」；已启用时只显示状态
+  - 冒烟（临时脚本，已通过）：未启用时 `derived_output_path` 平铺 → `create_sidecar_dir` 建目录 → 启用后跟随写入 `.kb/parsed.md` → 重复调用幂等 → 未知资产 ValueError「资产不存在」
 
 ## 项目文档
 

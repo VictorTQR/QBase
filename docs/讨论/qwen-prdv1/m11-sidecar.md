@@ -41,6 +41,11 @@
    会误入 assets 表成为文档资产。
 8. **范围外（明确不做）**：归集按钮、`.kb` 内多版本产物（如
    `summary.20260821.md`）、sidecar 目录内再嵌套、meta.json 的结构定义。
+9. **后补（2026-08-21，用户反馈手动建目录不便）**：详情页「派生文件」区
+   提供「创建 .kb 派生目录」按钮——opt-in 动作应用内化。只创建空目录
+   （`library_service.create_sidecar_dir` + `POST /api/assets/{id}/sidecar-dir`，
+   exist_ok 幂等），不移动已有平铺产物（决策 3 的「不做归集」不变）；
+   已启用时仅显示状态，不提供删除 / 移动操作。
 
 ---
 
