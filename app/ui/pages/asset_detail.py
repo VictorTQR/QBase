@@ -79,6 +79,14 @@ def _make_open_handler(fn, path: str):
     return handler
 
 
+def _make_seek_handler(player, start: float):
+    def handler():
+        player.seek(start)
+        player.play()
+
+    return handler
+
+
 def _render_text_section(artifact: dict):
     """渲染文本预览区域，支持展开全文与分段翻页。"""
     abs_path = artifact["absolute_path"]
@@ -177,10 +185,11 @@ def _render_segment(container, segment_state: dict):
             seg_next.on_click(go_next)
 
 
-def _render_transcript_segments(artifact: dict):
+def _render_transcript_segments(artifact: dict, player=None):
     """渲染 json 转录的分段视图（m12）：时间戳 + 说话人 + 文本，分页浏览。
 
     segments 缺失或解析失败时回退纯文本预览（_render_text_section）。
+    player 存在时（m13）时间戳可点击：跳转播放器到该时间并自动播放。
     """
     try:
         data = load_transcript_segments(artifact["absolute_path"])
@@ -216,9 +225,19 @@ def _render_transcript_segments(artifact: dict):
                     with ui.row().classes("w-full items-start gap-2 py-1"):
                         timestamp = format_clock(seg["start"])
                         if timestamp:
-                            ui.label(timestamp).classes(
-                                "text-xs font-mono text-gray-600 pt-0.5 shrink-0"
-                            )
+                            if player is not None:
+                                ui.button(
+                                    timestamp,
+                                    on_click=_make_seek_handler(
+                                        player, seg["start"]
+                                    ),
+                                ).props(
+                                    "flat dense size=sm no-caps color=blue"
+                                ).classes("font-mono shrink-0")
+                            else:
+                                ui.label(timestamp).classes(
+                                    "text-xs font-mono text-gray-600 pt-0.5 shrink-0"
+                                )
                         if seg["speaker"]:
                             ui.badge(seg["speaker"], color=C.NEUTRAL).props("outline")
                         ui.label(seg["text"]).classes(
@@ -310,6 +329,24 @@ def asset_detail_page(asset_id: str) -> None:
                     "打开目录",
                     on_click=_make_open_handler(open_folder, asset["absolute_path"]),
                 ).props("dense")
+
+        # 播放卡片（仅音频/视频，m13）：浏览器原生播放器，本地文件由 NiceGUI
+        # 自动托管（Range 流式，可拖动进度条）；源文件缺失时降级为提示
+        media_player = None
+        if asset["type"] in {"audio", "video"}:
+            with ui.card().classes("w-full p-4 mt-4"):
+                ui.label("播放").classes("text-lg font-semibold")
+                asset_file = Path(asset["absolute_path"])
+                if not asset_file.exists():
+                    ui.label(
+                        "源文件不存在于磁盘，无法播放（可能已被移动或删除）。"
+                    ).classes("text-sm text-orange-600")
+                elif asset["type"] == "audio":
+                    media_player = ui.audio(asset_file).classes("w-full")
+                else:
+                    media_player = ui.video(asset_file).classes(
+                        "w-full max-h-[60vh]"
+                    )
 
         # 文档解析卡片（仅白名单文档类型，m9）
         asset_ext = Path(asset["relative_path"]).suffix.lower()
@@ -610,6 +647,8 @@ def asset_detail_page(asset_id: str) -> None:
 
                             if is_text_artifact(artifact):
                                 if is_json_transcript(artifact):
-                                    _render_transcript_segments(artifact)
+                                    _render_transcript_segments(
+                                        artifact, media_player
+                                    )
                                 else:
                                     _render_text_section(artifact)
