@@ -1,8 +1,9 @@
-"""LLM 服务：OpenAI 兼容 chat completions + 长文本分段摘要合并（m6）。"""
+"""LLM 服务：OpenAI 兼容 chat completions + 长文本分段摘要合并（m6）+ AI 建议标签（m16）。"""
 
 from __future__ import annotations
 
 import httpx
+import json
 
 SYSTEM_PROMPT = """你是一个知识管理助手。
 请根据用户提供的内容生成中文总结。
@@ -27,12 +28,21 @@ MERGE_SUMMARY_PROMPT = """下面是一篇长内容的多段摘要。
 要求：
 1. 先给出 3-5 句核心总结。
 2. 再列出 5-15 个关键点，使用 Markdown 无序列表。
-3. 如果有行动项或待办事项，请单独列出。
+3. 如果内容包含行动项或待办事项，请单独列出。
 4. 不要编造不存在的信息。
 5. 使用 Markdown 格式输出。
 
 分段摘要：
 {partial_summaries}"""
+
+TAGGING_SYSTEM_PROMPT = """你是一个知识管理打标助手。
+根据提供的资产标题与内容，为主题打标签。
+
+要求：
+1. 输出 3-8 个标签，中文为主，专有名词可用英文。
+2. 每个标签不超过 10 个字符，不要包含逗号。
+3. 优先从「已有标签」中选用语义匹配的，再补充必要的新标签。
+4. 只输出 JSON 字符串数组（如 ["AI", "播客"]），不要输出任何其他内容。"""
 
 
 def chat_completion(messages: list[dict], config: dict) -> str:
@@ -171,3 +181,64 @@ def summarize_text(text: str, config: dict) -> str:
         ],
         config,
     )
+
+
+def _parse_tag_list(raw: str) -> list[str]:
+    """宽容解析 LLM 返回的标签 JSON 数组。
+
+    剥离 markdown code fence 与前后废话，截取首个 [ 到末个 ] 后
+    json.loads；非数组或解析失败抛 RuntimeError。
+    """
+    text = raw.strip()
+
+    if text.startswith("```"):
+        lines = [line for line in text.splitlines() if not line.strip().startswith("```")]
+        text = "\n".join(lines).strip()
+
+    start = text.find("[")
+    end = text.rfind("]")
+
+    if start < 0 or end <= start:
+        raise RuntimeError("AI 返回格式异常，请重试")
+
+    try:
+        data = json.loads(text[start : end + 1])
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("AI 返回格式异常，请重试") from exc
+
+    if not isinstance(data, list) or not all(isinstance(item, str) for item in data):
+        raise RuntimeError("AI 返回格式异常，请重试")
+
+    return data
+
+
+def suggest_tags(
+    title: str,
+    text: str,
+    existing_tags: list[str],
+    config: dict,
+) -> list[str]:
+    """AI 建议标签：标题 + 内容（截断）+ 已有标签 → JSON 数组（m16）。"""
+    max_input_chars = config.get("max_input_chars", 4000)
+    content = text.strip()[:max_input_chars]
+
+    if not content:
+        raise ValueError("没有可用于打标的内容")
+
+    existing = "、".join(existing_tags) if existing_tags else "（暂无）"
+
+    user_content = (
+        f"资产标题：{title}\n\n"
+        f"已有标签：{existing}\n\n"
+        f"内容：\n{content}"
+    )
+
+    raw = chat_completion(
+        [
+            {"role": "system", "content": TAGGING_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ],
+        config,
+    )
+
+    return _parse_tag_list(raw)

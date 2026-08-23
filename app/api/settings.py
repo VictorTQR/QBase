@@ -44,9 +44,9 @@ def test_connection(payload: dict) -> dict:
     kind = payload.get("kind")
     override = payload.get("override", {})
 
-    if kind not in {"llm", "embedding"}:
+    if kind not in {"llm", "llm_tagging", "embedding"}:
         raise HTTPException(
-            status_code=400, detail="kind 必须是 llm 或 embedding"
+            status_code=400, detail="kind 必须是 llm、llm_tagging 或 embedding"
         )
 
     try:

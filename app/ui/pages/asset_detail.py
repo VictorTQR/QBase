@@ -353,6 +353,9 @@ def asset_detail_page(asset_id: str) -> None:
                     label="编辑标签（可选或输入新名称）",
                 ).classes("w-72")
                 tag_save_button = ui.button("保存标签").props("dense")
+                tag_suggest_button = ui.button(
+                    "AI 建议标签", icon="auto_awesome"
+                ).props("dense")
 
             async def handle_save_tags():
                 tag_save_button.disable()
@@ -371,6 +374,41 @@ def asset_detail_page(asset_id: str) -> None:
                     tag_save_button.enable()
 
             tag_save_button.on_click(handle_save_tags)
+
+            async def handle_suggest_tags():
+                # AI 只建议不写库：结果合并进编辑器选中值，用户保存才生效（m16）
+                tag_suggest_button.disable()
+                tag_save_button.disable()
+                tag_suggest_button.set_text("生成中…")
+                try:
+                    suggestions = await run.io_bound(
+                        tag_service.suggest_asset_tags, asset_id
+                    )
+                    current = list(tag_editor.value or [])
+                    merged = current + [s for s in suggestions if s not in current]
+
+                    # 新建议标签补进选项，保证多选框能正常显示
+                    tag_editor.options = sorted(
+                        set(tag_editor.options or []) | set(suggestions)
+                    )
+                    tag_editor.value = merged
+                    tag_editor.update()
+
+                    if suggestions:
+                        ui.notify(
+                            f"已填入 {len(suggestions)} 个建议标签，确认后保存",
+                            type="positive",
+                        )
+                    else:
+                        ui.notify("AI 未返回可用标签", type="warning")
+                except Exception as exc:
+                    notify_error(exc)
+                finally:
+                    tag_suggest_button.set_text("AI 建议标签")
+                    tag_suggest_button.enable()
+                    tag_save_button.enable()
+
+            tag_suggest_button.on_click(handle_suggest_tags)
 
             with ui.row().classes("gap-2 mt-3"):
                 ui.button(

@@ -95,6 +95,7 @@ def settings_page() -> None:
         original_dimension = int(original_embedding.get("dimension", 0) or 0)
 
         llm_config = config.get("llm", {}).get("summary", {})
+        tagging_config = config.get("llm", {}).get("tagging", {})
         embedding_config = original_embedding
         parse_config = config.get("parse", {})
 
@@ -169,6 +170,36 @@ def settings_page() -> None:
 
             with ui.row().classes("mt-3 gap-3"):
                 test_llm_button = ui.button("测试 LLM API", icon="cable")
+
+        # ── AI 打标配置（m16）──
+        with ui.card().classes("w-full p-4 mt-4"):
+            ui.label("AI 打标配置").classes("text-lg font-semibold")
+            ui.label(
+                "详情页「AI 建议标签」使用；建议只预填编辑器，保存后才入库。"
+                "可与总结用不同模型（打标输入短、输出小，可用更快/更便宜的模型）。"
+            ).classes("text-sm text-gray-600 mt-1")
+
+            tagging_enabled = ui.switch(
+                "启用 AI 打标", value=bool(tagging_config.get("enabled", False))
+            )
+            tagging_base_url = ui.input(
+                "Base URL", value=str(tagging_config.get("base_url", ""))
+            ).classes("w-full")
+            tagging_model = ui.input(
+                "Model", value=str(tagging_config.get("model", ""))
+            ).classes("w-full")
+            tagging_api_key_env = ui.input(
+                "API Key 密钥名（api_key_env）",
+                value=str(tagging_config.get("api_key_env", "")),
+            ).classes("w-full")
+            _render_key_status(key_status, str(tagging_config.get("api_key_env", "")))
+            ui.label(
+                "temperature / max_tokens / timeout 等其余参数使用默认值，"
+                "如需调整请编辑 config.toml 的 [llm.tagging]。"
+            ).classes("text-xs text-gray-600 mt-2")
+
+            with ui.row().classes("mt-3 gap-3"):
+                test_tagging_button = ui.button("测试打标 API", icon="cable")
 
         # ── Embedding 配置 ──
         with ui.card().classes("w-full p-4 mt-4"):
@@ -443,7 +474,13 @@ def settings_page() -> None:
                         "timeout": int(llm_timeout.value or 180),
                         "max_input_chars": int(llm_max_input_chars.value or 24000),
                         "chunk_chars": int(llm_chunk_chars.value or 6000),
-                    }
+                    },
+                    "tagging": {
+                        "enabled": bool(tagging_enabled.value),
+                        "base_url": str(tagging_base_url.value or "").strip(),
+                        "model": str(tagging_model.value or "").strip(),
+                        "api_key_env": str(tagging_api_key_env.value or "").strip(),
+                    },
                 },
                 "embedding": {
                     "enabled": bool(embedding_enabled.value),
@@ -523,6 +560,21 @@ def settings_page() -> None:
                 notify_error(exc)
             finally:
                 test_llm_button.enable()
+
+        async def handle_test_tagging():
+            test_tagging_button.disable()
+            try:
+                result = await run.io_bound(
+                    config_service.test_connection, "llm_tagging", build_patch()
+                )
+                if result.get("ok"):
+                    ui.notify(result.get("message", "连接成功"), type="positive")
+                else:
+                    ui.notify(result.get("message", "连接失败"), type="negative")
+            except Exception as exc:
+                notify_error(exc)
+            finally:
+                test_tagging_button.enable()
 
         async def handle_test_embedding():
             test_embedding_button.disable()
@@ -607,6 +659,7 @@ def settings_page() -> None:
 
         save_button.on_click(handle_save)
         test_llm_button.on_click(handle_test_llm)
+        test_tagging_button.on_click(handle_test_tagging)
         test_embedding_button.on_click(handle_test_embedding)
         test_parse_button.on_click(handle_test_parse)
         rebuild_fts_button.on_click(handle_rebuild_fts)

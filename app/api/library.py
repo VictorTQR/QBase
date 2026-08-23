@@ -24,7 +24,11 @@ from app.services.parse_service import start_parsing
 from app.services.scanner_service import scan_current_library
 from app.services.search_service import search, search_hybrid
 from app.services.summarization_service import start_summarization
-from app.services.tag_service import get_all_tags, set_asset_tags
+from app.services.tag_service import (
+    get_all_tags,
+    set_asset_tags,
+    suggest_asset_tags,
+)
 from app.services.transcription_service import start_transcription
 from app.services.vector_service import rebuild_vector_index
 from app.state import get_db_path
@@ -133,6 +137,29 @@ def api_set_asset_tags(asset_id: str, req: SetAssetTagsRequest) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return {"tags": tags}
+
+
+@router.post("/assets/{asset_id}/suggest-tags")
+def api_suggest_asset_tags(asset_id: str) -> dict:
+    """AI 建议标签（m16）：只返回建议，不写库；400 未启用/无输入文本。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    conn = get_conn(get_db_path())
+    try:
+        if get_asset_by_id(conn, asset_id) is None:
+            raise HTTPException(status_code=404, detail="资产不存在")
+    finally:
+        conn.close()
+
+    try:
+        suggestions = suggest_asset_tags(asset_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return {"suggestions": suggestions}
 
 
 @router.post("/assets/{asset_id}/transcribe")

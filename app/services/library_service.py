@@ -78,6 +78,19 @@ timeout = 180
 max_input_chars = 24000
 chunk_chars = 6000
 
+[llm.tagging]
+# AI 建议标签（m16）。详情页点「AI 建议标签」生成建议，确认后保存。
+# 可与总结用不同模型（打标输入短、输出小，可用更快/更便宜的模型）。
+enabled = false
+provider = "openai_compatible"
+base_url = "https://api.siliconflow.cn/v1"
+api_key_env = "SILICONFLOW_API_KEY"
+model = "Qwen/Qwen2.5-72B-Instruct"
+temperature = 0.1
+max_tokens = 300
+timeout = 60
+max_input_chars = 4000
+
 [embedding]
 # 向量语义搜索（m5）。使用前先填好 base_url / model / dimension，
 # 再把 enabled 改为 true。dimension 必须与模型实际输出维度一致：

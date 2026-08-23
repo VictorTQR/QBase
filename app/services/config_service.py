@@ -239,6 +239,55 @@ def get_summary_llm_config() -> dict:
     return result
 
 
+def get_tagging_llm_config() -> dict:
+    """读取 AI 打标配置（[llm.tagging]，m16；enabled=false 时返回未启用状态，不校验）。"""
+    config = load_config()
+    tagging_config = config.get("llm", {}).get("tagging", {})
+
+    enabled = bool(tagging_config.get("enabled", False))
+
+    base_url = str(tagging_config.get("base_url", "")).strip()
+    api_key_env = str(tagging_config.get("api_key_env", "")).strip()
+    api_key = str(tagging_config.get("api_key", "")).strip()
+
+    if api_key_env:
+        resolved = get_api_key(api_key_env)
+        api_key = resolved if resolved else api_key
+
+    result = {
+        "enabled": enabled,
+        "provider": str(tagging_config.get("provider", "openai_compatible")),
+        "base_url": base_url,
+        "api_key_env": api_key_env,
+        "api_key": api_key,
+        "model": str(tagging_config.get("model", "")).strip(),
+        "temperature": float(tagging_config.get("temperature", 0.1)),
+        "max_tokens": int(tagging_config.get("max_tokens", 300) or 300),
+        "timeout": int(tagging_config.get("timeout", 60) or 60),
+        "max_input_chars": int(
+            tagging_config.get("max_input_chars", 4000) or 4000
+        ),
+    }
+
+    if enabled:
+        if not base_url:
+            raise ValueError("AI 打标配置缺少 base_url")
+
+        if not result["model"]:
+            raise ValueError("AI 打标配置缺少 model")
+
+        if not api_key:
+            if api_key_env:
+                raise ValueError(
+                    "未获取到 AI 打标 API Key。"
+                    f"已检查进程环境变量与 .knowledge/secrets.toml，均未找到 {api_key_env}。"
+                    "请设置该环境变量名，或在 .knowledge/secrets.toml 的 [keys] 下配置。"
+                )
+            raise ValueError("未获取到 AI 打标 API Key，请配置 api_key_env 或 api_key")
+
+    return result
+
+
 def get_parse_config() -> dict:
     """读取文档解析配置（[parse] + provider 子表展平，enabled=false 不校验）。"""
     config = load_config()
@@ -276,7 +325,7 @@ def _mask_api_keys(config: dict[str, Any]) -> dict[str, Any]:
     """
     masked = deepcopy(config)
 
-    for section in ("embedding", ("llm", "summary")):
+    for section in ("embedding", ("llm", "summary"), ("llm", "tagging")):
         node = masked
         for key in section if isinstance(section, tuple) else (section,):
             node = node.get(key, {}) if isinstance(node, dict) else {}
@@ -427,6 +476,28 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
         if chunk_chars > max_input_chars:
             raise ConfigError("LLM chunk_chars 不应大于 max_input_chars")
 
+    # ── llm.tagging（m16 AI 打标）──
+    tagging = llm.get("tagging", {})
+
+    if tagging.get("enabled"):
+        if not str(tagging.get("base_url", "")).strip():
+            raise ConfigError("AI 打标已启用，但 base_url 为空")
+
+        if not str(tagging.get("model", "")).strip():
+            raise ConfigError("AI 打标已启用，但 model 为空")
+
+        tagging_max_tokens = int(tagging.get("max_tokens", 300))
+        if tagging_max_tokens <= 0:
+            raise ConfigError("AI 打标 max_tokens 必须大于 0")
+
+        tagging_timeout = int(tagging.get("timeout", 60))
+        if tagging_timeout <= 0:
+            raise ConfigError("AI 打标 timeout 必须大于 0")
+
+        tagging_max_input = int(tagging.get("max_input_chars", 4000))
+        if tagging_max_input <= 0:
+            raise ConfigError("AI 打标 max_input_chars 必须大于 0")
+
     # ── parse ──
     parse = cfg.get("parse", {})
 
@@ -486,6 +557,10 @@ def get_key_status(config: dict[str, Any] | None = None) -> dict[str, dict]:
     if llm_summary.get("api_key_env"):
         key_names.add(str(llm_summary["api_key_env"]))
 
+    llm_tagging = config.get("llm", {}).get("tagging", {})
+    if llm_tagging.get("api_key_env"):
+        key_names.add(str(llm_tagging["api_key_env"]))
+
     parse = config.get("parse", {})
 
     if isinstance(parse, dict):
@@ -515,7 +590,10 @@ def has_plain_api_key(config: dict[str, Any] | None = None) -> bool:
         config = load_config()
 
     embedding_key = config.get("embedding", {}).get("api_key")
-    llm_key = config.get("llm", {}).get("summary", {}).get("api_key")
+    llm = config.get("llm", {})
+    llm_key = llm.get("summary", {}).get("api_key") or llm.get(
+        "tagging", {}
+    ).get("api_key")
 
     return bool(embedding_key or llm_key)
 
@@ -567,7 +645,12 @@ def test_connection(
         return _test_embedding_connection(config)
 
     if kind == "llm":
-        return _test_llm_connection(config)
+        return _test_llm_connection(config.get("llm", {}).get("summary", {}), "LLM 总结")
+
+    if kind == "llm_tagging":
+        return _test_llm_connection(
+            config.get("llm", {}).get("tagging", {}), "AI 打标"
+        )
 
     if kind == "parse":
         return _test_parse_connection(config)
@@ -578,14 +661,17 @@ def test_connection(
 def _get_api_key(section: dict[str, Any]) -> tuple[str, str]:
     """根据 api_key_env 解析真实 API Key，返回 (key_name, api_key)。
 
-    解析走 get_api_key：先查进程环境变量，再查 .knowledge/secrets.toml。
+    解析走 get_api_key：先查进程环境变量，再查 .knowledge/secrets.toml；
+    未解析到时回退配置中的明文 api_key（与运行时读取逻辑一致）。
     """
     env_name = str(section.get("api_key_env", "")).strip()
 
-    if not env_name:
-        return "", ""
+    api_key = get_api_key(env_name) if env_name else ""
 
-    return env_name, get_api_key(env_name)
+    if not api_key:
+        api_key = str(section.get("api_key", "")).strip()
+
+    return env_name, api_key
 
 
 def _test_embedding_connection(config: dict[str, Any]) -> dict[str, Any]:
@@ -635,22 +721,21 @@ def _test_embedding_connection(config: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "message": f"Embedding API 请求失败：{exc}"}
 
 
-def _test_llm_connection(config: dict[str, Any]) -> dict[str, Any]:
-    summary = config.get("llm", {}).get("summary", {})
+def _test_llm_connection(section: dict[str, Any], label: str) -> dict[str, Any]:
+    """测试 OpenAI 兼容 LLM 端点连通性（section 为 [llm.summary] / [llm.tagging]）。"""
+    if not section.get("enabled"):
+        return {"ok": False, "message": f"{label}未启用"}
 
-    if not summary.get("enabled"):
-        return {"ok": False, "message": "LLM 总结未启用"}
-
-    base_url = str(summary.get("base_url", "")).strip().rstrip("/")
-    model = str(summary.get("model", "")).strip()
+    base_url = str(section.get("base_url", "")).strip().rstrip("/")
+    model = str(section.get("model", "")).strip()
 
     if not base_url:
-        return {"ok": False, "message": "LLM base_url 为空"}
+        return {"ok": False, "message": f"{label} base_url 为空"}
 
     if not model:
-        return {"ok": False, "message": "LLM model 为空"}
+        return {"ok": False, "message": f"{label} model 为空"}
 
-    env_name, api_key = _get_api_key(summary)
+    env_name, api_key = _get_api_key(section)
 
     if env_name and not api_key:
         return {"ok": False, "message": f"环境变量 {env_name} 未设置"}
@@ -667,12 +752,12 @@ def _test_llm_connection(config: dict[str, Any]) -> dict[str, Any]:
         )
 
         if response.status_code == 200:
-            return {"ok": True, "message": "LLM API 连接成功"}
+            return {"ok": True, "message": f"{label} API 连接成功"}
 
         if response.status_code in {401, 403}:
             return {
                 "ok": False,
-                "message": f"LLM API 认证失败：HTTP {response.status_code}",
+                "message": f"{label} API 认证失败：HTTP {response.status_code}",
             }
 
     except Exception:
@@ -691,18 +776,18 @@ def _test_llm_connection(config: dict[str, Any]) -> dict[str, Any]:
         )
 
         if response.status_code == 200:
-            return {"ok": True, "message": f"LLM API 连接成功：{model}"}
+            return {"ok": True, "message": f"{label} API 连接成功：{model}"}
 
         return {
             "ok": False,
             "message": (
-                f"LLM API 返回 HTTP {response.status_code}："
+                f"{label} API 返回 HTTP {response.status_code}："
                 f"{response.text[:200]}"
             ),
         }
 
     except Exception as exc:
-        return {"ok": False, "message": f"LLM API 请求失败：{exc}"}
+        return {"ok": False, "message": f"{label} API 请求失败：{exc}"}
 
 
 def _test_parse_connection(config: dict[str, Any]) -> dict[str, Any]:

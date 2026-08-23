@@ -1,4 +1,4 @@
-"""标签服务（m15）：标签名校验、查询与整体替换。"""
+"""标签服务（m15）：标签名校验、查询与整体替换；AI 建议标签（m16）。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from app.repositories.tag_repository import (
     list_tags,
     set_asset_tags as repo_set_asset_tags,
 )
+from app.services import config_service, llm_service, summarization_service
 from app.state import get_db_path
 
 MAX_TAG_LENGTH = 30
@@ -80,3 +81,51 @@ def set_asset_tags(asset_id: str, names: list[str]) -> list[str]:
         return result
     finally:
         conn.close()
+
+
+def _clean_suggestions(names: list[str]) -> list[str]:
+    """宽松清洗 AI 建议的标签：不合规条目直接丢弃而非报错。"""
+    cleaned: list[str] = []
+
+    for raw in names:
+        if not isinstance(raw, str):
+            continue
+
+        name = raw.strip()
+
+        if not name or "," in name or len(name) > MAX_TAG_LENGTH:
+            continue
+
+        if name not in cleaned:
+            cleaned.append(name)
+
+    return cleaned[:MAX_TAGS_PER_ASSET]
+
+
+def suggest_asset_tags(asset_id: str) -> list[str]:
+    """AI 建议标签（m16）：只返回建议，不写库；由用户在编辑器确认后保存。
+
+    输入文本复用总结的来源选择（音频/视频取转录、文档取解析/原文）。
+    """
+    conn = get_conn(get_db_path())
+    try:
+        asset = get_asset_by_id(conn, asset_id)
+
+        if asset is None:
+            raise ValueError("资产不存在")
+
+        llm_config = config_service.get_tagging_llm_config()
+
+        if not llm_config.get("enabled"):
+            raise ValueError("AI 打标未启用，请前往设置页开启")
+
+        input_text = summarization_service.get_summary_input_text(conn, asset)
+        existing = [tag["name"] for tag in list_tags(conn)]
+    finally:
+        conn.close()
+
+    suggestions = llm_service.suggest_tags(
+        asset["title"], input_text, existing, llm_config
+    )
+
+    return _clean_suggestions(suggestions)
