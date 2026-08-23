@@ -463,6 +463,10 @@ tasks                可选任务日志或临时输出
 .pdf
 .docx
 .doc
+.pptx
+.ppt
+.xlsx
+.xls
 .md
 .txt
 .html
@@ -476,10 +480,14 @@ tasks                可选任务日志或临时输出
 第一阶段可直接内容索引：
 .md
 .txt
-.html / .htm，可选简单提取
 
-第一阶段暂不解析（后续里程碑解决）：
+内容提取未实现（仅文件名搜索，parse_status 为 not_required）：
+.html / .htm —— 「可选简单提取」暂缓，2026-08-23 前误标待解析，已纠正
+
+经解析后内容索引：
 .pdf / .docx / .doc —— m9 起经 MinerU 解析（见 §15）
+.pptx / .ppt / .xlsx / .xls —— 经 MinerU 解析（2026-08-23 起纳入扫描，
+  补齐 §15.2 白名单的扫描层缺口）
 .epub —— m10 起经内置本地解析器解析（见 §15）
 ```
 
@@ -1406,6 +1414,8 @@ AI 总结只写：
 
 m9 起白名单文档（.pdf/.docx/.doc/.pptx/.ppt/.xlsx/.xls）可在资产详情页发起
 MinerU 解析，生成 `{stem}.parsed.md` 后进入全文/向量索引并可用于 AI 总结。
+（注：.pptx/.ppt/.xlsx/.xls 于 2026-08-23 才补入扫描扩展名——m9 当时仅解析
+白名单收录，扫描层不识别这类文件，属实施缺口，现已对齐。）
 
 m10 起 `.epub` 一并纳入白名单：固定路由到内置本地解析器（标准库解
 zip + OPF spine，无需远端服务与 token，秒级完成），产物同为

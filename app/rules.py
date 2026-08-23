@@ -24,6 +24,10 @@ DOCUMENT_EXTENSIONS = {
     ".pdf",
     ".docx",
     ".doc",
+    ".pptx",
+    ".ppt",
+    ".xlsx",
+    ".xls",
     ".md",
     ".txt",
     ".html",
@@ -100,18 +104,20 @@ def should_ignore_dir(name: str) -> bool:
 
 
 def get_parse_status(asset_type: str, ext: str) -> str:
-    """第一阶段文档解析策略。
+    """文档解析策略。
 
     audio / video：不需要文档解析，需要转录。
     .md / .txt：可直接读取文本，不需要额外解析。
-    其他 document：等待文档解析模块（pending）。
+    .html / .htm：内容提取未实现，不入内容索引（仅文件名搜索），
+      状态为 not_required（2026-08-23 前误标 pending，无解析入口造成误导）。
+    其他 document（pdf/office/epub）：等待文档解析（pending）。
     """
     if asset_type in {"audio", "video"}:
         return "not_required"
 
     ext = ext.lower()
 
-    if ext in {".md", ".txt"}:
+    if ext in {".md", ".txt", ".html", ".htm"}:
         return "not_required"
 
     return "pending"

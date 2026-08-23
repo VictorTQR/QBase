@@ -157,6 +157,14 @@
     - 覆盖备份：重解析前旧 `{stem}.parsed.md` 复制为 `.knowledge/backups/{stem}.{时间戳}.bak.md`，与总结备份同目录同风格
     - 扫描层零改动：`.parsed.md` 后缀 M2 起已在 `ARTIFACT_SUFFIXES`，产物落盘后重扫自动绑定 kind=parsed
     - 测试用 mock（附录 A，纯标准库端口 8793，token=mock-token）：覆盖 未启用/无 token/连通测试/成功链路/覆盖备份/失败路径/重启恢复/epub 拒绝/200MB 拒绝
+- M9 后补丁：Office 扫描收录 + html/htm 改无需解析（2026-08-23）
+  - 背景：MinerU 批量上传接口支持 pdf/doc/ppt/excel/图片；核对发现 `PARSEABLE_EXTENSIONS`（m9）早已包含 `.pptx/.ppt/.xlsx/.xls`，但 `rules.DOCUMENT_EXTENSIONS` 没有这四个扩展名——这类文件根本不会被扫描成资产，PRD §15.2 宣称的白名单在扫描层是缺口（m9 实施遗漏，仅 docx/doc 当时已收录）
+  - `app/rules.py`：`DOCUMENT_EXTENSIONS` 追加 `.pptx/.ppt/.xlsx/.xls`（解析链路白名单/解析卡片/parsed.md 绑定/索引下游全部现成，零改动复用）；`get_parse_status` 的 not_required 集合追加 `.html/.htm`——内容提取未实现且无解析入口，此前标 pending 显示「待解析」徽章误导用户
+  - 决策记录：
+    - 图片明确不做（MinerU 虽支持）：图片未纳入资产体系，全变资产易造成列表噪音，待单独讨论范围后再议
+    - html/htm 的 not_required 无下游副作用已核实：全文索引仅收 `.md/.txt`（index_service 双条件过滤），向量读 chunks 表，总结按扩展名白名单（html 本就报「不支持生成总结」）——本次仅修正状态徽章语义
+    - 老库需重新扫描一次：新增的 Office 资产才会入库，存量 html 资产的 parse_status 由 pending 更新为 not_required（upsert 每次扫描都刷新该列）
+  - 手动验收步骤：① 放 pptx/xlsx 文件 → 扫描 → 资产列表出现（类型=文档，徽章=待解析）② 详情页发起解析 → 任务中心 → parsed.md 生成 → 全文搜索命中内容 → AI 总结可用 ③ html 资产重扫后徽章变「无需解析」，全文索引确认不含 html 原文（仅文件名搜索）
 - M10 EPUB 内容索引（内置本地解析器）- 代码已落地（2026-08-21），附录 A 验证脚本已跑通（合成 EPUB3/EPUB2/latin-1/坏 zip/DRM + 全链路），UI 手动验收步骤见讨论稿 m10-epub.md §3
   - 依据：讨论稿 qwen-prdv1/m10-epub.md（选型：手写 zipfile + 标准库，不引 ebooklib；.epub 固定路由内置解析器，不看 [parse].provider）
   - 落地内容：
@@ -235,6 +243,7 @@
 
 ## 项目文档
 
+- [项目现状同步-2026-08-23.md](./项目现状同步-2026-08-23.md) - 面向协作者的完整现状快照（功能全景 / 架构 / API / 配置 / 决策 / 限制 / 规划）
 - [项目梳理报告.md](./项目梳理报告.md) - 2026-08-16 项目全景梳理（历史演进 / 技术转向 / 架构决策）
 
 ## 修复记录
