@@ -253,6 +253,21 @@
     - 同步调用不走任务系统：单次轻调用无文件产物，任务中心没有可展示实体
     - 打标与总结可配不同模型（输入短输出小，可用更快/更便宜模型）
     - 清洗宽松丢弃而非报错：LLM 幻觉条目（空/含逗号/超长）静默丢弃，其余照常；解析失败（非 JSON）才报错
+- M17 批量任务（批量总结 + 批量 AI 打标）- 代码已落地（2026-08-23），冒烟（mock LLM 临时知识库全链路：批量总结 3 任务成功 / 重跑全跳过 / 批量打标追加不删已有 / 重启恢复 / 同资产去重）已通过，UI 手动验收步骤见讨论稿 m17-batch-tasks.md §3，待开发人员手动执行
+  - 依据：讨论稿 qwen-prdv1/m17-batch-tasks.md（两个产品决策——打标写入策略与总结覆盖策略——用户未逐条答复，按推荐项落地：自动追加写入 / 弹窗选择跳过或覆盖，讨论稿 §0 注明可复核）
+  - 落地内容：
+    - 新增 `app/services/batch_runner.py`：get_max_workers（读 [task].max_workers，m1 起存在但执行侧零消费，本次接通）+ execute_tasks（daemon 线程串行/ThreadPoolExecutor 并发消费任务列表；_inflight_task_ids 进程内去重，防重启恢复与在跑任务重复执行）
+    - `app/services/summarization_service.py`：start_summarization 的「校验+建任务」段抽成 _create_summarization_task（返回 task_id 或跳过原因，单条路径行为不变，改经 batch_runner 执行）；新增 start_batch_summarization（整体 enabled 预检 → 逐资产预检，overwrite=False 时已有 active summary 跳过 → 返回 created/skipped 报告）与 resume_pending_summarization_tasks
+    - `app/services/tag_service.py`：新增 run_tagging_task（复用建议链路：_get_tagging_input_text 优先 active 总结 → llm_service.suggest_tags → 宽松清洗 → 与已有标签合并追加 → set_asset_tags 写库；applied 记入 params_json 可审计；空建议 → failed「AI 未返回可用标签」）+ start_tagging（单条/重试入口）+ start_batch_tagging（追加语义全量跑）+ resume_pending_tagging_tasks；M16 单条 suggest_asset_tags 零改动
+    - `app/repositories/artifact_repository.py`：has_active_artifact（EXISTS 查询，批量判断「已有总结」）
+    - `app/services/library_service.py`：open_library 在 resume_running_parse_tasks 旁追加两个 resume 调用（pending/running 重跑幂等）
+    - `app/api/library.py`：POST /api/assets/batch-summarize（body {asset_ids, overwrite}）与 POST /api/assets/batch-tag（body {asset_ids}），均返回 {created, task_ids, skipped}，400 未开库/空列表/未启用
+    - UI：assets.py 行首勾选列 + 表头「全选本页」（选择集按 asset_id 跨页/跨筛选保留，min-width 1040→1080）+ 批量操作栏（已选 N 项 / 批量总结 / 批量打标 / 清除选择，N=0 禁用）+ 两个页面级确认对话框（总结：统计已有总结数，二选一按钮；打标：追加保存文案）；tasks.py TYPE_LABELS 增「AI 打标」+ 重试分发 tagging 分支
+  - 决策记录：
+    - 任务形态 = 每资产一条任务（复用任务中心展示/失败重试/同资产同类型去重），批量编排器只做「预检 + 建 pending 批 + 拉起 worker」；新任务类型 tagging，M16「同步建议不走任务系统」的边界保留（单条轻调用），批量 N 次 LLM 调用属重活走任务系统
+    - 批量打标自动追加写库（不删除已有标签），修订 M16「AI 结果不写库」的适用范围至单条交互流程；串行消费（max_workers=1）使先打的标签进入后续 prompt 的已有标签列表，引导标签收敛
+    - 打标任务的输入不可用（无转录/未解析）在执行期以 failed 呈现（创建期不拦截），用户在任务中心看到具体原因；总结任务的输入预检仍在创建期（沿用 m6 行为），批量时变为跳过+原因
+    - 批量提交后保留选择集（不自动清除），便于紧接对同一批资产做另一批量操作（总结 → 打标工作流：打标输入优先取总结）
 
 ## 项目文档
 
