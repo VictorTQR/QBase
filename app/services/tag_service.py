@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.database import get_conn
+from app.repositories.artifact_repository import list_artifacts_by_asset
 from app.repositories.asset_repository import get_asset_by_id
 from app.repositories.tag_repository import (
     get_tags_for_asset,
@@ -11,6 +12,7 @@ from app.repositories.tag_repository import (
 )
 from app.services import config_service, llm_service, summarization_service
 from app.state import get_db_path
+from app.utils import read_text_for_index
 
 MAX_TAG_LENGTH = 30
 MAX_TAGS_PER_ASSET = 20
@@ -102,10 +104,24 @@ def _clean_suggestions(names: list[str]) -> list[str]:
     return cleaned[:MAX_TAGS_PER_ASSET]
 
 
+def _get_tagging_input_text(conn, asset: dict) -> str:
+    """打标输入：优先取 active 总结（浓缩全文，长内容截断只伤覆盖度）；
+    无总结时沿用总结的来源选择（音频/视频取转录、文档取解析/原文）。
+    """
+    for artifact in list_artifacts_by_asset(conn, asset["id"]):
+        if artifact["kind"] == "summary" and artifact["status"] == "active":
+            text = read_text_for_index(artifact["absolute_path"])
+            if text.strip():
+                return text
+            break  # 总结为空文件，退回全文来源
+
+    return summarization_service.get_summary_input_text(conn, asset)
+
+
 def suggest_asset_tags(asset_id: str) -> list[str]:
     """AI 建议标签（m16）：只返回建议，不写库；由用户在编辑器确认后保存。
 
-    输入文本复用总结的来源选择（音频/视频取转录、文档取解析/原文）。
+    输入优先用 active 总结，无则取转录/解析/原文（复用总结来源选择）。
     """
     conn = get_conn(get_db_path())
     try:
@@ -119,7 +135,7 @@ def suggest_asset_tags(asset_id: str) -> list[str]:
         if not llm_config.get("enabled"):
             raise ValueError("AI 打标未启用，请前往设置页开启")
 
-        input_text = summarization_service.get_summary_input_text(conn, asset)
+        input_text = _get_tagging_input_text(conn, asset)
         existing = [tag["name"] for tag in list_tags(conn)]
     finally:
         conn.close()
