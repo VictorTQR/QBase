@@ -129,8 +129,9 @@ TTS 朗读
 ```
 
 其中文档解析、sidecar 目录、转录分段视图与播放器字幕级跳转已实现
-（M9-M13）；简单扁平标签已实现（M15，复杂标签体系仍不做）；文件监听、
-笔记编辑与 TTS 暂缓（见 §31 待实现）。
+（M9-M13）；简单扁平标签已实现（M15，复杂标签体系仍不做），AI 建议
+标签已实现（M16，批量自动打标仍不做）；文件监听、笔记编辑与 TTS 暂缓
+（见 §31 待实现）。
 
 ---
 
@@ -778,7 +779,8 @@ System Volume Information/
 总结状态
 笔记状态
 任务状态
-标签（m15，基本信息卡内徽章展示 + 多选编辑，可输入新名称）
+标签（m15，基本信息卡内徽章展示 + 多选编辑，可输入新名称；m16 起
+「AI 建议标签」按钮生成建议预填编辑器，确认保存才入库）
 ```
 
 操作按钮：
@@ -2084,6 +2086,19 @@ timeout = 180
 max_input_chars = 24000
 chunk_chars = 6000
 
+[llm.tagging]
+# AI 建议标签（m16）：详情页「AI 建议标签」生成建议，确认后保存；
+# 可与总结用不同模型（打标输入短、输出小，可用更快/更便宜的模型）
+enabled = false
+provider = "openai_compatible"
+base_url = "https://api.example.com/v1"
+api_key_env = "OPENAI_API_KEY"
+model = "gpt-4o-mini"
+temperature = 0.1
+max_tokens = 300
+timeout = 60
+max_input_chars = 4000
+
 [embedding]
 enabled = true
 provider = "openai_compatible"
@@ -2287,7 +2302,8 @@ app/
 类型
 路径
 状态
-标签（m15，徽章展示 + 多选编辑保存）
+标签（m15 徽章展示 + 多选编辑保存；m16「AI 建议标签」生成建议预填
+编辑器，确认后保存）
 操作按钮
 ```
 
@@ -2398,7 +2414,7 @@ hash，可选
    - 🔴 **缺失**：未找到密钥，点击弹出“如何配置环境变量或 secrets.toml”的指引。
 
 4. **连通性测试（Test Connection）**：
-   - 在 LLM / Embedding 卡片提供 `[测试 API]` 按钮。
+   - 在 LLM 总结 / AI 打标（m16）/ Embedding / 解析卡片提供 `[测试 API]` 按钮。
    - 后端结合表单数据与系统环境变量，发送极短 Ping 请求，直接在 UI 弹窗返回 HTTP 状态码及连通结果。
 
 5. **危险操作拦截**：
@@ -2434,6 +2450,7 @@ POST /api/assets/{asset_id}/reindex
 POST /api/assets/{asset_id}/sidecar-dir（m11，创建 .kb 派生目录）
 PUT /api/assets/{asset_id}/tags（m15，整体替换：缺失自动创建、零引用自动清理）
 GET /api/tags（m15，全部标签 + 使用数）
+POST /api/assets/{asset_id}/suggest-tags（m16，AI 建议标签：只返回建议不写库）
 ```
 
 ---
@@ -2469,7 +2486,7 @@ POST /api/tasks/{task_id}/retry
 ```text
 GET  /api/settings
 PUT  /api/settings
-POST /api/settings/test-connection
+POST /api/settings/test-connection（kind：llm / llm_tagging（m16）/ embedding）
 POST /api/index/rebuild-fts
 POST /api/index/rebuild-vector
 ```
@@ -3075,6 +3092,34 @@ REST：GET /api/tags、PUT /api/assets/{id}/tags、GET /api/search 增 tag 参�
 
 ---
 
+### M16：AI 建议标签（LLM 打标，M15 增强）
+
+目标：
+
+```text
+独立 [llm.tagging] 配置节（enabled 默认 false；temperature=0.1、
+max_tokens=300、timeout=60、输入截断 4000 字符），可与总结用不同模型
+详情页「AI 建议标签」按钮：同步调 LLM（按钮禁用防重复），建议合并进
+编辑器选中值（不覆盖已选、新标签补进选项），确认保存后才入库
+输入 = 标题 + 内容（复用总结来源选择：音频/视频取转录、文档取解析/
+原文）+ 全库已有标签（引导复用）；输出 = JSON 字符串数组，宽容解析
+（剥 fence、截取 [...]），失败中文报错
+建议宽松清洗：丢空 / 含半角逗号 / >30 字符，去重保序，截到单资产上限
+REST：POST /api/assets/{id}/suggest-tags；test-connection 增 llm_tagging
+不做批量打标与总结后自动建议（留待「批量任务」里程碑），AI 结果不写库
+```
+
+完成标志：
+
+```text
+点「AI 建议标签」后建议预填编辑器且标签行不变（未写库），保存后徽章刷新
+未启用时给中文提示；音频无转录沿用「请先生成转录」报错
+LLM 返回非 JSON / 含逗号或超长标签时被拒绝或丢弃，不白屏
+M15 手动打标与 LLM 总结行为完全不变
+```
+
+---
+
 ## 29. 验收标准
 
 ### 29.1 知识库
@@ -3289,6 +3334,19 @@ json 转录分段视图时间戳可点击，点击后播放器跳转到该段时
 
 ---
 
+### 29.16 AI 建议标签（m16）
+
+验收：
+
+```text
+详情页「AI 建议标签」生成建议并预填编辑器，确认保存后才入库
+独立 [llm.tagging] 配置：未启用给中文提示；设置页可编辑并测试连通
+建议经宽松清洗（去空/含逗号/超长/去重），不覆盖已选标签
+AI 打标不写库、不产生任务与文件；M15 手动打标行为完全不变
+```
+
+---
+
 ## 30. 风险与应对
 
 ### 30.1 API 成本
@@ -3391,7 +3449,7 @@ EPUB 索引已由 M10（内置本地解析器）、sidecar 目录已由 M11（�
 transcript JSON 分段视图已由 M12（详情页分段展示 + 判定统一）、音频/视频
 播放器与字幕级跳转已由 M13（原生播放器 + 分段时间戳点击跳转）、混合搜索
 排序已由 M14（全文 + 向量 RRF 融合）、标签系统已由 M15（简单扁平标签：
-手动打标 + 列表/搜索标签筛选）完成，剩余：
+手动打标 + 列表/搜索标签筛选；m16 增 AI 建议标签增强）完成，剩余：
 
 ```text
 1. 收藏与稍后处理
@@ -3609,8 +3667,9 @@ sidecar 目录
 打包 exe
 ```
 
-注记：标签系统（简单扁平版）已由 M15 实现，PDF 内容解析已由 M9（MinerU）
-实现，sidecar 目录已由 M11 实现；其余项维持不做（DOCX 解析仍未实现）。
+注记：标签系统（简单扁平版 + AI 建议）已由 M15/M16 实现，PDF 内容解析
+已由 M9（MinerU）实现，sidecar 目录已由 M11 实现；其余项维持不做
+（DOCX 解析仍未实现）。
 
 ---
 
@@ -3637,4 +3696,5 @@ M0 项目骨架
 → M13 音频/视频播放器与字幕级跳转
 → M14 混合搜索排序（全文 + 向量 RRF 融合）
 → M15 标签系统（手动打标 + 筛选）
+→ M16 AI 建议标签（LLM 打标，M15 增强）
 ```
