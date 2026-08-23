@@ -1,8 +1,14 @@
-"""标签服务（m15）：标签名校验、查询与整体替换；AI 建议标签（m16）。"""
+"""标签服务（m15）：标签名校验、查询与整体替换；AI 建议标签（m16）；
+任务化批量 AI 打标——建议清洗后自动追加写库（m17）。"""
 
 from __future__ import annotations
 
+import json
+
+from loguru import logger
+
 from app.database import get_conn
+from app.repositories import task_repository
 from app.repositories.artifact_repository import list_artifacts_by_asset
 from app.repositories.asset_repository import get_asset_by_id
 from app.repositories.tag_repository import (
@@ -10,7 +16,12 @@ from app.repositories.tag_repository import (
     list_tags,
     set_asset_tags as repo_set_asset_tags,
 )
-from app.services import config_service, llm_service, summarization_service
+from app.services import (
+    batch_runner,
+    config_service,
+    llm_service,
+    summarization_service,
+)
 from app.state import get_db_path
 from app.utils import read_text_for_index
 
@@ -145,3 +156,237 @@ def suggest_asset_tags(asset_id: str) -> list[str]:
     )
 
     return _clean_suggestions(suggestions)
+
+
+def _create_tagging_task(conn, asset_id: str) -> tuple[str | None, str | None]:
+    """校验并创建 pending AI 打标任务（m17）；不通过时返回 (None, 中文原因)。
+
+    输入可总结性（有无转录/解析）不在创建期校验——留到执行期以任务
+    failed 形式呈现，用户可在任务中心看到具体原因。
+    """
+    asset = get_asset_by_id(conn, asset_id)
+
+    if asset is None:
+        return None, "资产不存在"
+
+    if task_repository.count_running_tasks(
+        conn, asset_id=asset_id, task_type="tagging"
+    ) > 0:
+        return None, "该资产已有打标任务正在运行"
+
+    llm_config = config_service.get_tagging_llm_config()
+
+    if not llm_config.get("enabled"):
+        return None, "AI 打标未启用，请前往设置页开启"
+
+    task_id = task_repository.create_task(
+        conn,
+        asset_id=asset_id,
+        task_type="tagging",
+        params={"asset_id": asset_id},
+        command=None,
+        output_path=None,
+    )
+
+    return task_id, None
+
+
+def run_tagging_task(task_id: str) -> None:
+    """后台执行 AI 打标任务（m17）：生成建议 → 清洗 → 追加写库（不删已有标签）。
+
+    实际写入的新标签记入任务 params_json 的 applied 字段（任务详情可审计）。
+    """
+    conn = get_conn(get_db_path())
+
+    try:
+        task = task_repository.get_task(conn, task_id)
+
+        if task is None:
+            return
+
+        asset = get_asset_by_id(conn, task["asset_id"]) if task["asset_id"] else None
+
+        if asset is None:
+            task_repository.update_task(
+                conn,
+                task_id,
+                status="failed",
+                error="资产不存在",
+                finished_at=task_repository.utcnow_iso(),
+            )
+            conn.commit()
+            return
+
+        llm_config = config_service.get_tagging_llm_config()
+
+        if not llm_config.get("enabled"):
+            task_repository.update_task(
+                conn,
+                task_id,
+                status="failed",
+                error="AI 打标未启用，请前往设置页开启",
+                finished_at=task_repository.utcnow_iso(),
+            )
+            conn.commit()
+            return
+
+        task_repository.update_task(
+            conn, task_id, status="running", started_at=task_repository.utcnow_iso()
+        )
+        conn.commit()
+
+        input_text = _get_tagging_input_text(conn, asset)
+        existing = [tag["name"] for tag in list_tags(conn)]
+
+        suggestions = _clean_suggestions(
+            llm_service.suggest_tags(asset["title"], input_text, existing, llm_config)
+        )
+
+        if not suggestions:
+            task_repository.update_task(
+                conn,
+                task_id,
+                status="failed",
+                error="AI 未返回可用标签",
+                finished_at=task_repository.utcnow_iso(),
+            )
+            conn.commit()
+            return
+
+        current = get_tags_for_asset(conn, asset["id"])
+        merged = (current + [s for s in suggestions if s not in current])[
+            :MAX_TAGS_PER_ASSET
+        ]
+
+        repo_set_asset_tags(conn, asset["id"], merged)
+        conn.commit()
+
+        applied = [s for s in suggestions if s in merged]
+
+        task_repository.update_task(
+            conn,
+            task_id,
+            status="success",
+            params_json=json.dumps(
+                {"asset_id": asset["id"], "applied": applied},
+                ensure_ascii=False,
+            ),
+            finished_at=task_repository.utcnow_iso(),
+        )
+        conn.commit()
+
+        logger.info(
+            "AI 打标任务完成：{}（asset {}，追加 {}）",
+            task_id,
+            asset["id"],
+            applied,
+        )
+    except Exception as exc:
+        logger.error("AI 打标任务失败：{} - {}", task_id, exc)
+
+        try:
+            task_repository.update_task(
+                conn,
+                task_id,
+                status="failed",
+                error=str(exc),
+                finished_at=task_repository.utcnow_iso(),
+            )
+            conn.commit()
+        except Exception:
+            pass
+    finally:
+        conn.close()
+
+
+def start_tagging(asset_id: str) -> str:
+    """创建并启动单个 AI 打标任务（任务中心失败重试入口）。"""
+    conn = get_conn(get_db_path())
+
+    try:
+        task_id, reason = _create_tagging_task(conn, asset_id)
+
+        if task_id is None:
+            raise ValueError(reason)
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    batch_runner.execute_tasks([task_id], run_tagging_task)
+
+    logger.info("AI 打标任务已创建：{}（asset {}）", task_id, asset_id)
+
+    return task_id
+
+
+def start_batch_tagging(asset_ids: list[str]) -> dict:
+    """批量 AI 打标（m17）：追加语义全量跑，逐资产预检，不合规项跳过记原因。"""
+    if not asset_ids:
+        raise ValueError("未选择任何资产")
+
+    llm_config = config_service.get_tagging_llm_config()
+
+    if not llm_config.get("enabled"):
+        raise ValueError("AI 打标未启用，请前往设置页开启")
+
+    created: list[str] = []
+    skipped: list[dict] = []
+
+    conn = get_conn(get_db_path())
+
+    try:
+        for asset_id in asset_ids:
+            asset = get_asset_by_id(conn, asset_id)
+
+            task_id, reason = _create_tagging_task(conn, asset_id)
+
+            if task_id is None:
+                skipped.append(
+                    {
+                        "asset_id": asset_id,
+                        "title": asset["title"] if asset else None,
+                        "reason": reason,
+                    }
+                )
+            else:
+                created.append(task_id)
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    if created:
+        batch_runner.execute_tasks(created, run_tagging_task)
+
+    logger.info(
+        "批量 AI 打标：创建 {} 个任务，跳过 {} 项", len(created), len(skipped)
+    )
+
+    return {
+        "created": len(created),
+        "task_ids": created,
+        "skipped": skipped,
+    }
+
+
+def resume_pending_tagging_tasks() -> None:
+    """打开知识库时恢复未完结的 AI 打标任务（重跑幂等；in-flight 去重见 batch_runner）。"""
+    conn = get_conn(get_db_path())
+
+    try:
+        rows = conn.execute(
+            """
+            SELECT id FROM tasks
+            WHERE type = 'tagging' AND status IN ('pending', 'running')
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        return
+
+    task_ids = [row["id"] for row in rows]
+    logger.info("恢复未完结的 AI 打标任务：{} 个", len(task_ids))
+    batch_runner.execute_tasks(task_ids, run_tagging_task)

@@ -1,9 +1,9 @@
-"""总结服务：LLM 生成 {stem}.summary.md，后台任务 + 覆盖备份 + 自动刷新索引（m6）。"""
+"""总结服务：LLM 生成 {stem}.summary.md，后台任务 + 覆盖备份 + 自动刷新索引（m6）；
+批量总结与重启恢复（m17）经 batch_runner 消费。"""
 
 from __future__ import annotations
 
 import shutil
-import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,9 +11,13 @@ from loguru import logger
 
 from app.database import get_conn
 from app.repositories import task_repository
-from app.repositories.artifact_repository import list_artifacts_by_asset
+from app.repositories.artifact_repository import (
+    has_active_artifact,
+    list_artifacts_by_asset,
+)
 from app.repositories.asset_repository import get_asset_by_id
 from app.rules import derived_output_path
+from app.services import batch_runner
 from app.services.config_service import get_summary_llm_config
 from app.services.index_service import rebuild_fulltext_index
 from app.services.llm_service import summarize_text
@@ -102,61 +106,167 @@ def backup_existing_summary(summary_path: Path) -> Path | None:
     return backup_path
 
 
+def _create_summarization_task(
+    conn, asset_id: str
+) -> tuple[str | None, str | None]:
+    """校验并创建 pending 总结任务；不通过时返回 (None, 中文原因)，不报错。"""
+    asset = get_asset_by_id(conn, asset_id)
+
+    if asset is None:
+        return None, "资产不存在"
+
+    if task_repository.count_running_tasks(
+        conn, asset_id=asset_id, task_type="summarization"
+    ) > 0:
+        return None, "该资产已有总结任务正在运行"
+
+    llm_config = get_summary_llm_config()
+
+    if not llm_config["enabled"]:
+        return None, "LLM 总结未启用，请检查 [llm.summary] enabled"
+
+    # 前置校验输入文本（无转录 / 不支持的类型在这里就报错，不创建任务）
+    input_text = get_summary_input_text(conn, asset)
+
+    if not input_text.strip():
+        return None, "输入文本为空，无法生成总结"
+
+    # m11 跟随现状：资产旁存在 <name>.kb/ 目录时写入其中，否则平铺
+    summary_path = str(derived_output_path(asset["absolute_path"], "summary.md"))
+
+    task_id = task_repository.create_task(
+        conn,
+        asset_id=asset_id,
+        task_type="summarization",
+        params={
+            "asset_id": asset_id,
+            "input_length": len(input_text),
+            "output_path": summary_path,
+        },
+        command=None,
+        output_path=summary_path,
+    )
+
+    return task_id, None
+
+
 def start_summarization(asset_id: str) -> str:
     """创建并启动总结任务（并发去重 + 前置校验）。"""
     conn = get_conn(get_db_path())
 
     try:
-        asset = get_asset_by_id(conn, asset_id)
+        task_id, reason = _create_summarization_task(conn, asset_id)
 
-        if asset is None:
-            raise ValueError("资产不存在")
-
-        if task_repository.count_running_tasks(
-            conn, asset_id=asset_id, task_type="summarization"
-        ) > 0:
-            raise ValueError("该资产已有总结任务正在运行")
-
-        llm_config = get_summary_llm_config()
-
-        if not llm_config["enabled"]:
-            raise ValueError("LLM 总结未启用，请检查 [llm.summary] enabled")
-
-        # 前置校验输入文本（无转录 / 不支持的类型在这里就报错，不创建任务）
-        input_text = get_summary_input_text(conn, asset)
-
-        if not input_text.strip():
-            raise ValueError("输入文本为空，无法生成总结")
-
-        # m11 跟随现状：资产旁存在 <name>.kb/ 目录时写入其中，否则平铺
-        summary_path = str(derived_output_path(asset["absolute_path"], "summary.md"))
-
-        task_id = task_repository.create_task(
-            conn,
-            asset_id=asset_id,
-            task_type="summarization",
-            params={
-                "asset_id": asset_id,
-                "input_length": len(input_text),
-                "output_path": summary_path,
-            },
-            command=None,
-            output_path=summary_path,
-        )
+        if task_id is None:
+            raise ValueError(reason)
 
         conn.commit()
     finally:
         conn.close()
 
-    threading.Thread(
-        target=run_summarization_task,
-        args=(task_id,),
-        daemon=True,
-    ).start()
+    batch_runner.execute_tasks([task_id], run_summarization_task)
 
     logger.info("总结任务已创建：{}（asset {}）", task_id, asset_id)
 
     return task_id
+
+
+def start_batch_summarization(
+    asset_ids: list[str], overwrite: bool = False
+) -> dict:
+    """批量总结（m17）：逐资产预检建任务，不合规项跳过并记录原因。
+
+    overwrite=False 时已有 active 总结的资产跳过；True 时全部重新生成
+    （执行体覆盖前自动备份到 .knowledge/backups/）。
+    """
+    if not asset_ids:
+        raise ValueError("未选择任何资产")
+
+    llm_config = get_summary_llm_config()
+
+    if not llm_config["enabled"]:
+        raise ValueError("LLM 总结未启用，请检查 [llm.summary] enabled")
+
+    created: list[str] = []
+    skipped: list[dict] = []
+
+    conn = get_conn(get_db_path())
+
+    try:
+        for asset_id in asset_ids:
+            asset = get_asset_by_id(conn, asset_id)
+
+            if asset is None:
+                skipped.append(
+                    {
+                        "asset_id": asset_id,
+                        "title": None,
+                        "reason": "资产不存在",
+                    }
+                )
+                continue
+
+            if not overwrite and has_active_artifact(conn, asset_id, "summary"):
+                skipped.append(
+                    {
+                        "asset_id": asset_id,
+                        "title": asset["title"],
+                        "reason": "已有总结",
+                    }
+                )
+                continue
+
+            task_id, reason = _create_summarization_task(conn, asset_id)
+
+            if task_id is None:
+                skipped.append(
+                    {
+                        "asset_id": asset_id,
+                        "title": asset["title"],
+                        "reason": reason,
+                    }
+                )
+            else:
+                created.append(task_id)
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    if created:
+        batch_runner.execute_tasks(created, run_summarization_task)
+
+    logger.info(
+        "批量总结：创建 {} 个任务，跳过 {} 项", len(created), len(skipped)
+    )
+
+    return {
+        "created": len(created),
+        "task_ids": created,
+        "skipped": skipped,
+    }
+
+
+def resume_pending_summarization_tasks() -> None:
+    """打开知识库时恢复未完结的总结任务（重跑幂等；in-flight 去重见 batch_runner）。"""
+    conn = get_conn(get_db_path())
+
+    try:
+        rows = conn.execute(
+            """
+            SELECT id FROM tasks
+            WHERE type = 'summarization' AND status IN ('pending', 'running')
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        return
+
+    task_ids = [row["id"] for row in rows]
+    logger.info("恢复未完结的总结任务：{} 个", len(task_ids))
+    batch_runner.execute_tasks(task_ids, run_summarization_task)
 
 
 def run_summarization_task(task_id: str) -> None:

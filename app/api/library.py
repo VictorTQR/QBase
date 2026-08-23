@@ -23,10 +23,14 @@ from app.services.index_service import rebuild_fulltext_index
 from app.services.parse_service import start_parsing
 from app.services.scanner_service import scan_current_library
 from app.services.search_service import search, search_hybrid
-from app.services.summarization_service import start_summarization
+from app.services.summarization_service import (
+    start_batch_summarization,
+    start_summarization,
+)
 from app.services.tag_service import (
     get_all_tags,
     set_asset_tags,
+    start_batch_tagging,
     suggest_asset_tags,
 )
 from app.services.transcription_service import start_transcription
@@ -42,6 +46,15 @@ class OpenLibraryRequest(BaseModel):
 
 class SetAssetTagsRequest(BaseModel):
     tags: list[str]
+
+
+class BatchSummarizeRequest(BaseModel):
+    asset_ids: list[str]
+    overwrite: bool = False
+
+
+class BatchTagRequest(BaseModel):
+    asset_ids: list[str]
 
 
 @router.post("/library/open")
@@ -160,6 +173,36 @@ def api_suggest_asset_tags(asset_id: str) -> dict:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return {"suggestions": suggestions}
+
+
+@router.post("/assets/batch-summarize")
+def api_batch_summarize(req: BatchSummarizeRequest) -> dict:
+    """批量总结（m17）：逐资产预检建任务，不合规项跳过；进度见任务中心。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    if not req.asset_ids:
+        raise HTTPException(status_code=400, detail="未选择任何资产")
+
+    try:
+        return start_batch_summarization(req.asset_ids, overwrite=req.overwrite)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/assets/batch-tag")
+def api_batch_tag(req: BatchTagRequest) -> dict:
+    """批量 AI 打标（m17）：建议清洗后自动追加写库，不删除已有标签。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    if not req.asset_ids:
+        raise HTTPException(status_code=400, detail="未选择任何资产")
+
+    try:
+        return start_batch_tagging(req.asset_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/assets/{asset_id}/transcribe")

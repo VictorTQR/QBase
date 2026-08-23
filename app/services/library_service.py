@@ -149,6 +149,15 @@ def open_library(path_str: str) -> dict:
 
     resume_running_parse_tasks()
 
+    # 恢复未完结的批量总结 / AI 打标任务（m17，重跑幂等）
+    from app.services.summarization_service import (
+        resume_pending_summarization_tasks,
+    )
+    from app.services.tag_service import resume_pending_tagging_tasks
+
+    resume_pending_summarization_tasks()
+    resume_pending_tagging_tasks()
+
     return {
         "library_root": str(root),
         "db_path": str(db_path),

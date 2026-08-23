@@ -86,6 +86,23 @@ def upsert_artifact(conn: sqlite3.Connection, artifact: dict) -> str:
     return artifact_id
 
 
+def has_active_artifact(
+    conn: sqlite3.Connection, asset_id: str, kind: str
+) -> bool:
+    """资产是否存在指定 kind 的 active 派生文件（m17 批量总结判断「已有总结」）。"""
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM artifacts
+        WHERE asset_id = ? AND kind = ? AND status = 'active'
+        LIMIT 1
+        """,
+        (asset_id, kind),
+    ).fetchone()
+
+    return row is not None
+
+
 def list_artifacts_by_asset(conn: sqlite3.Connection, asset_id: str) -> list[dict]:
     """获取某个资产的所有派生文件。"""
     rows = conn.execute(

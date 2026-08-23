@@ -33,6 +33,7 @@ TYPE_LABELS = {
     "transcription": "转录",
     "summarization": "总结",
     "parse": "解析",
+    "tagging": "AI 打标",
 }
 
 
@@ -245,6 +246,19 @@ def tasks_page() -> None:
 
                         ui.notify(
                             f"已创建新解析任务：{new_task_id[:8]}",
+                            type="positive",
+                        )
+
+                    elif task["type"] == "tagging" and task["asset_id"]:
+                        from app.services.tag_service import start_tagging
+
+                        new_task_id = await run.io_bound(
+                            start_tagging,
+                            task["asset_id"],
+                        )
+
+                        ui.notify(
+                            f"已创建新打标任务：{new_task_id[:8]}",
                             type="positive",
                         )
 

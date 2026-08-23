@@ -1,4 +1,5 @@
-"""资产列表页：扫描 / 刷新、类型与文件名与标签过滤、排序、分页、派生状态徽章、标签列、打开文件与目录。"""
+"""资产列表页：扫描 / 刷新、类型与文件名与标签过滤、排序、分页、派生状态徽章、
+标签列、打开文件与目录、多选与批量总结 / 批量打标（m17）。"""
 
 from __future__ import annotations
 
@@ -8,9 +9,11 @@ from nicegui import run, ui
 
 from app.ui.tokens import C, CLS
 from app.database import get_conn
+from app.repositories.artifact_repository import has_active_artifact
 from app.repositories.asset_repository import count_assets, list_assets
 from app.services.scanner_service import scan_current_library
-from app.services.tag_service import get_all_tags
+from app.services.summarization_service import start_batch_summarization
+from app.services.tag_service import get_all_tags, start_batch_tagging
 from app.state import get_db_path, state
 from app.ui.components import render_derived_badges
 from app.ui.layout import page_frame, require_library
@@ -63,6 +66,41 @@ async def assets_page():
                 label="排序",
             ).classes("w-36")
             count_label = ui.label("").classes("text-sm text-gray-600")
+
+        # 批量操作栏（m17）：勾选数 > 0 时可用；选择集按 asset_id 跨页保留
+        selection: dict = {"ids": set()}
+
+        with ui.row().classes("items-center gap-3 mt-2"):
+            selection_label = ui.label("已选 0 项").classes("text-sm text-gray-600")
+            batch_summarize_btn = ui.button("批量总结", icon="notes").props(
+                "outline size=sm"
+            )
+            batch_tag_btn = ui.button("批量打标", icon="sell").props(
+                "outline size=sm"
+            )
+            clear_selection_btn = ui.button("清除选择").props(
+                "flat size=sm"
+            )
+
+        batch_summarize_btn.disable()
+        batch_tag_btn.disable()
+        clear_selection_btn.disable()
+
+        def update_selection_ui():
+            count = len(selection["ids"])
+            selection_label.text = f"已选 {count} 项"
+            batch_summarize_btn.enabled = count > 0
+            batch_tag_btn.enabled = count > 0
+            clear_selection_btn.enabled = count > 0
+
+        # 批量确认对话框须在页面层级定义，避免被 list_container.clear() 销毁
+        with ui.dialog() as batch_summarize_dialog:
+            with ui.card():
+                batch_summarize_content = ui.column()
+
+        with ui.dialog() as batch_tag_dialog:
+            with ui.card():
+                batch_tag_content = ui.column()
 
         list_container = ui.column().classes("w-full mt-4 overflow-x-auto")
 
@@ -161,7 +199,39 @@ async def assets_page():
                         )
                     return
 
-                with ui.row().classes(CLS["table_head"]).style("min-width: 1040px"):
+                def make_select_handler(asset_id: str):
+                    def handler(e):
+                        if e.value:
+                            selection["ids"].add(asset_id)
+                        else:
+                            selection["ids"].discard(asset_id)
+                        update_selection_ui()
+
+                    return handler
+
+                page_asset_ids = [asset["id"] for asset in assets]
+
+                def make_select_all_handler():
+                    async def handler(e):
+                        if e.value:
+                            selection["ids"].update(page_asset_ids)
+                        else:
+                            selection["ids"].difference_update(page_asset_ids)
+                        update_selection_ui()
+                        # 重新渲染本页各行勾选状态
+                        await load_assets()
+
+                    return handler
+
+                with ui.row().classes(CLS["table_head"]).style("min-width: 1080px"):
+                    ui.checkbox(
+                        "",
+                        value=all(
+                            asset_id in selection["ids"]
+                            for asset_id in page_asset_ids
+                        ),
+                        on_change=make_select_all_handler(),
+                    ).classes("w-10").tooltip("全选本页")
                     ui.label("标题").classes("w-56")
                     ui.label("类型").classes("w-16")
                     ui.label("路径").classes("flex-1")
@@ -172,7 +242,15 @@ async def assets_page():
                     ui.label("操作").classes("w-36")
 
                 for asset in assets:
-                    with ui.row().classes(CLS["table_row"]).style("min-width: 1040px"):
+                    with ui.row().classes(CLS["table_row"]).style(
+                        "min-width: 1080px"
+                    ):
+                        ui.checkbox(
+                            "",
+                            value=asset["id"] in selection["ids"],
+                            on_change=make_select_handler(asset["id"]),
+                        ).classes("w-10")
+
                         ui.link(
                             asset["title"],
                             f"/assets/{asset['id']}",
@@ -254,6 +332,136 @@ async def assets_page():
             current_page["value"] = 0
             await load_assets()
 
+        def count_selected_with_summary(asset_ids: list[str]) -> int:
+            conn = get_conn(get_db_path())
+            try:
+                return sum(
+                    1
+                    for asset_id in asset_ids
+                    if has_active_artifact(conn, asset_id, "summary")
+                )
+            finally:
+                conn.close()
+
+        async def run_batch_summarize(overwrite: bool):
+            asset_ids = sorted(selection["ids"])
+            batch_summarize_dialog.close()
+
+            if not asset_ids:
+                return
+
+            try:
+                report = await run.io_bound(
+                    start_batch_summarization, asset_ids, overwrite
+                )
+            except Exception as exc:
+                notify_error(exc)
+                return
+
+            message = f"已创建 {report['created']} 个总结任务，进度见任务中心"
+
+            if report["skipped"]:
+                message += f"；跳过 {len(report['skipped'])} 项"
+
+            ui.notify(message, type="positive")
+
+        async def open_batch_summarize_dialog():
+            asset_ids = sorted(selection["ids"])
+
+            if not asset_ids:
+                return
+
+            try:
+                existing_count = await run.io_bound(
+                    count_selected_with_summary, asset_ids
+                )
+            except Exception as exc:
+                notify_error(exc)
+                return
+
+            batch_summarize_content.clear()
+            with batch_summarize_content:
+                ui.label("批量 AI 总结").classes("text-lg font-bold")
+
+                if existing_count > 0:
+                    ui.label(
+                        f"已选 {len(asset_ids)} 项，"
+                        f"其中 {existing_count} 项已有总结。"
+                    ).classes("mt-1")
+                else:
+                    ui.label(f"将为 {len(asset_ids)} 个资产生成 AI 总结。").classes(
+                        "mt-1"
+                    )
+
+                with ui.row().classes("mt-3 gap-2"):
+                    if existing_count > 0:
+                        ui.button(
+                            "跳过已有，总结其余",
+                            on_click=lambda: run_batch_summarize(False),
+                        ).props("color=primary")
+                        ui.button(
+                            "全部重新生成（旧文件自动备份）",
+                            on_click=lambda: run_batch_summarize(True),
+                        ).props("outline")
+                    else:
+                        ui.button(
+                            "开始总结",
+                            on_click=lambda: run_batch_summarize(False),
+                        ).props("color=primary")
+
+                    ui.button("取消", on_click=batch_summarize_dialog.close).props(
+                        "flat"
+                    )
+
+            batch_summarize_dialog.open()
+
+        async def run_batch_tag():
+            asset_ids = sorted(selection["ids"])
+            batch_tag_dialog.close()
+
+            if not asset_ids:
+                return
+
+            try:
+                report = await run.io_bound(start_batch_tagging, asset_ids)
+            except Exception as exc:
+                notify_error(exc)
+                return
+
+            message = f"已创建 {report['created']} 个打标任务，进度见任务中心"
+
+            if report["skipped"]:
+                message += f"；跳过 {len(report['skipped'])} 项"
+
+            ui.notify(message, type="positive")
+
+        def open_batch_tag_dialog():
+            asset_ids = sorted(selection["ids"])
+
+            if not asset_ids:
+                return
+
+            batch_tag_content.clear()
+            with batch_tag_content:
+                ui.label("批量 AI 打标").classes("text-lg font-bold")
+                ui.label(
+                    f"将对 {len(asset_ids)} 个资产生成 AI 标签并自动追加保存"
+                    "（不删除已有标签），任务可在任务中心查看。"
+                ).classes("mt-1")
+
+                with ui.row().classes("mt-3 gap-2"):
+                    ui.button("开始打标", on_click=run_batch_tag).props(
+                        "color=primary"
+                    )
+                    ui.button("取消", on_click=batch_tag_dialog.close).props("flat")
+
+            batch_tag_dialog.open()
+
+        async def handle_clear_selection():
+            selection["ids"].clear()
+            update_selection_ui()
+            await load_assets()
+
         name_debounce: dict = {"handle": None, "task": None}
 
         def fire_name_filter_reload():
@@ -279,6 +487,9 @@ async def assets_page():
         name_filter.on_value_change(lambda: schedule_name_filter_reload())
         prev_btn.on_click(handle_prev)
         next_btn.on_click(handle_next)
+        batch_summarize_btn.on_click(open_batch_summarize_dialog)
+        batch_tag_btn.on_click(open_batch_tag_dialog)
+        clear_selection_btn.on_click(handle_clear_selection)
 
         await load_tag_options()
         await load_assets()
