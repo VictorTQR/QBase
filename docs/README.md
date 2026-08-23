@@ -244,7 +244,7 @@
   - 依据：讨论稿 qwen-prdv1/m16-ai-tags.md（修订 m15 决策 2「不做 AI 建议标签」的部分：AI 只建议、人确认；批量打标与总结后自动建议仍明确不做）
   - 落地内容：
     - `app/services/llm_service.py`：TAGGING_SYSTEM_PROMPT（中文：3-8 个、单个 ≤10 字符、优先复用已有标签、只输出 JSON 数组）+ suggest_tags（标题/内容截断/已有标签 → chat_completion）+ _parse_tag_list（剥 markdown fence、截取 [...]、json.loads，失败 RuntimeError 中文报错）
-    - `app/services/tag_service.py`：suggest_asset_tags（校验资产/启用/输入文本，复用 get_summary_input_text 取内容，全库标签随 prompt 下发引导复用）+ _clean_suggestions（宽松清洗：丢空/含半角逗号/>30 字符、去重保序、截到单资产上限）；全程不写库
+    - `app/services/tag_service.py`：suggest_asset_tags（校验资产/启用/输入文本，输入优先 active 总结、空总结跳过、无则复用 get_summary_input_text 取转录/解析/原文，全库标签随 prompt 下发引导复用）+ _clean_suggestions（宽松清洗：丢空/含半角逗号/>30 字符、去重保序、截到单资产上限）；全程不写库
     - `app/services/config_service.py`：get_tagging_llm_config（[llm.tagging]，默认 temperature=0.1 / max_tokens=300 / timeout=60 / 输入截断 4000）+ validate/掩码/密钥状态覆盖新节 + _test_llm_connection 参数化（section/label）、test_connection 增 kind=llm_tagging；顺带修复 _get_api_key 不回退明文 api_key（此前配置明文 Key 时测试连接误报失败，运行时实际可用）
     - `app/services/library_service.py`：DEFAULT_LIBRARY_CONFIG 增 [llm.tagging] 节（enabled=false，老库不迁移、读默认值）
     - `app/api/library.py`：POST /api/assets/{id}/suggest-tags（400 未开库/未启用/无输入，404 资产不存在，502 LLM 调用/解析失败）；`app/api/settings.py`：test-connection kind 白名单增 llm_tagging

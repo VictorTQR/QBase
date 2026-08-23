@@ -22,10 +22,11 @@
    短输出小，可用更快/更便宜的）。设置页新增精简卡片（只暴露
    enabled/base_url/model/api_key_env + 测试按钮，其余参数走默认值
    或 config.toml 直编）。
-4. **输入 = 标题 + 内容 + 已有标签**：内容复用总结的来源选择
-   （get_summary_input_text：音频/视频取转录、文档取解析/原文），
-   截断 max_input_chars（默认 4000）；全库现有标签列表随 prompt
-   下发，引导复用避免同义标签 proliferation。
+4. **输入 = 标题 + 内容 + 已有标签**：内容优先取 active 总结（浓缩全文，
+   长内容全文截断只伤覆盖度；总结为空文件时跳过）；无总结沿用总结的
+   来源选择（get_summary_input_text：音频/视频取转录、文档取解析/
+   原文），截断 max_input_chars（默认 4000）；全库现有标签列表随
+   prompt 下发，引导复用避免同义标签 proliferation。
 5. **输出 = JSON 字符串数组，宽容解析**：3-8 个、单个 ≤10 字符、
    中文为主；解析剥 markdown fence、截取首个 [ 到末个 ] 后
    json.loads，失败抛 RuntimeError("AI 返回格式异常，请重试")。
@@ -80,10 +81,13 @@ suggest_tags(title, text,
 
 ```text
 _clean_suggestions(names)        宽松清洗（决策 6）
+_get_tagging_input_text(conn,
+                        asset)   优先 active 总结（空文件跳过），无则
+                                 get_summary_input_text（音频/视频转录、
+                                 文档解析/原文）
 suggest_asset_tags(asset_id)     校验资产存在 → get_tagging_llm_config
                                  （未启用抛 ValueError("AI 打标未启用，
-                                 请前往设置页开启")）→ 复用
-                                 get_summary_input_text 取文本（沿用其
+                                 请前往设置页开启")）→ 取输入文本（沿用其
                                  报错如「请先生成转录」）→ list_tags 取
                                  现有标签 → llm_service.suggest_tags →
                                  清洗返回；全程不写库

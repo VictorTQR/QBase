@@ -3101,8 +3101,8 @@ REST：GET /api/tags、PUT /api/assets/{id}/tags、GET /api/search 增 tag 参�
 max_tokens=300、timeout=60、输入截断 4000 字符），可与总结用不同模型
 详情页「AI 建议标签」按钮：同步调 LLM（按钮禁用防重复），建议合并进
 编辑器选中值（不覆盖已选、新标签补进选项），确认保存后才入库
-输入 = 标题 + 内容（复用总结来源选择：音频/视频取转录、文档取解析/
-原文）+ 全库已有标签（引导复用）；输出 = JSON 字符串数组，宽容解析
+输入 = 标题 + 内容（优先 active 总结，无则取转录/解析/原文，复用总结
+来源选择）+ 全库已有标签（引导复用）；输出 = JSON 字符串数组，宽容解析
 （剥 fence、截取 [...]），失败中文报错
 建议宽松清洗：丢空 / 含半角逗号 / >30 字符，去重保序，截到单资产上限
 REST：POST /api/assets/{id}/suggest-tags；test-connection 增 llm_tagging
