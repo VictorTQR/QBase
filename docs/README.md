@@ -269,9 +269,27 @@
     - 打标任务的输入不可用（无转录/未解析）在执行期以 failed 呈现（创建期不拦截），用户在任务中心看到具体原因；总结任务的输入预检仍在创建期（沿用 m6 行为），批量时变为跳过+原因
     - 批量提交后保留选择集（不自动清除），便于紧接对同一批资产做另一批量操作（总结 → 打标工作流：打标输入优先取总结）
 
+- M18 深度分析（多模板分析产物）- 代码已落地（2026-08-24），冒烟（mock LLM 临时知识库全链路：模板生成不覆盖 / 带时间戳输入构造 / 单条任务成功写 analysis.teaching.md / 批量跳过与覆盖备份 / sidecar 输出 / 伪造 pending 任务恢复 / 分析进全文索引 / 超长分窗 5+1 次调用合并）已通过，UI 手动验收步骤见讨论稿 m18-analysis.md §3，待开发人员手动执行
+  - 依据：讨论稿 qwen-prdv1/m18-analysis.md（三个产品决策——模板管理方式 / 渲染方式 / 时间戳交互——用户未逐条答复，按推荐项落地：presets 文件化无 UI 编辑器 / 仅分析用 markdown 渲染 / v1 时间戳仅展示，讨论稿 §0 注明可复核）
+  - 落地内容：
+    - 新增 `app/services/analysis_preset_service.py`：.knowledge/presets/*.md 模板系统（极简 frontmatter 解析、内置 teaching/interview、ensure 已存在不覆盖、list/get、{title} 用 str.replace 替换防花括号冲突）
+    - 新增 `app/services/analysis_service.py`：build_timestamped_input（transcript.json segments → [MM:SS] 说话人: 文本，纯文本转录报错引导 -f json）、_create_analysis_task / start_analysis / start_batch_analysis（该模板已有分析按文件名反解判定，路径无关）/ resume_pending_analysis_tasks / run_analysis_task（备份 → 写 analysis.<preset>.md → 重扫描 + 重建索引）
+    - `app/services/llm_service.py`：analyze_text（模板 system + 带时间戳 user；超长按 split_by_time_windows 时间窗切块逐窗分析再合并，时间感知版 map-reduce）
+    - `app/rules.py`：FLAT/SIDECAR_ANALYSIS_NAME_RE 正则（preset_id 限 [a-z0-9][a-z0-9_-]*），explicit_artifact_kind/_stem 与 sidecar_file_kind 接入 analysis 分支
+    - 配置：DEFAULT_LIBRARY_CONFIG 增 [llm.analysis]（长上下文预算：max_tokens 6000 / timeout 600 / max_input_chars 100000 / window_minutes 15，默认模型 Qwen3-235B-A22B）；config_service 读取/校验/打码/密钥状态/连通测试（kind=llm_analysis）；open_library 挂 ensure_builtin_presets + resume_pending_analysis_tasks
+    - 索引与徽章：INDEX_ARTIFACT_KINDS + analysis（白名单占位符同步 +1）；asset_repository/_HAS_BADGE_COLUMNS 与 search_service._get_derived_badges 增 has_analysis；components 增「分析」徽章（deep-purple）
+    - `app/api/library.py`：GET /api/analysis-presets、POST /api/assets/{id}/analyze、POST /api/assets/batch-analyze
+    - UI：asset_detail「AI 分析」卡片（模板下拉 + 描述/已有提示 + 覆盖确认；无模板/非音视频/非 JSON 转录禁用并说明）+ 派生 tabs「分析·{模板名}」markdown 渲染（_render_markdown_section 剥 frontmatter + 超长分页复用，全项目首个 markdown 渲染点）；assets 批量分析对话框（模板切换刷新描述与已有计数）；tasks TYPE_LABELS「AI 分析」+ 重试分支从 params_json 取 preset_id；settings「AI 分析配置」卡片 +「分析模板」只读列表
+  - 决策记录：
+    - 分析是独立产物类型（一个资产 × 一个模板 = 一份分析），不改造总结；打标输入优先总结的链路不变，分析不参与打标输入
+    - 「已有该模板分析」跳过判定按文件名反解 preset（路径无关）——中途创建 .kb 目录不改变判定，与总结的 kind 级宽松语义一致
+    - 内置模板 types 标注 audio/video（需 JSON 转录才有时间锚点）；机制上 types 字段留文档类扩展
+    - 超长兜底按时间窗而非字符切（保结构与时间戳）；完全无时间戳时明确报错不降级
+
 ## 项目文档
 
-- [项目现状同步-2026-08-23.md](./项目现状同步-2026-08-23.md) - 面向协作者的完整现状快照（功能全景 / 架构 / API / 配置 / 决策 / 限制 / 规划）
+- [项目现状同步-2026-08-24.md](./项目现状同步-2026-08-24.md) - 面向协作者的完整现状快照（功能全景 / 架构 / API / 配置 / 决策 / 限制 / 规划）
+- [项目现状同步-2026-08-23.md](./项目现状同步-2026-08-23.md) - 历史快照（M17 时点）
 - [项目梳理报告.md](./项目梳理报告.md) - 2026-08-16 项目全景梳理（历史演进 / 技术转向 / 架构决策）
 
 ## 修复记录

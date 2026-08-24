@@ -530,6 +530,11 @@ episode-001.summary.md           AI 总结
 episode-001.notes.md             用户笔记
 episode-001.parsed.md            文档解析结果，后续使用
 episode-001.meta.json            元数据，后续使用
+episode-001.analysis.<preset_id>.md
+                                 AI 深度分析（m18），<preset_id> 对应
+                                 .knowledge/presets/<preset_id>.md 模板
+                                 （限 [a-z0-9][a-z0-9_-]*），一个资产 ×
+                                 一个模板 = 一份分析
 ```
 
 m11 起同时识别 sidecar 目录形态 `episode-001.mp3.kb\`（见 §9.4），两种形态可并存。
@@ -613,7 +618,8 @@ episode-001.mp3.kb\
 目录名 = 原始文件完整文件名 + .kb（含扩展名），按 relative_path 精确绑定资产，
 无 stem 歧义；资产不存在时目录内容计入孤儿，不入库，资产恢复后刷新重新绑定
 内部固定文件名映射 kind：transcript.json / transcript.txt → transcript、
-summary.md → summary、notes.md → note、parsed.md → parsed、meta.json → meta；
+summary.md → summary、notes.md → note、parsed.md → parsed、meta.json → meta、
+analysis.<preset_id>.md → analysis（m18 变长模式，preset_id 反解自文件名）；
 未识别命名与隐藏文件忽略，不递归子目录
 写入策略 = 跟随现状（opt-in）：资产旁已存在 .kb\ 目录时，应用生成的总结 /
 解析产物写入目录内（文件名无 stem 前缀）；否则维持平铺。手动建目录，或在
@@ -1261,6 +1267,37 @@ started_at
 finished_at
 output_path
 ```
+
+### 13.8 AI 深度分析（多模板分析产物，m18）
+
+优先级：P1（m18 已实现）
+
+定位：**总结服务快速浏览（短、泛），分析服务深度使用（长、结构化、
+带时间锚点）**。总结与打标行为不变，分析不参与打标输入。
+
+**分析模板**：`.knowledge/presets/<preset_id>.md`，frontmatter（name /
+description / types，默认 audio, video）+ 正文即提示词模板（占位符
+`{title}` 替换为资产标题）。开库自动生成内置「授课分析」（teaching）
+与「访谈分析」（interview）模板，已存在一律不覆盖。
+
+**产物**：一个资产 × 一个模板 = 一份分析。有 `.kb/` sidecar 目录写
+`analysis.<preset_id>.md`，否则平铺 `{stem}.analysis.<preset_id>.md`；
+frontmatter 记 type/preset/preset_name/source/generator/model/
+created_at；覆盖前备份 `.knowledge/backups/`；扫描识别 kind=analysis，
+进全文索引。
+
+**输入**：active 的 `.transcript.json` segments 构造带时间戳文本
+（`[MM:SS] 说话人: 文本`，speaker 缺失由模型推断并注明）；纯文本
+转录报错引导 `-f json` 重转录。超长（> max_input_chars）按时间窗
+（window_minutes）切块逐窗分析后合并，保留时间戳与模板结构。
+
+**任务**：新任务类型 analysis，params_json 记 preset_id / preset_name；
+单条（详情页「AI 分析」卡片选模板）+ 批量（列表多选，跳过已有该模板
+分析 / 全部重新生成）+ 重启恢复 + 失败重试，全部复用 M17 设施。
+
+**展示**：详情页派生 tabs「分析·{模板名}」，markdown 渲染（剥
+frontmatter，超长分页）；列表「分析」徽章。v1 时间戳仅展示，点击
+跳转留后续。
 
 ---
 
@@ -1942,6 +1979,7 @@ summary
 note
 parsed
 meta
+analysis
 ```
 
 `source`：
@@ -2106,6 +2144,21 @@ temperature = 0.1
 max_tokens = 300
 timeout = 60
 max_input_chars = 4000
+
+[llm.analysis]
+# AI 深度分析（m18）：模板驱动的分析产物（授课分析 / 访谈分析等）。
+# 长输入长输出——需要长上下文模型；超过 max_input_chars 时按时间窗
+# 切块逐窗分析后合并（window_minutes）；模板见 .knowledge/presets/
+enabled = false
+provider = "openai_compatible"
+base_url = "https://api.example.com/v1"
+api_key_env = "OPENAI_API_KEY"
+model = "long-context-model"
+temperature = 0.3
+max_tokens = 6000
+timeout = 600
+max_input_chars = 100000
+window_minutes = 15
 
 [embedding]
 enabled = true
@@ -2286,6 +2339,7 @@ app/
 打开目录
 生成转录
 生成总结
+生成分析（m18 选模板）
 ```
 
 状态徽章：
@@ -2465,6 +2519,10 @@ POST /api/assets/batch-summarize（m17，批量总结：body {asset_ids, overwri
   逐资产预检建任务，不合规项 skipped 返回原因）
 POST /api/assets/batch-tag（m17，批量 AI 打标：body {asset_ids}，建议清洗后
   自动追加写库，不删除已有标签）
+GET /api/analysis-presets（m18，分析模板列表）
+POST /api/assets/{asset_id}/analyze（m18，深度分析：body {preset_id}）
+POST /api/assets/batch-analyze（m18，批量分析：body {asset_ids,
+  preset_id, overwrite}，逐资产预检建任务，不合规项 skipped 返回原因）
 ```
 
 ---
@@ -3165,6 +3223,38 @@ POST /api/assets/batch-tag
 单条总结、M16 建议标签、M15 手动打标行为完全不变
 ```
 
+### M18：深度分析（多模板分析产物）
+
+目标：
+
+```text
+新增派生产物类型 analysis：一个资产 × 一个分析模板 = 一份分析文件
+（区别于总结：长输出、结构化、带时间锚点；总结/打标行为不变）
+模板文件化 .knowledge/presets/<preset_id>.md：frontmatter（name/
+description/types）+ 正文即提示词（{title} 占位符）；开库生成内置
+授课分析 / 访谈分析两模板，已存在不覆盖——改文件即改提示词、加文件
+即加新分析类型
+输入带时间戳：transcript.json segments → [MM:SS] 说话人: 文本；
+纯文本转录报错引导 -f json 重转录；超长按时间窗切块逐窗分析后合并
+独立 [llm.analysis] 配置（长上下文模型、max_tokens 6000、
+max_input_chars 100000、window_minutes 15）
+任务形态复用 M17：新任务类型 analysis，单条（详情页选模板）+ 批量
+（列表多选，跳过已有/全部重新生成）+ 重启恢复 + 失败重试；REST：
+GET /api/analysis-presets、POST /api/assets/{id}/analyze、
+POST /api/assets/batch-analyze
+分析产物 markdown 渲染（详情页 tabs，剥 frontmatter），进全文索引，
+列表「分析」徽章；覆盖前自动备份 .knowledge/backups/
+```
+
+完成标志：
+
+```text
+同一资产可同时持有多个模板的分析，tab 名「分析·{模板名}」
+内置两模板开库自动生成，用户修改不被覆盖
+分析产物带时间戳、markdown 渲染、可被全文搜索命中
+批量/重试/重启恢复正常；总结与打标既有行为完全不变
+```
+
 ---
 
 ## 29. 验收标准
@@ -3514,7 +3604,8 @@ transcript JSON 分段视图已由 M12（详情页分段展示 + 判定统一）
 排序已由 M14（全文 + 向量 RRF 融合）、标签系统已由 M15（简单扁平标签：
 手动打标 + 列表/搜索标签筛选；m16 增 AI 建议标签增强）、批量任务已由
 M17（资产列表多选 + 批量总结 + 批量 AI 打标，复用任务系统与既有 LLM
-配置）完成，剩余：
+配置）、深度分析已由 M18（多模板分析产物：presets 文件化 + 带时间戳
+输入 + [llm.analysis] + 任务复用）完成，剩余：
 
 ```text
 1. 收藏与稍后处理
