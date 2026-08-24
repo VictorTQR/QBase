@@ -1,16 +1,22 @@
 """资产列表页：扫描 / 刷新、类型与文件名与标签过滤、排序、分页、派生状态徽章、
-标签列、打开文件与目录、多选与批量总结 / 批量打标（m17）。"""
+标签列、打开文件与目录、多选与批量总结 / 批量打标（m17）、
+按文件夹层级浏览——面包屑 + 子文件夹导航 + 当前层直接文件（m19）。"""
 
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from nicegui import run, ui
 
 from app.ui.tokens import C, CLS
 from app.database import get_conn
 from app.repositories.artifact_repository import has_active_artifact
-from app.repositories.asset_repository import count_assets, list_assets
+from app.repositories.asset_repository import (
+    count_assets,
+    list_assets,
+    list_child_folders,
+)
 from app.services.analysis_preset_service import list_analysis_presets
 from app.services.analysis_service import (
     has_active_analysis,
@@ -70,6 +76,10 @@ async def assets_page():
                 value="修改时间 ↓",
                 label="排序",
             ).classes("w-36")
+            view_toggle = ui.toggle(
+                {"folder": "按文件夹", "flat": "平铺"},
+                value="folder",
+            ).props('no-caps dense').classes("text-sm")
             count_label = ui.label("").classes("text-sm text-gray-600")
 
         # 批量操作栏（m17）：勾选数 > 0 时可用；选择集按 asset_id 跨页保留
@@ -124,6 +134,7 @@ async def assets_page():
             next_btn = ui.button("下一页 →").props("outline size=sm")
 
         current_page = {"value": 0}
+        current_folder = {"value": ""}  # 当前浏览的文件夹（POSIX 相对路径，"" 为根）
 
         def make_open_file_handler(asset: dict):
             async def handler():
@@ -142,6 +153,71 @@ async def assets_page():
                     notify_error(exc)
 
             return handler
+
+        def make_enter_folder_handler(folder_path: str):
+            async def handler():
+                current_folder["value"] = folder_path
+                current_page["value"] = 0
+                await load_assets()
+
+            return handler
+
+        def make_open_folder_row_handler(folder_path: str):
+            async def handler():
+                try:
+                    absolute_dir = Path(state.library_root) / folder_path
+                    await run.io_bound(open_folder, str(absolute_dir))
+                except Exception as exc:
+                    notify_error(exc)
+
+            return handler
+
+        def render_folder_breadcrumb():
+            """文件夹模式下的路径面包屑：祖先可点击返回，当前层加粗。"""
+            with ui.row().classes(CLS["breadcrumb"]):
+                if current_folder["value"]:
+                    ui.button(
+                        "全部", on_click=make_enter_folder_handler("")
+                    ).props("flat dense size=sm no-caps").classes(CLS["link"])
+                else:
+                    ui.label("全部").classes(CLS["breadcrumb_current"])
+
+                prefix = ""
+                segments = current_folder["value"].split("/")
+                for i, segment in enumerate(segments):
+                    prefix = f"{prefix}/{segment}" if prefix else segment
+                    ui.label("/").classes(CLS["breadcrumb_sep"])
+                    if i < len(segments) - 1:
+                        ui.button(
+                            segment,
+                            on_click=make_enter_folder_handler(prefix),
+                        ).props("flat dense size=sm no-caps").classes(CLS["link"])
+                    else:
+                        ui.label(segment).classes(CLS["breadcrumb_current"])
+
+        def render_folder_row(child: dict):
+            """子文件夹行：名称点击进入，「打开」在资源管理器中定位。"""
+            child_path = (
+                f"{current_folder['value']}/{child['name']}"
+                if current_folder["value"]
+                else child["name"]
+            )
+            with ui.row().classes(CLS["table_row"]).style("min-width: 1080px"):
+                ui.icon("folder", color="amber").classes("w-10")
+                ui.button(
+                    child["name"],
+                    on_click=make_enter_folder_handler(child_path),
+                ).props("flat dense no-caps align=left").classes(
+                    "flex-1 truncate text-blue-600"
+                ).tooltip(child_path)
+                ui.badge(f"{child['count']} 个资产", color=C.NEUTRAL).classes(
+                    "text-xs"
+                )
+                with ui.row().classes("w-36 gap-1 justify-end"):
+                    ui.button(
+                        "打开",
+                        on_click=make_open_folder_row_handler(child_path),
+                    ).props("dense size=sm")
 
         async def load_tag_options():
             """加载全部标签名作为筛选项（库未建标签表等异常时静默为空）。"""
@@ -174,11 +250,30 @@ async def assets_page():
             keyword = (name_filter.value or "").strip() or None
             tag_names = [t for t in (tag_filter.value or []) if t] or None
 
+            # 文件夹浏览 = 按文件夹视图且无关键词；全库搜索与平铺模式不按文件夹过滤
+            folder_browsing = view_toggle.value == "folder" and not keyword
+            # None = 不过滤（搜索 / 平铺）；"" = 根层直接文件
+            folder = current_folder["value"] if folder_browsing else None
+
             def _load():
                 conn = get_conn(get_db_path())
                 try:
+                    folders = (
+                        list_child_folders(
+                            conn,
+                            folder=folder,
+                            asset_type=asset_type,
+                            tag_names=tag_names,
+                        )
+                        if folder_browsing
+                        else []
+                    )
                     total = count_assets(
-                        conn, asset_type, keyword=keyword, tag_names=tag_names
+                        conn,
+                        asset_type,
+                        keyword=keyword,
+                        tag_names=tag_names,
+                        folder=folder,
                     )
                     rows = list_assets(
                         conn,
@@ -189,23 +284,45 @@ async def assets_page():
                         order_dir=order_dir,
                         keyword=keyword,
                         tag_names=tag_names,
+                        folder=folder,
                     )
                 finally:
                     conn.close()
-                return total, rows
+                return folders, total, rows
 
-            total, assets = await run.io_bound(_load)
+            folders, total, assets = await run.io_bound(_load)
 
             total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
-            count_label.text = f"共 {total} 个资产"
+            if keyword:
+                count_label.text = f"全库搜索：{total} 个结果"
+            elif folder_browsing:
+                count_label.text = (
+                    f"当前层 {total} 个文件 · {len(folders)} 个子文件夹"
+                )
+            else:
+                count_label.text = f"共 {total} 个资产"
             page_label.text = f"第 {page + 1} / {total_pages} 页"
             prev_btn.disabled = page <= 0
             next_btn.disabled = page >= total_pages - 1
 
             list_container.clear()
             with list_container:
+                if folder_browsing:
+                    render_folder_breadcrumb()
+                    for child in folders:
+                        render_folder_row(child)
+
                 if not assets:
-                    if keyword or asset_type or tag_names:
+                    if folder_browsing and folders:
+                        ui.label("此文件夹内暂无直接资产。").classes(
+                            "text-gray-600"
+                        )
+                    elif folder_browsing and current_folder["value"]:
+                        if asset_type or tag_names:
+                            ui.label("没有匹配的资产。").classes("text-gray-600")
+                        else:
+                            ui.label("此文件夹内暂无资产。").classes("text-gray-600")
+                    elif keyword or asset_type or tag_names:
                         ui.label("没有匹配的资产。").classes("text-gray-600")
                     else:
                         ui.label("暂无资产。请点击「扫描 / 刷新」。").classes(
@@ -237,6 +354,10 @@ async def assets_page():
 
                     return handler
 
+                # 文件夹浏览时标题即文件名、路径列冗余（标题列加宽）；
+                # 搜索 / 平铺模式保留完整路径列便于定位
+                show_path = not folder_browsing
+
                 with ui.row().classes(CLS["table_head"]).style("min-width: 1080px"):
                     ui.checkbox(
                         "",
@@ -246,9 +367,12 @@ async def assets_page():
                         ),
                         on_change=make_select_all_handler(),
                     ).classes("w-10").tooltip("全选本页")
-                    ui.label("标题").classes("w-56")
+                    ui.label("标题").classes(
+                        "w-56" if show_path else "flex-1"
+                    )
                     ui.label("类型").classes("w-16")
-                    ui.label("路径").classes("flex-1")
+                    if show_path:
+                        ui.label("路径").classes("flex-1")
                     ui.label("标签").classes("w-40")
                     ui.label("状态").classes("w-48")
                     ui.label("大小").classes("w-20 text-right")
@@ -268,12 +392,18 @@ async def assets_page():
                         ui.link(
                             asset["title"],
                             f"/assets/{asset['id']}",
-                        ).classes("w-56 truncate text-blue-600").tooltip(asset["title"])
+                        ).classes(
+                            "w-56 truncate text-blue-600"
+                            if show_path
+                            else "flex-1 truncate text-blue-600"
+                        ).tooltip(asset["title"])
 
                         ui.label(asset["type"]).classes("w-16")
-                        ui.label(asset["relative_path"]).classes(
-                            "flex-1 truncate"
-                        ).tooltip(asset["relative_path"])
+
+                        if show_path:
+                            ui.label(asset["relative_path"]).classes(
+                                "flex-1 truncate"
+                            ).tooltip(asset["relative_path"])
 
                         tags = sorted(asset.get("tags") or [])
                         with ui.row().classes("w-40 gap-1 flex-wrap"):
@@ -325,6 +455,8 @@ async def assets_page():
                     )
 
                 current_page["value"] = 0
+                # 扫描可能删除文件夹，回到根目录避免停留在已消失的路径
+                current_folder["value"] = ""
                 await load_assets()
                 # 扫描会清理已删资产及其标签绑定，筛选项随之刷新
                 await load_tag_options()
@@ -623,6 +755,7 @@ async def assets_page():
         type_filter.on_value_change(handle_filter_or_sort_change)
         tag_filter.on_value_change(handle_filter_or_sort_change)
         sort_select.on_value_change(handle_filter_or_sort_change)
+        view_toggle.on_value_change(handle_filter_or_sort_change)
         name_filter.on_value_change(lambda: schedule_name_filter_reload())
         prev_btn.on_click(handle_prev)
         next_btn.on_click(handle_next)

@@ -122,13 +122,30 @@ def _build_asset_filters(
     asset_type: str | None,
     keyword: str | None,
     tag_names: list[str] | None = None,
+    folder: str | None = None,
+    folder_direct_only: bool = True,
 ) -> tuple[str, list]:
-    """构造类型、文件名（标题/相对路径）与标签筛选条件。
+    """构造类型、文件名（标题/相对路径）、标签与文件夹筛选条件。
 
     标签为多选 OR 语义：资产带任一所选标签即保留。
+    folder: POSIX 相对路径的文件夹前缀；None 表示不按文件夹过滤（搜索 /
+    平铺），"" 表示根目录，非空值表示子文件夹。folder_direct_only 为 True
+    时仅保留该文件夹的直接文件，False 时保留整个子树。
     """
     clauses: list[str] = []
     params: list = []
+
+    if folder is not None:
+        if folder:
+            clauses.append("a.relative_path LIKE ? ESCAPE '\\'")
+            params.append(f"{escape_like(folder)}/%")
+            rest_start = len(folder) + 2
+        else:
+            rest_start = 1
+        if folder_direct_only:
+            # 去掉「folder/」前缀后不含 "/"，即当前层的直接文件
+            clauses.append("instr(substr(a.relative_path, ?), '/') = 0")
+            params.append(rest_start)
 
     if asset_type:
         clauses.append("a.type = ?")
@@ -165,6 +182,7 @@ def list_assets(
     order_dir: str = "DESC",
     keyword: str | None = None,
     tag_names: list[str] | None = None,
+    folder: str | None = None,
 ) -> list[dict]:
     """获取资产列表，附带派生文件状态（徽章）与标签，支持筛选、排序与分页。
 
@@ -172,6 +190,7 @@ def list_assets(
     order_dir: "ASC" / "DESC"
     keyword: 文件名关键词，命中标题或相对路径
     tag_names: 标签多选（OR）；行内 tags 为标签名列表，展示顺序由 UI 排序
+    folder: 仅返回该文件夹的直接文件；"" 表示根层，None 表示不按文件夹过滤
     """
     if order_by not in _ALLOWED_ORDER_COLUMNS:
         order_by = "mtime"
@@ -187,7 +206,9 @@ def list_assets(
         WHERE at.asset_id = a.id) AS tags_csv
     """
 
-    where_clause, params = _build_asset_filters(asset_type, keyword, tag_names)
+    where_clause, params = _build_asset_filters(
+        asset_type, keyword, tag_names, folder=folder
+    )
 
     rows = conn.execute(
         f"""
@@ -215,13 +236,59 @@ def count_assets(
     asset_type: str | None = None,
     keyword: str | None = None,
     tag_names: list[str] | None = None,
+    folder: str | None = None,
 ) -> int:
-    where_clause, params = _build_asset_filters(asset_type, keyword, tag_names)
+    where_clause, params = _build_asset_filters(
+        asset_type, keyword, tag_names, folder=folder
+    )
     row = conn.execute(
         f"SELECT COUNT(*) AS cnt FROM assets a {where_clause}",
         params,
     ).fetchone()
     return int(row["cnt"]) if row else 0
+
+
+def list_child_folders(
+    conn: sqlite3.Connection,
+    folder: str | None = None,
+    asset_type: str | None = None,
+    keyword: str | None = None,
+    tag_names: list[str] | None = None,
+) -> list[dict]:
+    """列出 folder 的直接子文件夹，附带各子树内匹配筛选的资产总数。
+
+    对子树下每个资产取「去掉 folder/ 前缀后的第一段」分组计数，深层资产
+    天然聚合到顶层段，因此 count 是递归总数。按文件夹名升序返回
+    [{"name": ..., "count": ...}, ...]。
+    """
+    where_clause, params = _build_asset_filters(
+        asset_type,
+        keyword,
+        tag_names,
+        folder=folder or None,
+        folder_direct_only=False,
+    )
+    # substr 起点：根为 1（整条路径）；子文件夹去掉「folder/」后为 len+2
+    rest_start = len(folder) + 2 if folder else 1
+
+    rows = conn.execute(
+        f"""
+        SELECT
+          substr(rest, 1, instr(rest, '/') - 1) AS name,
+          COUNT(*) AS cnt
+        FROM (
+          SELECT substr(a.relative_path, ?) AS rest
+          FROM assets a
+          {where_clause}
+        )
+        WHERE instr(rest, '/') > 0
+        GROUP BY name
+        ORDER BY name ASC
+        """,
+        [rest_start] + params,
+    ).fetchall()
+
+    return [{"name": row["name"], "count": int(row["cnt"])} for row in rows]
 
 
 def get_asset_by_id(conn: sqlite3.Connection, asset_id: str) -> dict | None:
