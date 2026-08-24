@@ -14,7 +14,7 @@ from app.utils import read_text_for_index
 
 CHUNK_MAX_CHARS = 800
 
-INDEX_ARTIFACT_KINDS = ("transcript", "summary", "note", "parsed")
+INDEX_ARTIFACT_KINDS = ("transcript", "summary", "note", "parsed", "analysis")
 
 
 def utcnow_iso() -> str:
@@ -108,12 +108,12 @@ def rebuild_fulltext_index() -> dict:
     try:
         conn.execute("DELETE FROM chunks")
 
-        # 索引派生文件：transcript / summary / note / parsed
+        # 索引派生文件：transcript / summary / note / parsed / analysis
         artifact_rows = conn.execute(
             """
             SELECT id, asset_id, kind, relative_path, absolute_path
             FROM artifacts
-            WHERE status = 'active' AND kind IN (?, ?, ?, ?)
+            WHERE status = 'active' AND kind IN (?, ?, ?, ?, ?)
             """,
             INDEX_ARTIFACT_KINDS,
         ).fetchall()

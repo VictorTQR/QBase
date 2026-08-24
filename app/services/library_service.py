@@ -91,6 +91,23 @@ max_tokens = 300
 timeout = 60
 max_input_chars = 4000
 
+[llm.analysis]
+# AI 深度分析（m18）：模板驱动的分析产物（授课分析 / 访谈分析等）。
+# 长输入长输出——2 小时课程转录约 4-6 万字，需要长上下文模型
+# （可换 GLM / DeepSeek 等任意 OpenAI 兼容长上下文端点）。
+# 超过 max_input_chars 时按时间窗切块逐窗分析后合并；模板见
+# .knowledge/presets/（改文件即改提示词，加文件即加新分析类型）。
+enabled = false
+provider = "openai_compatible"
+base_url = "https://api.siliconflow.cn/v1"
+api_key_env = "SILICONFLOW_API_KEY"
+model = "Qwen/Qwen3-235B-A22B"
+temperature = 0.3
+max_tokens = 6000
+timeout = 600
+max_input_chars = 100000
+window_minutes = 15
+
 [embedding]
 # 向量语义搜索（m5）。使用前先填好 base_url / model / dimension，
 # 再把 enabled 改为 true。dimension 必须与模型实际输出维度一致：
@@ -144,19 +161,26 @@ def open_library(path_str: str) -> dict:
     add_recent_library(str(root))
     logger.info("已打开知识库：{}", root)
 
+    # 生成内置分析模板（已存在不覆盖，m18）
+    from app.services.analysis_preset_service import ensure_builtin_presets
+
+    ensure_builtin_presets()
+
     # 恢复未完结的远程解析任务（幂等；未打开过解析功能时无任务可恢复）
     from app.services.parse_service import resume_running_parse_tasks
 
     resume_running_parse_tasks()
 
-    # 恢复未完结的批量总结 / AI 打标任务（m17，重跑幂等）
+    # 恢复未完结的批量总结 / AI 打标 / 深度分析任务（m17/m18，重跑幂等）
     from app.services.summarization_service import (
         resume_pending_summarization_tasks,
     )
     from app.services.tag_service import resume_pending_tagging_tasks
+    from app.services.analysis_service import resume_pending_analysis_tasks
 
     resume_pending_summarization_tasks()
     resume_pending_tagging_tasks()
+    resume_pending_analysis_tasks()
 
     return {
         "library_root": str(root),

@@ -1,9 +1,11 @@
-"""LLM 服务：OpenAI 兼容 chat completions + 长文本分段摘要合并（m6）+ AI 建议标签（m16）。"""
+"""LLM 服务：OpenAI 兼容 chat completions + 长文本分段摘要合并（m6）+ AI 建议标签（m16）
++ 深度分析（m18，模板提示词 + 时间窗切块合并）。"""
 
 from __future__ import annotations
 
 import httpx
 import json
+import re
 
 SYSTEM_PROMPT = """你是一个知识管理助手。
 请根据用户提供的内容生成中文总结。
@@ -43,6 +45,27 @@ TAGGING_SYSTEM_PROMPT = """你是一个知识管理打标助手。
 2. 每个标签不超过 10 个字符，不要包含逗号。
 3. 优先从「已有标签」中选用语义匹配的，再补充必要的新标签。
 4. 只输出 JSON 字符串数组（如 ["AI", "播客"]），不要输出任何其他内容。"""
+
+# 深度分析（m18）：长内容超出 max_input_chars 时按时间窗逐窗分析后合并。
+# 时间戳行格式 [MM:SS] 或 [H:MM:SS]（由 analysis_service 构造输入时生成）。
+TIMESTAMP_LINE_RE = re.compile(r"^\[(\d{1,3}):(\d{2})(?::(\d{2}))?\]")
+
+ANALYSIS_WINDOW_PROMPT = """这是完整内容的一个时间窗（第 {index} / {total} 窗，覆盖 [{start} – {end}]）。
+请只针对这个时间窗输出分析，保持既定的 Markdown 结构与章节层次；
+不要臆测未出现在本窗中的内容。
+
+内容：
+{window_text}"""
+
+ANALYSIS_MERGE_PROMPT = """下面是一份长内容按时间窗分段生成的分析结果。
+请把它们合并成一份完整的最终分析：
+1. 保持既定的 Markdown 结构（合并同主题段落，重排章节编号）。
+2. 保留所有时间戳引用，不要丢弃或改写时间。
+3. 「手法清单 / 摘录」类汇总章节需跨窗去重合并，按时间排序。
+4. 不要编造分段分析中不存在的信息。
+
+分段分析：
+{partial_analyses}"""
 
 
 def chat_completion(messages: list[dict], config: dict) -> str:
@@ -177,6 +200,157 @@ def summarize_text(text: str, config: dict) -> str:
             {
                 "role": "user",
                 "content": MERGE_SUMMARY_PROMPT.format(partial_summaries=combined),
+            },
+        ],
+        config,
+    )
+
+
+def _line_start_seconds(line: str) -> float | None:
+    """解析行首时间戳 [MM:SS] / [H:MM:SS] 为秒；无时间戳返回 None。"""
+    match = TIMESTAMP_LINE_RE.match(line.strip())
+
+    if match is None:
+        return None
+
+    first, minute, second = match.group(1), match.group(2), match.group(3)
+
+    if second is None:
+        return int(first) * 60 + int(minute)
+
+    return int(first) * 3600 + int(minute) * 60 + int(second)
+
+
+def _format_seconds(total_seconds: int) -> str:
+    hours, rem = divmod(total_seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+
+    return f"{minutes:02d}:{secs:02d}"
+
+
+def split_by_time_windows(text: str, window_minutes: int) -> list[dict]:
+    """按行首时间戳把带时间戳文本聚成时间窗（时间感知版切块，m18）。
+
+    每窗 {start, end, text}：start/end 为窗内首/末时间戳（秒），
+    无时间戳的行归入当前窗；输入完全无时间戳时返回单窗原文。
+    """
+    window_seconds = max(60, int(window_minutes) * 60)
+    windows: list[dict] = []
+    current: dict | None = None
+    current_index = -1
+
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+
+        seconds = _line_start_seconds(line)
+
+        if seconds is None:
+            if current is None:
+                current = {"start": None, "end": None, "lines": []}
+                windows.append(current)
+                current_index = -1
+        else:
+            index = int(seconds // window_seconds)
+
+            if index != current_index:
+                current = {"start": seconds, "end": seconds, "lines": []}
+                windows.append(current)
+                current_index = index
+            else:
+                current["end"] = seconds
+
+        current["lines"].append(line)
+
+    result: list[dict] = []
+
+    for window in windows:
+        if not window["lines"]:
+            continue
+
+        start = window["start"] if window["start"] is not None else 0
+        end = window["end"] if window["end"] is not None else start
+
+        result.append(
+            {
+                "start": start,
+                "end": end,
+                "text": "\n".join(window["lines"]),
+            }
+        )
+
+    return result
+
+
+def analyze_text(system_prompt: str, text: str, config: dict) -> str:
+    """深度分析（m18）：模板提示词为 system，带时间戳全文为 user。
+
+    短输入单次调用；超过 max_input_chars 时按时间窗切块：逐窗调用
+    （附「只分析该时间窗」指令）再用 ANALYSIS_MERGE_PROMPT 合并成
+    完整分析，合并要求保留时间戳与模板结构。
+    """
+    text = text.strip()
+
+    if not text:
+        raise ValueError("输入文本为空，无法生成分析")
+
+    max_input_chars = config.get("max_input_chars", 100000)
+
+    if len(text) <= max_input_chars:
+        return chat_completion(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text},
+            ],
+            config,
+        )
+
+    window_minutes = config.get("window_minutes", 15)
+    windows = split_by_time_windows(text, window_minutes)
+
+    if len(windows) <= 1:
+        raise ValueError(
+            "输入过长且无法按时间戳分窗（转录缺少时间分段），"
+            "请在 [llm.analysis] 中调大 max_input_chars 或改用长上下文模型"
+        )
+
+    partial_analyses: list[str] = []
+
+    for index, window in enumerate(windows):
+        user_content = (
+            f"{system_prompt.strip()}\n\n"
+            + ANALYSIS_WINDOW_PROMPT.format(
+                index=index + 1,
+                total=len(windows),
+                start=_format_seconds(window["start"]),
+                end=_format_seconds(window["end"]),
+                window_text=window["text"],
+            )
+        )
+
+        partial = chat_completion(
+            [
+                {"role": "system", "content": "你是一个内容分析助手，输出简体中文 Markdown。"},
+                {"role": "user", "content": user_content},
+            ],
+            config,
+        )
+        partial_analyses.append(partial.strip())
+
+    combined = "\n\n---\n\n".join(
+        f"【第 {i + 1} 窗 · {_format_seconds(w['start'])} – {_format_seconds(w['end'])}】\n{partial}"
+        for i, (w, partial) in enumerate(zip(windows, partial_analyses))
+    )
+
+    return chat_completion(
+        [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": ANALYSIS_MERGE_PROMPT.format(partial_analyses=combined),
             },
         ],
         config,

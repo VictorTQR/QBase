@@ -107,7 +107,11 @@ _HAS_BADGE_COLUMNS = """
   EXISTS(
     SELECT 1 FROM artifacts b
     WHERE b.asset_id = a.id AND b.kind = 'meta' AND b.status = 'active'
-  ) AS has_meta
+  ) AS has_meta,
+  EXISTS(
+    SELECT 1 FROM artifacts b
+    WHERE b.asset_id = a.id AND b.kind = 'analysis' AND b.status = 'active'
+  ) AS has_analysis
 """
 
 # 排序白名单，防止 SQL 注入

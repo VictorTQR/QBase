@@ -98,7 +98,7 @@ def _extract_highlight_words(query: str) -> list[str]:
 
 
 def _get_derived_badges(conn, asset_id: str | None) -> dict:
-    """查询某资产的派生完成度（转录/总结/笔记/已解析/元数据）。"""
+    """查询某资产的派生完成度（转录/总结/笔记/已解析/元数据/分析）。"""
     if not asset_id:
         return {}
 
@@ -123,10 +123,15 @@ def _get_derived_badges(conn, asset_id: str | None) -> dict:
             CASE WHEN EXISTS(
                 SELECT 1 FROM artifacts WHERE asset_id = ? AND kind = 'meta'
                 AND status = 'active'
-            ) THEN 1 ELSE 0 END AS has_meta
+            ) THEN 1 ELSE 0 END AS has_meta,
+            CASE WHEN EXISTS(
+                SELECT 1 FROM artifacts WHERE asset_id = ? AND kind = 'analysis'
+                AND status = 'active'
+            ) THEN 1 ELSE 0 END AS has_analysis
     """
     row = conn.execute(
-        sql, (asset_id, asset_id, asset_id, asset_id, asset_id)
+        sql,
+        (asset_id, asset_id, asset_id, asset_id, asset_id, asset_id),
     ).fetchone()
     return dict(row) if row else {}
 

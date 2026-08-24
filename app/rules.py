@@ -1,5 +1,6 @@
 """文件类型与忽略规则。"""
 
+import re
 from pathlib import Path
 
 AUDIO_EXTENSIONS = {
@@ -79,6 +80,41 @@ def is_transcript_json_name(filename: str) -> bool:
     return lower == "transcript.json" or lower.endswith(TRANSCRIPT_JSON_SUFFIX)
 
 
+# ── 深度分析产物（m18）──────────────────────────────────────────────────────
+# 平铺 <stem>.analysis.<preset_id>.md / sidecar 目录内 analysis.<preset_id>.md。
+# preset_id 限 [a-z0-9][a-z0-9_-]*，与 .knowledge/presets/<preset_id>.md 模板
+# 文件名一致，保证文件名可无歧义反解出 stem 与 preset。
+ANALYSIS_PRESET_ID = r"[a-z0-9][a-z0-9_-]*"
+FLAT_ANALYSIS_NAME_RE = re.compile(
+    rf"^(?P<stem>.+)\.analysis\.(?P<preset>{ANALYSIS_PRESET_ID})\.md$",
+    re.IGNORECASE,
+)
+SIDECAR_ANALYSIS_NAME_RE = re.compile(
+    rf"^analysis\.(?P<preset>{ANALYSIS_PRESET_ID})\.md$",
+    re.IGNORECASE,
+)
+
+
+def flat_analysis_artifact(filename: str) -> tuple[str, str] | None:
+    """平铺分析文件名 -> (stem, preset_id)；不匹配返回 None。"""
+    match = FLAT_ANALYSIS_NAME_RE.match(filename)
+
+    if match is None:
+        return None
+
+    return match.group("stem"), match.group("preset").lower()
+
+
+def sidecar_analysis_preset(filename: str) -> str | None:
+    """sidecar 目录内分析文件名 -> preset_id；不匹配返回 None。"""
+    match = SIDECAR_ANALYSIS_NAME_RE.match(filename)
+
+    if match is None:
+        return None
+
+    return match.group("preset").lower()
+
+
 def classify_extension(ext: str) -> str | None:
     """根据扩展名判断资产类型。"""
     ext = ext.lower()
@@ -128,6 +164,10 @@ def explicit_artifact_kind(filename: str) -> str | None:
 
     例：episode-001.summary.md -> "summary"
     """
+    # 分析产物（变长 preset_id）先于固定后缀匹配（m18）
+    if FLAT_ANALYSIS_NAME_RE.match(filename):
+        return "analysis"
+
     lower_name = filename.lower()
 
     for suffix, kind in ARTIFACT_SUFFIXES:
@@ -142,6 +182,11 @@ def explicit_artifact_stem(filename: str) -> str:
 
     例：episode-001.transcript.txt -> "episode-001"
     """
+    analysis_parts = flat_analysis_artifact(filename)
+
+    if analysis_parts is not None:
+        return analysis_parts[0]
+
     lower_name = filename.lower()
 
     for suffix, _ in ARTIFACT_SUFFIXES:
@@ -182,6 +227,9 @@ def sidecar_asset_filename(dir_name: str) -> str:
 
 def sidecar_file_kind(filename: str) -> str | None:
     """sidecar 目录内文件名 -> kind；未识别命名返回 None。"""
+    if sidecar_analysis_preset(filename) is not None:
+        return "analysis"
+
     return SIDECAR_FILE_KINDS.get(filename.lower())
 
 

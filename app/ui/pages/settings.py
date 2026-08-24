@@ -201,6 +201,78 @@ def settings_page() -> None:
             with ui.row().classes("mt-3 gap-3"):
                 test_tagging_button = ui.button("测试打标 API", icon="cable")
 
+        # ── AI 分析配置（m18）──
+        analysis_config = config.get("llm", {}).get("analysis", {})
+
+        with ui.card().classes("w-full p-4 mt-4"):
+            ui.label("AI 分析配置").classes("text-lg font-semibold")
+            ui.label(
+                "模板驱动的深度分析（授课分析 / 访谈分析等）。长输入长输出——"
+                "2 小时课程转录约 4-6 万字，建议配置长上下文模型；"
+                "超过 max_input_chars 时按时间窗切块逐窗分析后合并。"
+            ).classes("text-sm text-gray-600 mt-1")
+
+            analysis_enabled = ui.switch(
+                "启用 AI 分析", value=bool(analysis_config.get("enabled", False))
+            )
+            analysis_base_url = ui.input(
+                "Base URL", value=str(analysis_config.get("base_url", ""))
+            ).classes("w-full")
+            analysis_model = ui.input(
+                "Model", value=str(analysis_config.get("model", ""))
+            ).classes("w-full")
+            analysis_api_key_env = ui.input(
+                "API Key 密钥名（api_key_env）",
+                value=str(analysis_config.get("api_key_env", "")),
+            ).classes("w-full")
+            _render_key_status(
+                key_status, str(analysis_config.get("api_key_env", ""))
+            )
+            ui.label(
+                "temperature / max_tokens / timeout / max_input_chars /"
+                " window_minutes 使用默认值，如需调整请编辑 config.toml"
+                " 的 [llm.analysis]。"
+            ).classes("text-xs text-gray-600 mt-2")
+
+            with ui.row().classes("mt-3 gap-3"):
+                test_analysis_button = ui.button("测试分析 API", icon="cable")
+
+        # ── 分析模板（m18，只读：改文件即改提示词）──
+        with ui.card().classes("w-full p-4 mt-4"):
+            ui.label("分析模板").classes("text-lg font-semibold")
+
+            try:
+                from app.services.analysis_preset_service import (
+                    list_analysis_presets,
+                )
+
+                analysis_presets = list_analysis_presets()
+            except Exception:
+                analysis_presets = []
+
+            if analysis_presets:
+                for preset in analysis_presets:
+                    with ui.row().classes("items-center gap-2 mt-1"):
+                        ui.badge(preset["name"], color=C.ANALYSIS)
+                        ui.label(preset["id"]).classes(
+                            "text-xs font-mono text-gray-600"
+                        )
+                        if preset["description"]:
+                            ui.label(preset["description"]).classes(
+                                "text-xs text-gray-600 flex-1 truncate"
+                            ).tooltip(preset["description"])
+                        ui.label(
+                            "适用：" + " / ".join(sorted(preset["types"]))
+                        ).classes("text-xs text-gray-600")
+            else:
+                ui.label("未找到分析模板。").classes("text-sm text-gray-600 mt-1")
+
+            ui.label(
+                "模板位于 .knowledge/presets/*.md：frontmatter 写名称/描述/适用类型，"
+                "正文即提示词（占位符 {title} 会被替换为资产标题）。"
+                "改文件即改提示词，加文件即加新分析类型；内置模板已存在时不覆盖。"
+            ).classes("text-xs text-gray-600 mt-2")
+
         # ── Embedding 配置 ──
         with ui.card().classes("w-full p-4 mt-4"):
             ui.label("Embedding 配置").classes("text-lg font-semibold")
@@ -481,6 +553,12 @@ def settings_page() -> None:
                         "model": str(tagging_model.value or "").strip(),
                         "api_key_env": str(tagging_api_key_env.value or "").strip(),
                     },
+                    "analysis": {
+                        "enabled": bool(analysis_enabled.value),
+                        "base_url": str(analysis_base_url.value or "").strip(),
+                        "model": str(analysis_model.value or "").strip(),
+                        "api_key_env": str(analysis_api_key_env.value or "").strip(),
+                    },
                 },
                 "embedding": {
                     "enabled": bool(embedding_enabled.value),
@@ -576,6 +654,21 @@ def settings_page() -> None:
             finally:
                 test_tagging_button.enable()
 
+        async def handle_test_analysis():
+            test_analysis_button.disable()
+            try:
+                result = await run.io_bound(
+                    config_service.test_connection, "llm_analysis", build_patch()
+                )
+                if result.get("ok"):
+                    ui.notify(result.get("message", "连接成功"), type="positive")
+                else:
+                    ui.notify(result.get("message", "连接失败"), type="negative")
+            except Exception as exc:
+                notify_error(exc)
+            finally:
+                test_analysis_button.enable()
+
         async def handle_test_embedding():
             test_embedding_button.disable()
             try:
@@ -660,6 +753,7 @@ def settings_page() -> None:
         save_button.on_click(handle_save)
         test_llm_button.on_click(handle_test_llm)
         test_tagging_button.on_click(handle_test_tagging)
+        test_analysis_button.on_click(handle_test_analysis)
         test_embedding_button.on_click(handle_test_embedding)
         test_parse_button.on_click(handle_test_parse)
         rebuild_fts_button.on_click(handle_rebuild_fts)

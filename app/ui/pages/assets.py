@@ -11,6 +11,11 @@ from app.ui.tokens import C, CLS
 from app.database import get_conn
 from app.repositories.artifact_repository import has_active_artifact
 from app.repositories.asset_repository import count_assets, list_assets
+from app.services.analysis_preset_service import list_analysis_presets
+from app.services.analysis_service import (
+    has_active_analysis,
+    start_batch_analysis,
+)
 from app.services.scanner_service import scan_current_library
 from app.services.summarization_service import start_batch_summarization
 from app.services.tag_service import get_all_tags, start_batch_tagging
@@ -78,12 +83,16 @@ async def assets_page():
             batch_tag_btn = ui.button("批量打标", icon="sell").props(
                 "outline size=sm"
             )
+            batch_analyze_btn = ui.button("批量分析", icon="query_stats").props(
+                "outline size=sm"
+            )
             clear_selection_btn = ui.button("清除选择").props(
                 "flat size=sm"
             )
 
         batch_summarize_btn.disable()
         batch_tag_btn.disable()
+        batch_analyze_btn.disable()
         clear_selection_btn.disable()
 
         def update_selection_ui():
@@ -91,6 +100,7 @@ async def assets_page():
             selection_label.text = f"已选 {count} 项"
             batch_summarize_btn.enabled = count > 0
             batch_tag_btn.enabled = count > 0
+            batch_analyze_btn.enabled = count > 0
             clear_selection_btn.enabled = count > 0
 
         # 批量确认对话框须在页面层级定义，避免被 list_container.clear() 销毁
@@ -101,6 +111,10 @@ async def assets_page():
         with ui.dialog() as batch_tag_dialog:
             with ui.card():
                 batch_tag_content = ui.column()
+
+        with ui.dialog() as batch_analyze_dialog:
+            with ui.card():
+                batch_analyze_content = ui.column()
 
         list_container = ui.column().classes("w-full mt-4 overflow-x-auto")
 
@@ -457,6 +471,131 @@ async def assets_page():
 
             batch_tag_dialog.open()
 
+        async def run_batch_analyze(overwrite: bool, preset_id: str | None):
+            asset_ids = sorted(selection["ids"])
+            batch_analyze_dialog.close()
+
+            if not asset_ids or not preset_id:
+                return
+
+            try:
+                report = await run.io_bound(
+                    start_batch_analysis, asset_ids, preset_id, overwrite
+                )
+            except Exception as exc:
+                notify_error(exc)
+                return
+
+            message = f"已创建 {report['created']} 个分析任务，进度见任务中心"
+
+            if report["skipped"]:
+                message += f"；跳过 {len(report['skipped'])} 项"
+
+            ui.notify(message, type="positive")
+
+        def count_selected_with_analysis(asset_ids: list[str], preset_id: str) -> int:
+            conn = get_conn(get_db_path())
+            try:
+                return sum(
+                    1
+                    for asset_id in asset_ids
+                    if has_active_analysis(conn, asset_id, preset_id)
+                )
+            finally:
+                conn.close()
+
+        async def open_batch_analyze_dialog():
+            asset_ids = sorted(selection["ids"])
+
+            if not asset_ids:
+                return
+
+            try:
+                presets = await run.io_bound(list_analysis_presets)
+            except Exception as exc:
+                notify_error(exc)
+                return
+
+            if not presets:
+                ui.notify(
+                    "未找到分析模板。模板位于 .knowledge/presets/，"
+                    "加文件即加新分析类型。",
+                    type="warning",
+                )
+                return
+
+            batch_analyze_content.clear()
+
+            with batch_analyze_content:
+                ui.label("批量 AI 分析").classes("text-lg font-bold")
+
+                analyze_preset_select = ui.select(
+                    options={p["id"]: p["name"] for p in presets},
+                    value=presets[0]["id"],
+                    label="分析模板",
+                ).classes("w-64")
+
+                preset_desc_label = ui.label(
+                    presets[0]["description"] or ""
+                ).classes("text-xs text-gray-600 mt-1")
+
+                analyze_existing_label = ui.label().classes("text-sm mt-2")
+                ui.label(
+                    "仅音频 / 视频且已有 JSON 转录的资产会创建任务，"
+                    "其余跳过并记录原因。"
+                ).classes("text-xs text-gray-600 mt-1")
+
+                with ui.row().classes("mt-3 gap-2"):
+                    ui.button(
+                        "跳过已有，分析其余",
+                        on_click=lambda: run_batch_analyze(
+                            False, analyze_preset_select.value
+                        ),
+                    ).props("color=primary")
+                    ui.button(
+                        "全部重新生成（旧文件自动备份）",
+                        on_click=lambda: run_batch_analyze(
+                            True, analyze_preset_select.value
+                        ),
+                    ).props("outline")
+                    ui.button(
+                        "取消", on_click=batch_analyze_dialog.close
+                    ).props("flat")
+
+            async def refresh_existing_count():
+                preset_id = analyze_preset_select.value
+
+                try:
+                    existing_count = await run.io_bound(
+                        count_selected_with_analysis, asset_ids, preset_id
+                    )
+                except Exception:
+                    existing_count = 0
+
+                analyze_existing_label.set_text(
+                    f"已选 {len(asset_ids)} 项，"
+                    f"其中 {existing_count} 项已有此模板的分析。"
+                )
+
+            def handle_preset_change():
+                preset_id = analyze_preset_select.value
+                preset_desc_label.set_text(
+                    next(
+                        (p["description"] for p in presets if p["id"] == preset_id),
+                        "",
+                    )
+                    or ""
+                )
+                # async 刷新计数交给事件循环，避免阻塞 on_change 回调
+                asyncio.create_task(refresh_existing_count())
+
+            analyze_preset_select.on_value_change(
+                lambda: handle_preset_change()
+            )
+            await refresh_existing_count()
+
+            batch_analyze_dialog.open()
+
         async def handle_clear_selection():
             selection["ids"].clear()
             update_selection_ui()
@@ -489,6 +628,7 @@ async def assets_page():
         next_btn.on_click(handle_next)
         batch_summarize_btn.on_click(open_batch_summarize_dialog)
         batch_tag_btn.on_click(open_batch_tag_dialog)
+        batch_analyze_btn.on_click(open_batch_analyze_dialog)
         clear_selection_btn.on_click(handle_clear_selection)
 
         await load_tag_options()

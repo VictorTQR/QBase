@@ -19,6 +19,11 @@ from app.services.library_service import (
     get_library_status,
     open_library,
 )
+from app.services.analysis_preset_service import list_analysis_presets
+from app.services.analysis_service import (
+    start_analysis,
+    start_batch_analysis,
+)
 from app.services.index_service import rebuild_fulltext_index
 from app.services.parse_service import start_parsing
 from app.services.scanner_service import scan_current_library
@@ -55,6 +60,16 @@ class BatchSummarizeRequest(BaseModel):
 
 class BatchTagRequest(BaseModel):
     asset_ids: list[str]
+
+
+class AnalyzeRequest(BaseModel):
+    preset_id: str
+
+
+class BatchAnalyzeRequest(BaseModel):
+    asset_ids: list[str]
+    preset_id: str
+    overwrite: bool = False
 
 
 @router.post("/library/open")
@@ -201,6 +216,44 @@ def api_batch_tag(req: BatchTagRequest) -> dict:
 
     try:
         return start_batch_tagging(req.asset_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/analysis-presets")
+def api_list_analysis_presets() -> dict:
+    """分析模板列表（m18）：.knowledge/presets/ 下的全部可用模板。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    return {"items": list_analysis_presets()}
+
+
+@router.post("/assets/{asset_id}/analyze")
+def api_start_analysis(asset_id: str, req: AnalyzeRequest) -> dict:
+    """触发生成深度分析任务（m18）：preset_id 指定分析模板。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    try:
+        task_id = start_analysis(asset_id, req.preset_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {"task_id": task_id, "status": "pending"}
+
+
+@router.post("/assets/batch-analyze")
+def api_batch_analyze(req: BatchAnalyzeRequest) -> dict:
+    """批量深度分析（m18）：同一模板逐资产预检建任务，不合规项跳过。"""
+    if get_library_status().get("opened") is not True:
+        raise HTTPException(status_code=400, detail="未打开知识库")
+
+    if not req.asset_ids:
+        raise HTTPException(status_code=400, detail="未选择任何资产")
+
+    try:
+        return start_batch_analysis(req.asset_ids, req.preset_id, overwrite=req.overwrite)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

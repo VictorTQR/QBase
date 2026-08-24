@@ -17,6 +17,11 @@ from app.services import (
     tag_service,
     transcription_service,
 )
+from app.services.analysis_preset_service import list_analysis_presets
+from app.services.analysis_service import (
+    analysis_preset_name,
+    start_analysis,
+)
 from app.services.parse_service import PARSEABLE_EXTENSIONS, start_parsing
 from app.services.parsers import get_parser_for_extension
 from app.state import get_db_path, state
@@ -42,9 +47,10 @@ KIND_LABELS = {
     "note": "笔记",
     "parsed": "解析结果",
     "meta": "元数据",
+    "analysis": "分析",
 }
 
-TEXT_ARTIFACT_KINDS = {"transcript", "summary", "note", "parsed"}
+TEXT_ARTIFACT_KINDS = {"transcript", "summary", "note", "parsed", "analysis"}
 
 # 大文本分段阈值
 SEGMENT_SIZE = 10000
@@ -149,8 +155,8 @@ def _render_text_section(artifact: dict):
     collapse_btn.on_click(handle_collapse)
 
 
-def _render_segment(container, segment_state: dict):
-    """渲染分段文本 + 翻页控件。"""
+def _render_segment(container, segment_state: dict, markdown: bool = False):
+    """渲染分段文本 + 翻页控件（markdown=True 时用 ui.markdown 渲染）。"""
     container.clear()
     text = segment_state["full_text"]
     offset = segment_state["offset"]
@@ -161,10 +167,16 @@ def _render_segment(container, segment_state: dict):
     total_pages = (total_len + SEGMENT_SIZE - 1) // SEGMENT_SIZE
 
     with container:
-        ui.label(segment).classes(
-            "text-sm whitespace-pre-wrap text-gray-700 bg-gray-50 p-3 rounded "
-            "max-h-[60vh] overflow-y-auto"
-        )
+        if markdown:
+            ui.markdown(segment).classes(
+                "text-sm text-gray-700 bg-gray-50 p-3 rounded "
+                "max-h-[60vh] overflow-y-auto w-full"
+            )
+        else:
+            ui.label(segment).classes(
+                "text-sm whitespace-pre-wrap text-gray-700 bg-gray-50 p-3 rounded "
+                "max-h-[60vh] overflow-y-auto"
+            )
         with ui.row().classes("items-center gap-3 mt-2"):
             seg_prev = ui.button("← 上一段").props("outline size=sm")
             ui.label(f"第 {current_page} / {total_pages} 段").classes(
@@ -185,6 +197,83 @@ def _render_segment(container, segment_state: dict):
 
             seg_prev.on_click(go_prev)
             seg_next.on_click(go_next)
+
+
+def _strip_frontmatter(text: str) -> str:
+    """剥掉 --- 包裹的 frontmatter（分析/总结文件渲染 markdown 前使用）。"""
+    if not text.startswith("---"):
+        return text
+
+    lines = text.splitlines()
+
+    try:
+        end = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
+    except StopIteration:
+        return text
+
+    return "\n".join(lines[end + 1 :]).strip()
+
+
+def _render_markdown_section(artifact: dict):
+    """渲染 markdown 产物（m18 分析）：预览 / 展开全文 / 超长分页，结构同
+    _render_text_section，区别是剥 frontmatter 后用 ui.markdown 渲染。"""
+    abs_path = artifact["absolute_path"]
+
+    preview_container = ui.column().classes("w-full mt-2")
+    full_container = ui.column().classes("w-full mt-2")
+    full_container.set_visibility(False)
+
+    try:
+        preview_text, _ = read_text_preview(abs_path, max_chars=2000)
+    except Exception:
+        preview_text = "（无法读取预览）"
+
+    with preview_container:
+        ui.markdown(_strip_frontmatter(preview_text)).classes(
+            "text-sm text-gray-700 bg-gray-50 p-3 rounded "
+            "max-h-[40vh] overflow-y-auto w-full"
+        )
+        ui.label("预览已截断").classes("text-xs text-gray-600 mt-1")
+
+    expand_btn = ui.button("展开全文").props("flat size=sm color=blue").classes("mt-1")
+    collapse_btn = ui.button("收起").props("flat size=sm color=grey").classes("mt-1")
+    collapse_btn.set_visibility(False)
+
+    segment_state = {"offset": 0, "total_len": 0, "full_text": ""}
+
+    async def handle_expand():
+        try:
+            text = await run.io_bound(read_text_full, abs_path)
+        except Exception as exc:
+            notify_error(exc)
+            return
+
+        text = _strip_frontmatter(text)
+        segment_state["full_text"] = text
+        segment_state["total_len"] = len(text)
+
+        preview_container.set_visibility(False)
+        full_container.set_visibility(True)
+        expand_btn.set_visibility(False)
+        collapse_btn.set_visibility(True)
+
+        if len(text) <= FULL_TEXT_THRESHOLD:
+            with full_container:
+                ui.markdown(text).classes(
+                    "text-sm text-gray-700 bg-gray-50 p-3 rounded "
+                    "max-h-[70vh] overflow-y-auto w-full"
+                )
+        else:
+            _render_segment(full_container, segment_state, markdown=True)
+
+    def handle_collapse():
+        preview_container.set_visibility(True)
+        full_container.set_visibility(False)
+        expand_btn.set_visibility(True)
+        collapse_btn.set_visibility(False)
+
+    expand_btn.on_click(handle_expand)
+    collapse_btn.on_click(handle_collapse)
 
 
 def _render_transcript_segments(artifact: dict, player=None):
@@ -642,6 +731,131 @@ def asset_detail_page(asset_id: str) -> None:
                     ui.button("生成总结", icon="auto_awesome").props("disable")
                 ui.link("任务中心", "/tasks").classes("flex items-center text-blue-600")
 
+        # AI 分析卡片（m18）：模板驱动的深度分析，一个资产 × 一个模板 = 一份分析
+        analysis_presets: list[dict] = []
+
+        try:
+            analysis_presets = [
+                p for p in list_analysis_presets() if asset["type"] in p["types"]
+            ]
+        except Exception:
+            analysis_presets = []
+
+        # 已有 active 分析的 preset_id 集合（覆盖确认 + 卡片提示）
+        existing_analysis_presets = {
+            pid
+            for pid in (
+                analysis_preset_name(a)
+                for a in artifacts
+                if a["kind"] == "analysis" and a["status"] == "active"
+            )
+            if pid
+        }
+
+        active_json_transcript = any(
+            a["kind"] == "transcript"
+            and a["status"] == "active"
+            and is_json_transcript(a)
+            for a in artifacts
+        )
+
+        async def start_analysis_task():
+            try:
+                task_id = await run.io_bound(
+                    start_analysis, asset["id"], analysis_preset_select.value
+                )
+                ui.notify(
+                    f"分析任务已创建：{task_id[:8]}。请查看任务中心。",
+                    type="positive",
+                )
+                analyze_button.disable()
+            except Exception as exc:
+                notify_error(exc)
+
+        with ui.dialog() as overwrite_analysis_dialog:
+            with ui.card():
+                ui.label("该资产已有此模板的分析文件，是否覆盖？（旧文件会自动备份）")
+                with ui.row().classes("gap-2 mt-3"):
+                    ui.button("取消", on_click=overwrite_analysis_dialog.close)
+
+                    async def confirm_overwrite_analysis():
+                        overwrite_analysis_dialog.close()
+                        await start_analysis_task()
+
+                    ui.button("覆盖并生成", on_click=confirm_overwrite_analysis)
+
+        with ui.card().classes("w-full p-4 mt-4"):
+            ui.label("AI 分析").classes("text-lg font-semibold")
+
+            if asset["type"] not in {"audio", "video"}:
+                analysis_hint = "深度分析目前仅支持音频 / 视频资产。"
+            elif not has_transcript:
+                analysis_hint = "需要先生成转录，才能做深度分析。"
+            elif not active_json_transcript:
+                analysis_hint = (
+                    "当前转录不是 JSON 格式（无时间分段）。"
+                    "请把 [cli] transcribe_command 改为 -f json 重新生成转录。"
+                )
+            else:
+                analysis_hint = (
+                    "基于带时间戳的转录做深度分析（区别于快速浏览的总结），"
+                    "已生成的分析见下方派生文件区。"
+                )
+
+            ui.label(analysis_hint).classes("text-sm text-gray-600")
+
+            can_analyze = (
+                bool(analysis_presets)
+                and asset["type"] in {"audio", "video"}
+                and active_json_transcript
+            )
+
+            if not analysis_presets:
+                ui.label(
+                    "未找到分析模板。模板位于 .knowledge/presets/（加文件即加新分析类型）。"
+                ).classes("text-sm text-orange-600 mt-1")
+
+            analysis_preset_select = ui.select(
+                options={p["id"]: p["name"] for p in analysis_presets},
+                value=analysis_presets[0]["id"] if analysis_presets else None,
+                label="分析模板",
+            ).classes("w-72")
+
+            preset_desc_label = ui.label().classes("text-xs text-gray-600 mt-1")
+            preset_existing_label = ui.label().classes("text-xs text-orange-600")
+
+            def update_preset_desc():
+                preset_id = analysis_preset_select.value
+                desc = next(
+                    (p["description"] for p in analysis_presets if p["id"] == preset_id),
+                    "",
+                )
+                preset_desc_label.set_text(desc or "（无描述）")
+                preset_existing_label.set_text(
+                    "该模板已有分析文件，重新生成会覆盖（旧文件自动备份）。"
+                    if preset_id in existing_analysis_presets
+                    else ""
+                )
+
+            analysis_preset_select.on_value_change(lambda: update_preset_desc())
+            update_preset_desc()
+
+            async def handle_analyze():
+                if analysis_preset_select.value in existing_analysis_presets:
+                    overwrite_analysis_dialog.open()
+                    return
+
+                await start_analysis_task()
+
+            with ui.row().classes("gap-3 mt-3"):
+                if can_analyze:
+                    analyze_button = ui.button(
+                        "生成分析", icon="query_stats", on_click=handle_analyze
+                    )
+                else:
+                    ui.button("生成分析", icon="query_stats").props("disable")
+                ui.link("任务中心", "/tasks").classes("flex items-center text-blue-600")
+
         # 派生文件（多 tab 展示：每个派生文件一个 tab）
         ui.label("派生文件").classes("text-xl font-semibold mt-6")
 
@@ -686,11 +900,33 @@ def asset_detail_page(asset_id: str) -> None:
         if not artifacts:
             ui.label("暂无派生文件。").classes("text-gray-600")
         else:
+            # 分析产物按模板命名：分析·授课分析（模板删除后回退 preset_id）
+            preset_name_by_id: dict[str, str] = {}
+
+            try:
+                preset_name_by_id = {
+                    p["id"]: p["name"] for p in list_analysis_presets()
+                }
+            except Exception:
+                preset_name_by_id = {}
+
+            def artifact_base_label(artifact: dict) -> str:
+                base = KIND_LABELS.get(artifact["kind"], artifact["kind"])
+
+                if artifact["kind"] == "analysis":
+                    preset_id = analysis_preset_name(artifact)
+
+                    if preset_id:
+                        name = preset_name_by_id.get(preset_id, preset_id)
+                        return f"分析·{name}"
+
+                return base
+
             # 计算 tab 标签：kind 标签为主，同 kind 重复时追加序号区分
             seen: dict[str, int] = {}
             tab_names: list[str] = []
             for artifact in artifacts:
-                base = KIND_LABELS.get(artifact["kind"], artifact["kind"])
+                base = artifact_base_label(artifact)
                 if base in seen:
                     seen[base] += 1
                     tab_names.append(f"{base} ({seen[base]})")
@@ -708,8 +944,12 @@ def asset_detail_page(asset_id: str) -> None:
                         with ui.card().classes("w-full p-3"):
                             with ui.row().classes("w-full items-center gap-2"):
                                 ui.badge(
-                                    KIND_LABELS.get(artifact["kind"], artifact["kind"]),
+                                    artifact_base_label(artifact),
                                     color=C.NEUTRAL,
+                                ).tooltip(
+                                    KIND_LABELS.get(
+                                        artifact["kind"], artifact["kind"]
+                                    )
                                 )
                                 ui.label(artifact["relative_path"]).classes(
                                     "flex-1 truncate"
@@ -740,5 +980,7 @@ def asset_detail_page(asset_id: str) -> None:
                                     _render_transcript_segments(
                                         artifact, media_player
                                     )
+                                elif artifact["kind"] == "analysis":
+                                    _render_markdown_section(artifact)
                                 else:
                                     _render_text_section(artifact)

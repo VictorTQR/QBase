@@ -23,6 +23,7 @@ class C:
     PARSED = "teal"
     META = "grey-6"
     PENDING = "orange"
+    ANALYSIS = "deep-purple"
 
     # 标签徽章（m15）
     TAG = "indigo"

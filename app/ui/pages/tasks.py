@@ -34,6 +34,7 @@ TYPE_LABELS = {
     "summarization": "总结",
     "parse": "解析",
     "tagging": "AI 打标",
+    "analysis": "AI 分析",
 }
 
 
@@ -259,6 +260,27 @@ def tasks_page() -> None:
 
                         ui.notify(
                             f"已创建新打标任务：{new_task_id[:8]}",
+                            type="positive",
+                        )
+
+                    elif task["type"] == "analysis" and task["asset_id"]:
+                        from app.services.analysis_service import start_analysis
+
+                        try:
+                            params = json.loads(task["params_json"] or "{}")
+                        except json.JSONDecodeError:
+                            params = {}
+
+                        preset_id = str(params.get("preset_id") or "")
+
+                        new_task_id = await run.io_bound(
+                            start_analysis,
+                            task["asset_id"],
+                            preset_id,
+                        )
+
+                        ui.notify(
+                            f"已创建新分析任务：{new_task_id[:8]}",
                             type="positive",
                         )
 
