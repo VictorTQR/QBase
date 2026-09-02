@@ -77,11 +77,13 @@ def chat_completion(messages: list[dict], config: dict) -> str:
         "Content-Type": "application/json",
     }
 
+    max_tokens = config.get("max_tokens", 2000)
+
     payload = {
         "model": config["model"],
         "messages": messages,
         "temperature": config.get("temperature", 0.2),
-        "max_tokens": config.get("max_tokens", 2000),
+        "max_tokens": max_tokens,
     }
 
     with httpx.Client(timeout=config.get("timeout", 180)) as client:
@@ -99,7 +101,31 @@ def chat_completion(messages: list[dict], config: dict) -> str:
     if not choices:
         raise RuntimeError("LLM API 返回空结果")
 
-    return choices[0].get("message", {}).get("content", "")
+    choice = choices[0]
+    content = (choice.get("message") or {}).get("content") or ""
+    finish_reason = choice.get("finish_reason")
+
+    if finish_reason == "length":
+        reasoning_tokens = (
+            (data.get("usage") or {}).get("completion_tokens_details") or {}
+        ).get("reasoning_tokens")
+        reasoning_part = (
+            f"，其中思考消耗 {reasoning_tokens} token"
+            if reasoning_tokens is not None
+            else ""
+        )
+        raise RuntimeError(
+            f"LLM 输出在 max_tokens={max_tokens} 处被截断（finish_reason=length"
+            f"{reasoning_part}）。思考型模型的推理 token 计入 max_tokens，"
+            "请在配置中调大后重试"
+        )
+
+    if not content.strip():
+        raise RuntimeError(
+            f"LLM 返回空内容（finish_reason={finish_reason}），请重试或检查模型配置"
+        )
+
+    return content
 
 
 def split_text_for_summary(text: str, chunk_chars: int) -> list[str]:
