@@ -295,6 +295,18 @@
     - 关键词非空即全库搜索（忽略当前文件夹），清空后回到原文件夹——「浏览时范围是当前文件夹，搜索时范围是全库」
     - 不新增表/列，文件夹概念继续隐含在 relative_path（KISS）；分页仅作用文件行，多选/批量/排序零改动
 
+- M20 LLM 异步对话补全（智谱）- 代码已落地（2026-09-03），自检（MockTransport 全分支：提交→PROCESSING→SUCCESS 提取 / 提交 404 提示改回 sync / FAIL 带错误详情 / 轮询 401 早失败 / 持续 500 容忍至超时 / 提交缺任务 id 报错 / mode 路由与 thinking 透传断言 / validate_config 集成）已通过，真实 API 冒烟待开发人员手动执行
+  - 依据：智谱官方文档「对话补全（异步）」POST /paas/v4/async/chat/completions 与「查询异步结果」GET /paas/v4/async-result/{id}（三个方案决策经用户确认：三功能统一支持 / 重启重新提交不续轮 / 顺带支持 thinking 配置；provider 抽象层评估后不做）
+  - 落地内容：
+    - `app/services/llm_service.py`：chat_completion 按 config["mode"] 分支（sync 原逻辑不变）；新增 _chat_completion_async（提交→轮询→提取，端点从 base_url 推导；timeout 只约束单次 HTTP，max_wait_seconds 默认 1800 总体截止，poll_interval_seconds 默认 5；单次轮询网络异常/非 200 容忍至截止，401/403 立即失败）；抽取共享 _build_payload（thinking 显式配置才附带 {"type":...}）与 _extract_content（截断检查 + 异步特有 finish_reason 中文报错：sensitive/network_error/model_context_window_exceeded）；提交 404/405 报错提示改回 sync
+    - `app/services/config_service.py`：_llm_async_fields（mode/thinking/poll_interval_seconds/max_wait_seconds 归一化，默认 sync/不传/5/1800）接入三个 LLM getter；_validate_llm_async_fields 接入 validate_config 三处（枚举与数值校验）
+    - `app/ui/pages/settings.py`：AI 服务三张卡片（总结/打标/分析）各加「调用模式」（同步/异步（智谱））与「thinking」（默认不传/开启/关闭）下拉，纳入 build_patch 写回；说明文字注明异步为智谱专有接口
+  - 决策记录：
+    - 异步为智谱系专属可选能力，mode 默认 sync，DeepSeek/硅基流动等用户零感知；误开时报可读错误而非静默降级
+    - 重启时轮询中的任务随任务系统整体重跑（重新提交），不持久化智谱 task_id（分析是 map-reduce 多次调用，逐调用持久化复杂度不成比例）
+    - 不引入 provider 抽象层：真实差异仅一对端点+一个参数且全部提供商 OpenAI 兼容；config 的 provider 字段 + chat_completion 唯一入口即抽象缝，出现协议级分歧提供商/特有能力 ≥3/UI 需要提供商预设时再评估
+    - 异步 max_tokens 上限 128K（同步一般 8~16K），配合 thinking 显式开关治理思考型模型推理 token 预算截断（60fb62e 的根因修复）
+
 ## 项目文档
 
 - [项目现状同步-2026-08-24.md](./项目现状同步-2026-08-24.md) - 面向协作者的完整现状快照（功能全景 / 架构 / API / 配置 / 决策 / 限制 / 规划）

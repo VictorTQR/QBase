@@ -2138,6 +2138,13 @@ max_tokens = 2000
 timeout = 180
 max_input_chars = 24000
 chunk_chars = 6000
+# 异步对话补全（m20，智谱系专有）：mode=async 走「提交 + 轮询」，
+# poll_interval_seconds / max_wait_seconds 仅 async 生效；
+# thinking = "enabled"/"disabled" 显式传 {"type":...}，留空不传（默认）
+mode = "sync"
+thinking = ""
+poll_interval_seconds = 5
+max_wait_seconds = 1800
 
 [llm.tagging]
 # AI 建议标签（m16）：详情页「AI 建议标签」生成建议，确认后保存；
@@ -2151,11 +2158,16 @@ temperature = 0.1
 max_tokens = 300
 timeout = 60
 max_input_chars = 4000
+mode = "sync"
+thinking = ""
+poll_interval_seconds = 5
+max_wait_seconds = 1800
 
 [llm.analysis]
 # AI 深度分析（m18）：模板驱动的分析产物（授课分析 / 访谈分析等）。
 # 长输入长输出——需要长上下文模型；超过 max_input_chars 时按时间窗
 # 切块逐窗分析后合并（window_minutes）；模板见 .knowledge/presets/
+# 智谱异步模式（m20）max_tokens 上限 128K，思考型模型不再被截断
 enabled = false
 provider = "openai_compatible"
 base_url = "https://api.example.com/v1"
@@ -2166,6 +2178,10 @@ max_tokens = 6000
 timeout = 600
 max_input_chars = 100000
 window_minutes = 15
+mode = "sync"
+thinking = ""
+poll_interval_seconds = 5
+max_wait_seconds = 1800
 
 [embedding]
 enabled = true
@@ -3297,6 +3313,41 @@ POST /api/assets/batch-analyze
 
 ---
 
+### M20：LLM 异步对话补全（智谱）
+
+目标：
+
+```text
+chat_completion 按 [llm.*] 的 mode 配置分支：sync（默认，现状不变）/
+async（智谱异步对话补全）；三个 LLM 功能（总结/打标/分析）独立开关
+async 走「提交 + 轮询」：POST {base_url}/async/chat/completions 返回
+任务 id，轮询 GET {base_url}/async-result/{id} 至 SUCCESS/FAIL
+（端点从 base_url 推导，不硬编码域名，网关代理同样可用）
+提交/轮询均为短请求：timeout 只约束单次 HTTP；总体截止 max_wait_seconds
+（默认 1800），轮询间隔 poll_interval_seconds（默认 5）；单次轮询网络
+异常或非 200 容忍至截止时间（401/403 密钥问题立即失败）
+结果校验与 sync 共用：finish_reason=length 截断检查（含 reasoning_tokens
+提示，异步模式 max_tokens 上限 128K 可大幅调大）+ 异步特有 finish_reason
+中文报错（sensitive / network_error / model_context_window_exceeded）
+提交 404/405 提示「当前提供商不支持异步对话接口，请改回 sync」，不静默降级
+thinking 字段（智谱系参数）：显式配置 enabled/disabled 才附带
+{"type": ...}，未配置完全不传，兼容所有 OpenAI 兼容端点
+设置页 AI 服务三张卡片（总结/打标/分析）加「调用模式」「thinking」下拉，
+写回 config.toml；poll/max_wait 走 config.toml 直编
+不引入 provider 抽象层：真实差异仅一对端点 + 一个参数，全部提供商均
+OpenAI 兼容；config 的 provider 字段 + chat_completion 唯一入口即抽象缝
+```
+
+完成标志：
+
+```text
+默认 sync 路径回归：总结/打标/分析行为不变，payload 不含 thinking
+async 模式深度分析：提交→轮询→产物落盘；思考型模型配大 max_tokens 不再截断
+不支持异步的提供商误开 async：报错可读并指回 sync
+```
+
+---
+
 ## 29. 验收标准
 
 ### 29.1 知识库
@@ -3663,7 +3714,8 @@ M17（资产列表多选 + 批量总结 + 批量 AI 打标，复用任务系统�
 配置）、深度分析已由 M18（多模板分析产物：presets 文件化 + 带时间戳
 输入 + [llm.analysis] + 任务复用）、资产列表文件夹层级浏览已由 M19
 （文件管理器式导航：面包屑 + 子文件夹递归计数 + 当前层直接文件 +
-关键词全库搜索）完成，剩余：
+关键词全库搜索）、LLM 异步对话补全已由 M20（[llm.*] mode 切换 +
+智谱提交/轮询 + thinking 显式配置）完成，剩余：
 
 ```text
 1. 收藏与稍后处理
