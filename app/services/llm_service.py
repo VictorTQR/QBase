@@ -1,11 +1,13 @@
 """LLM 服务：OpenAI 兼容 chat completions + 长文本分段摘要合并（m6）+ AI 建议标签（m16）
-+ 深度分析（m18，模板提示词 + 时间窗切块合并）。"""
++ 深度分析（m18，模板提示词 + 时间窗切块合并）
++ 异步对话补全（m20，智谱提交 + 轮询，mode 配置切换）。"""
 
 from __future__ import annotations
 
 import httpx
 import json
 import re
+import time
 
 SYSTEM_PROMPT = """你是一个知识管理助手。
 请根据用户提供的内容生成中文总结。
@@ -68,34 +70,39 @@ ANALYSIS_MERGE_PROMPT = """下面是一份长内容按时间窗分段生成的�
 {partial_analyses}"""
 
 
-def chat_completion(messages: list[dict], config: dict) -> str:
-    """调用 OpenAI 兼容 /chat/completions API。"""
-    url = config["base_url"].rstrip("/") + "/chat/completions"
+def _build_payload(messages: list[dict], config: dict) -> dict:
+    """构建 chat/completions 请求体（同步/异步共用）。
 
-    headers = {
-        "Authorization": f"Bearer {config['api_key']}",
-        "Content-Type": "application/json",
-    }
-
-    max_tokens = config.get("max_tokens", 2000)
-
+    thinking 仅在显式配置时附带（智谱系参数，{"type": "enabled"/"disabled"}），
+    未配置完全不传，兼容所有 OpenAI 兼容端点。
+    """
     payload = {
         "model": config["model"],
         "messages": messages,
         "temperature": config.get("temperature", 0.2),
-        "max_tokens": max_tokens,
+        "max_tokens": config.get("max_tokens", 2000),
     }
 
-    with httpx.Client(timeout=config.get("timeout", 180)) as client:
-        response = client.post(url, headers=headers, json=payload)
+    thinking = str(config.get("thinking") or "").strip().lower()
 
-        if response.status_code != 200:
-            raise RuntimeError(
-                f"LLM API 错误：{response.status_code} {response.text[:500]}"
-            )
+    if thinking in ("enabled", "disabled"):
+        payload["thinking"] = {"type": thinking}
 
-        data = response.json()
+    return payload
 
+
+# 异步结果特有的 finish_reason（智谱异步对话），映射为可读中文错误。
+_ASYNC_FINISH_REASON_ERRORS = {
+    "sensitive": "内容被安全审核接口拦截（finish_reason=sensitive）",
+    "network_error": "上游网络异常导致生成中断（finish_reason=network_error）",
+    "model_context_window_exceeded": (
+        "输入超出模型上下文窗口（finish_reason=model_context_window_exceeded）"
+    ),
+}
+
+
+def _extract_content(data: dict, max_tokens: int) -> str:
+    """从 ChatCompletionResponse 提取正文并校验（同步/异步共用）。"""
     choices = data.get("choices", [])
 
     if not choices:
@@ -117,7 +124,12 @@ def chat_completion(messages: list[dict], config: dict) -> str:
         raise RuntimeError(
             f"LLM 输出在 max_tokens={max_tokens} 处被截断（finish_reason=length"
             f"{reasoning_part}）。思考型模型的推理 token 计入 max_tokens，"
-            "请在配置中调大后重试"
+            "请在配置中调大后重试（异步模式上限更高，可大幅调大）"
+        )
+
+    if finish_reason in _ASYNC_FINISH_REASON_ERRORS:
+        raise RuntimeError(
+            f"LLM 生成失败：{_ASYNC_FINISH_REASON_ERRORS[finish_reason]}"
         )
 
     if not content.strip():
@@ -126,6 +138,136 @@ def chat_completion(messages: list[dict], config: dict) -> str:
         )
 
     return content
+
+
+def chat_completion(messages: list[dict], config: dict) -> str:
+    """调用 OpenAI 兼容 /chat/completions API。
+
+    mode="async" 时改走智谱异步对话补全（提交 + 轮询，m20），
+    其余配置字段两种模式含义一致。
+    """
+    if str(config.get("mode") or "sync").strip().lower() == "async":
+        return _chat_completion_async(messages, config)
+
+    url = config["base_url"].rstrip("/") + "/chat/completions"
+
+    headers = {
+        "Authorization": f"Bearer {config['api_key']}",
+        "Content-Type": "application/json",
+    }
+
+    max_tokens = config.get("max_tokens", 2000)
+
+    with httpx.Client(timeout=config.get("timeout", 180)) as client:
+        response = client.post(
+            url, headers=headers, json=_build_payload(messages, config)
+        )
+
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"LLM API 错误：{response.status_code} {response.text[:500]}"
+            )
+
+        data = response.json()
+
+    return _extract_content(data, max_tokens)
+
+
+def _chat_completion_async(messages: list[dict], config: dict) -> str:
+    """智谱异步对话补全（m20）：提交返回任务 id，轮询 async-result 至完成。
+
+    端点从 base_url 推导（智谱 v4 根路径下为 {base_url}/async/chat/completions
+    与 {base_url}/async-result/{id}），不硬编码域名，网关代理同样可用。
+    提交/轮询均为短请求，timeout 只约束单次 HTTP；总体截止由 max_wait_seconds
+    控制。轮询单次网络异常或非 200 不立即失败，容忍至截止时间（401/403 除外，
+    密钥问题早失败）。应用重启后由任务系统整体重跑（重新提交），不续轮。
+    """
+    base = config["base_url"].rstrip("/")
+    headers = {
+        "Authorization": f"Bearer {config['api_key']}",
+        "Content-Type": "application/json",
+    }
+    timeout = config.get("timeout", 180)
+    max_tokens = config.get("max_tokens", 2000)
+
+    with httpx.Client(timeout=timeout) as client:
+        response = client.post(
+            f"{base}/async/chat/completions",
+            headers=headers,
+            json=_build_payload(messages, config),
+        )
+
+        if response.status_code in (404, 405):
+            raise RuntimeError(
+                f"当前提供商不支持异步对话接口（{response.status_code} "
+                f"{base}/async/chat/completions），请将该功能的 mode 改回 sync"
+            )
+
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"LLM 异步提交错误：{response.status_code} {response.text[:500]}"
+            )
+
+        submission = response.json()
+
+    task_id = submission.get("id")
+
+    if not task_id:
+        raise RuntimeError(
+            "LLM 异步提交未返回任务 id："
+            f"{json.dumps(submission, ensure_ascii=False)[:300]}"
+        )
+
+    poll_interval = max(1, int(config.get("poll_interval_seconds", 5) or 5))
+    max_wait = max(poll_interval, int(config.get("max_wait_seconds", 1800) or 1800))
+    deadline = time.monotonic() + max_wait
+
+    with httpx.Client(timeout=timeout) as client:
+        while True:
+            time.sleep(poll_interval)
+
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    f"LLM 异步任务等待超时（超过 {max_wait} 秒，任务 id={task_id}），"
+                    "请重试或在配置中调大 max_wait_seconds"
+                )
+
+            try:
+                response = client.get(
+                    f"{base}/async-result/{task_id}", headers=headers
+                )
+            except httpx.HTTPError:
+                continue
+
+            if response.status_code in (401, 403):
+                raise RuntimeError(
+                    f"LLM 异步结果查询被拒绝（{response.status_code}），请检查 API Key"
+                )
+
+            if response.status_code != 200:
+                continue
+
+            data = response.json()
+            status = data.get("task_status")
+
+            if status == "SUCCESS":
+                return _extract_content(data, max_tokens)
+
+            if status == "FAIL":
+                error = data.get("error") or {}
+                detail = " ".join(
+                    str(part)
+                    for part in (error.get("code"), error.get("message"))
+                    if part
+                ).strip()
+                raise RuntimeError(
+                    f"LLM 异步任务失败（任务 id={task_id}）：{detail or response.text[:300]}"
+                )
+
+            # PROCESSING 或未识别的中间态继续轮询；个别实现不带 task_status
+            # 直接回完整结果，此处兜底识别。
+            if not status and data.get("choices"):
+                return _extract_content(data, max_tokens)
 
 
 def split_text_for_summary(text: str, chunk_chars: int) -> list[str]:

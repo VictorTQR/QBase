@@ -3,6 +3,10 @@
 渐进式分层：高频配置用表单编辑并写回 .knowledge/config.toml；
 CLI / App 等复杂配置只读展示，提供「打开 config.toml」按钮交由系统编辑器处理。
 配置唯一真相来源始终是 config.toml，UI 只是其可视化编辑器。
+
+布局按 Tab 分组：AI 服务 / 索引与任务 / 高级选项 / 维护；
+保存按钮常驻 Tab 行右侧，并在含表单的 Tab 底部重复出现。
+tab_panels 各面板常驻 DOM，切换 Tab 不销毁控件，跨 Tab 收集表单值不受影响。
 """
 
 from __future__ import annotations
@@ -15,7 +19,7 @@ from app.services.config_service import ConfigError
 from app.services.vector_service import get_vector_stats, clear_embedding_cache
 from app.state import state
 from app.ui.layout import page_frame
-from app.ui.tokens import C
+from app.ui.tokens import C, CLS
 from app.utils import notify_error, open_file
 
 
@@ -53,41 +57,16 @@ def settings_page() -> None:
             ui.label(str(exc)).classes("text-red-600 mt-4")
             return
 
-        ui.label("设置").classes("text-2xl font-bold")
-        ui.label(str(state.library_root)).classes("text-sm text-gray-600")
-
-        # ── 配置文件信息 ──
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("配置文件").classes("text-lg font-semibold")
-            ui.label(str(config_path)).classes("text-sm text-gray-600 mt-2")
-
-            with ui.row().classes("gap-3 mt-3"):
-                ui.button(
-                    "打开 config.toml",
-                    icon="edit_document",
-                    on_click=lambda: open_file(str(config_path)),
-                )
-                ui.button(
-                    "编辑 secrets.toml",
-                    icon="key",
-                    on_click=handle_open_secrets,
-                )
-                ui.button(
-                    "重新加载",
-                    icon="refresh",
-                    on_click=lambda: ui.navigate.to("/settings"),
-                )
-
-            ui.label(
-                "API Key 也可放在 .knowledge/secrets.toml 的 [keys] 中，"
-                "由 api_key_env 引用的名称查找，无需设置系统环境变量。"
-            ).classes("text-xs text-gray-600 mt-3")
-
-            if config_service.has_plain_api_key(config):
-                ui.label(
-                    "⚠ 检测到配置中存在明文 api_key。"
-                    "建议删除 api_key，改用 api_key_env 引用环境变量。"
-                ).classes("text-orange-600 text-sm mt-3")
+        # ── Tab 分组导航 + 常驻保存按钮 ──
+        with ui.row().classes("w-full items-center gap-4"):
+            with ui.tabs().classes("flex-1 min-w-0") as settings_tabs:
+                ui.tab("ai", label="AI 服务")
+                ui.tab("index", label="索引与任务")
+                ui.tab("advanced", label="高级选项")
+                ui.tab("maintenance", label="维护")
+            save_button_top = ui.button("保存配置", icon="save").props(
+                "color=primary"
+            )
 
         # 原始 Embedding 配置，用于判断是否需要重建向量索引
         original_embedding = config.get("embedding", {})
@@ -114,423 +93,584 @@ def settings_page() -> None:
         cli_config = config.get("cli", {})
         app_config = config.get("app", {})
 
-        # ── LLM 总结配置 ──
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("LLM 总结配置").classes("text-lg font-semibold")
+        with ui.tab_panels(settings_tabs, value="ai").classes("w-full"):
 
-            llm_enabled = ui.switch(
-                "启用 LLM 总结", value=bool(llm_config.get("enabled", False))
-            )
-            llm_base_url = ui.input(
-                "Base URL", value=str(llm_config.get("base_url", ""))
-            ).classes("w-full")
-            llm_model = ui.input(
-                "Model", value=str(llm_config.get("model", ""))
-            ).classes("w-full")
-            llm_api_key_env = ui.input(
-                "API Key 密钥名（api_key_env）",
-                value=str(llm_config.get("api_key_env", "")),
-            ).classes("w-full")
-            _render_key_status(key_status, str(llm_config.get("api_key_env", "")))
+            # ── Tab：AI 服务 ──
+            with ui.tab_panel("ai"):
+                with ui.column().classes("w-full gap-4"):
 
-            with ui.row().classes("w-full gap-3"):
-                llm_temperature = ui.number(
-                    "temperature",
-                    value=float(llm_config.get("temperature", 0.2)),
-                    min=0,
-                    max=2,
-                    step=0.1,
-                ).classes("w-40")
-                llm_max_tokens = ui.number(
-                    "max_tokens",
-                    value=int(llm_config.get("max_tokens", 2000)),
-                    min=1,
-                    step=1,
-                ).classes("w-40")
-                llm_timeout = ui.number(
-                    "timeout 秒",
-                    value=int(llm_config.get("timeout", 180)),
-                    min=1,
-                    step=1,
-                ).classes("w-40")
+                    # ── LLM 总结配置 ──
+                    with ui.card().classes(CLS["card"]):
+                        ui.label("LLM 总结配置").classes(CLS["card_title"])
 
-            with ui.row().classes("w-full gap-3"):
-                llm_max_input_chars = ui.number(
-                    "max_input_chars",
-                    value=int(llm_config.get("max_input_chars", 24000)),
-                    min=1,
-                    step=1000,
-                ).classes("w-52")
-                llm_chunk_chars = ui.number(
-                    "chunk_chars",
-                    value=int(llm_config.get("chunk_chars", 6000)),
-                    min=1,
-                    step=500,
-                ).classes("w-52")
-
-            with ui.row().classes("mt-3 gap-3"):
-                test_llm_button = ui.button("测试 LLM API", icon="cable")
-
-        # ── AI 打标配置（m16）──
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("AI 打标配置").classes("text-lg font-semibold")
-            ui.label(
-                "详情页「AI 建议标签」使用；建议只预填编辑器，保存后才入库。"
-                "可与总结用不同模型（打标输入短、输出小，可用更快/更便宜的模型）。"
-            ).classes("text-sm text-gray-600 mt-1")
-
-            tagging_enabled = ui.switch(
-                "启用 AI 打标", value=bool(tagging_config.get("enabled", False))
-            )
-            tagging_base_url = ui.input(
-                "Base URL", value=str(tagging_config.get("base_url", ""))
-            ).classes("w-full")
-            tagging_model = ui.input(
-                "Model", value=str(tagging_config.get("model", ""))
-            ).classes("w-full")
-            tagging_api_key_env = ui.input(
-                "API Key 密钥名（api_key_env）",
-                value=str(tagging_config.get("api_key_env", "")),
-            ).classes("w-full")
-            _render_key_status(key_status, str(tagging_config.get("api_key_env", "")))
-            ui.label(
-                "temperature / max_tokens / timeout 等其余参数使用默认值，"
-                "如需调整请编辑 config.toml 的 [llm.tagging]。"
-            ).classes("text-xs text-gray-600 mt-2")
-
-            with ui.row().classes("mt-3 gap-3"):
-                test_tagging_button = ui.button("测试打标 API", icon="cable")
-
-        # ── AI 分析配置（m18）──
-        analysis_config = config.get("llm", {}).get("analysis", {})
-
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("AI 分析配置").classes("text-lg font-semibold")
-            ui.label(
-                "模板驱动的深度分析（授课分析 / 访谈分析等）。长输入长输出——"
-                "2 小时课程转录约 4-6 万字，建议配置长上下文模型；"
-                "超过 max_input_chars 时按时间窗切块逐窗分析后合并。"
-            ).classes("text-sm text-gray-600 mt-1")
-
-            analysis_enabled = ui.switch(
-                "启用 AI 分析", value=bool(analysis_config.get("enabled", False))
-            )
-            analysis_base_url = ui.input(
-                "Base URL", value=str(analysis_config.get("base_url", ""))
-            ).classes("w-full")
-            analysis_model = ui.input(
-                "Model", value=str(analysis_config.get("model", ""))
-            ).classes("w-full")
-            analysis_api_key_env = ui.input(
-                "API Key 密钥名（api_key_env）",
-                value=str(analysis_config.get("api_key_env", "")),
-            ).classes("w-full")
-            _render_key_status(
-                key_status, str(analysis_config.get("api_key_env", ""))
-            )
-            ui.label(
-                "temperature / max_tokens / timeout / max_input_chars /"
-                " window_minutes 使用默认值，如需调整请编辑 config.toml"
-                " 的 [llm.analysis]。"
-            ).classes("text-xs text-gray-600 mt-2")
-
-            with ui.row().classes("mt-3 gap-3"):
-                test_analysis_button = ui.button("测试分析 API", icon="cable")
-
-        # ── 分析模板（m18，只读：改文件即改提示词）──
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("分析模板").classes("text-lg font-semibold")
-
-            try:
-                from app.services.analysis_preset_service import (
-                    list_analysis_presets,
-                )
-
-                analysis_presets = list_analysis_presets()
-            except Exception:
-                analysis_presets = []
-
-            if analysis_presets:
-                for preset in analysis_presets:
-                    with ui.row().classes("items-center gap-2 mt-1"):
-                        ui.badge(preset["name"], color=C.ANALYSIS)
-                        ui.label(preset["id"]).classes(
-                            "text-xs font-mono text-gray-600"
+                        llm_enabled = ui.switch(
+                            "启用 LLM 总结",
+                            value=bool(llm_config.get("enabled", False)),
                         )
-                        if preset["description"]:
-                            ui.label(preset["description"]).classes(
-                                "text-xs text-gray-600 flex-1 truncate"
-                            ).tooltip(preset["description"])
-                        ui.label(
-                            "适用：" + " / ".join(sorted(preset["types"]))
-                        ).classes("text-xs text-gray-600")
-            else:
-                ui.label("未找到分析模板。").classes("text-sm text-gray-600 mt-1")
-
-            ui.label(
-                "模板位于 .knowledge/presets/*.md：frontmatter 写名称/描述/适用类型，"
-                "正文即提示词（占位符 {title} 会被替换为资产标题）。"
-                "改文件即改提示词，加文件即加新分析类型；内置模板已存在时不覆盖。"
-            ).classes("text-xs text-gray-600 mt-2")
-
-        # ── Embedding 配置 ──
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("Embedding 配置").classes("text-lg font-semibold")
-
-            embedding_enabled = ui.switch(
-                "启用 Embedding", value=bool(embedding_config.get("enabled", False))
-            )
-            embedding_base_url = ui.input(
-                "Base URL", value=str(embedding_config.get("base_url", ""))
-            ).classes("w-full")
-            embedding_model = ui.input(
-                "Model", value=str(embedding_config.get("model", ""))
-            ).classes("w-full")
-            embedding_api_key_env = ui.input(
-                "API Key 密钥名（api_key_env）",
-                value=str(embedding_config.get("api_key_env", "")),
-            ).classes("w-full")
-            _render_key_status(
-                key_status, str(embedding_config.get("api_key_env", ""))
-            )
-
-            with ui.row().classes("w-full gap-3"):
-                embedding_dimension = ui.number(
-                    "dimension",
-                    value=int(embedding_config.get("dimension", 0) or 0),
-                    min=1,
-                    step=1,
-                ).classes("w-40")
-                embedding_batch_size = ui.number(
-                    "batch_size",
-                    value=int(embedding_config.get("batch_size", 16) or 16),
-                    min=1,
-                    step=1,
-                ).classes("w-40")
-                embedding_timeout = ui.number(
-                    "timeout 秒",
-                    value=int(embedding_config.get("timeout", 120) or 120),
-                    min=1,
-                    step=1,
-                ).classes("w-40")
-
-            ui.label(
-                "注意：修改 Embedding model 或 dimension 后需要重建向量索引。"
-            ).classes("text-orange-600 text-sm mt-2")
-
-            with ui.row().classes("mt-3 gap-3"):
-                test_embedding_button = ui.button(
-                    "测试 Embedding API", icon="cable"
-                )
-
-        # ── 文档解析配置（m9，当前仅 mineru）──
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("文档解析配置").classes("text-lg font-semibold")
-
-            parse_enabled = ui.switch(
-                "启用文档解析", value=bool(parse_config.get("enabled", False))
-            )
-            ui.label(
-                f"解析器：{parse_provider}（pdf/office）；.epub 由内置本地解析器处理，"
-                "无需 token"
-            ).classes("text-sm text-gray-600")
-
-            parse_base_url = ui.input(
-                "Base URL",
-                value=str(parse_mineru.get("base_url", "https://mineru.net")),
-            ).classes("w-full")
-            parse_model_version = ui.select(
-                ["vlm", "pipeline"],
-                label="model_version",
-                value=str(parse_mineru.get("model_version", "vlm")),
-            ).classes("w-48")
-            parse_token_env = ui.input(
-                "Token 密钥名（token_env）",
-                value=str(parse_mineru.get("token_env", "MINERU_API_TOKEN")),
-            ).classes("w-full")
-            _render_key_status(
-                key_status, str(parse_mineru.get("token_env", ""))
-            )
-
-            with ui.row().classes("w-full gap-3"):
-                parse_timeout = ui.number(
-                    "timeout 秒（单任务整体超时）",
-                    value=int(parse_mineru.get("timeout_seconds", 1800) or 1800),
-                    min=1,
-                    step=60,
-                ).classes("w-56")
-                parse_poll_interval = ui.number(
-                    "轮询间隔秒",
-                    value=int(
-                        parse_mineru.get("poll_interval_seconds", 10) or 10
-                    ),
-                    min=1,
-                    step=1,
-                ).classes("w-40")
-
-            ui.label(
-                "token 到 https://mineru.net「API 管理」页创建；"
-                "测试 API 只校验 token，不消耗解析额度。"
-            ).classes("text-xs text-gray-600 mt-2")
-
-            with ui.row().classes("mt-3 gap-3"):
-                test_parse_button = ui.button("测试解析 API", icon="cable")
-
-        # ── 索引配置 ──
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("索引配置").classes("text-lg font-semibold")
-
-            with ui.row().classes("w-full gap-3"):
-                chunk_max_chars = ui.number(
-                    "chunk_max_chars",
-                    value=int(index_config.get("chunk_max_chars", 800)),
-                    min=100,
-                    step=100,
-                ).classes("w-48")
-                chunk_overlap = ui.number(
-                    "chunk_overlap",
-                    value=int(index_config.get("chunk_overlap", 100)),
-                    min=0,
-                    step=10,
-                ).classes("w-48")
-                rebuild_batch_size = ui.number(
-                    "rebuild_batch_size",
-                    value=int(index_config.get("rebuild_batch_size", 100)),
-                    min=1,
-                    step=10,
-                ).classes("w-48")
-
-            ui.label("chunk_overlap 必须小于 chunk_max_chars。").classes(
-                "text-xs text-gray-600 mt-2"
-            )
-
-        # ── 任务配置 ──
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("任务配置").classes("text-lg font-semibold")
-
-            with ui.row().classes("w-full gap-3"):
-                max_workers = ui.number(
-                    "max_workers",
-                    value=int(task_config.get("max_workers", 1)),
-                    min=1,
-                    max=8,
-                    step=1,
-                ).classes("w-40")
-                task_timeout_seconds = ui.number(
-                    "task_timeout_seconds",
-                    value=int(task_config.get("task_timeout_seconds", 7200)),
-                    min=1,
-                    step=60,
-                ).classes("w-56")
-
-        # ── 扫描配置 ──
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("扫描配置").classes("text-lg font-semibold")
-            scan_on_startup = ui.switch(
-                "启动时扫描",
-                value=bool(library_config.get("scan_on_startup", True)),
-            )
-
-            ignore_list = library_config.get("ignore", [])
-            ui.label("当前忽略目录").classes("text-sm font-semibold mt-3")
-            if ignore_list:
-                ui.code("\n".join(ignore_list)).classes("w-full")
-            else:
-                ui.label("未配置忽略目录").classes("text-sm text-gray-600")
-            ui.label(
-                "忽略目录列表较复杂，请通过 config.toml 修改。"
-            ).classes("text-xs text-gray-600 mt-2")
-
-        # ── 极客直编区：CLI / App 只读展示 ──
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("转录 CLI 配置（只读）").classes("text-lg font-semibold")
-            transcribe_command = cli_config.get("transcribe_command", [])
-            if transcribe_command:
-                ui.code(str(transcribe_command)).classes("w-full")
-            else:
-                ui.label("未配置").classes("text-sm text-gray-600")
-            ui.label(
-                "CLI 命令模板涉及路径与参数格式，请通过 config.toml 修改。"
-            ).classes("text-xs text-gray-600 mt-2")
-
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("应用配置（只读）").classes("text-lg font-semibold")
-            ui.label(
-                f"host: {app_config.get('host', '127.0.0.1')}"
-            ).classes("text-sm mt-2")
-            ui.label(f"port: {app_config.get('port', 8765)}").classes("text-sm")
-            ui.label(
-                f"log_level: {app_config.get('log_level', 'INFO')}"
-            ).classes("text-sm")
-            ui.label(
-                "host / port 修改后需重启应用，请通过 config.toml 修改。"
-            ).classes("text-xs text-gray-600 mt-2")
-
-        # ── 保存 ──
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("保存配置").classes("text-lg font-semibold")
-            ui.label("保存后会写回 config.toml，未编辑的字段保持不变。").classes(
-                "text-sm text-gray-600 mt-2"
-            )
-            with ui.row().classes("mt-3 gap-3"):
-                save_button = ui.button("保存配置", icon="save").props(
-                    "color=primary"
-                )
-
-        # ── 索引管理 ──
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("索引管理").classes("text-lg font-semibold")
-            ui.label("重建全文索引会重新处理所有已识别的文本内容。").classes(
-                "text-sm text-gray-600 mt-2"
-            )
-            with ui.row().classes("gap-3 mt-3"):
-                rebuild_fts_button = ui.button(
-                    "重建全文索引", icon="refresh"
-                )
-
-        # ── 向量索引状态 ──
-        with ui.card().classes("w-full p-4 mt-4"):
-            ui.label("向量索引状态").classes("text-lg font-semibold")
-            ui.label(
-                "重建向量索引会调用 Embedding API，已缓存的片段不会重复计费。"
-            ).classes("text-sm text-orange-600 mt-1")
-
-            vector_stats_container = ui.column().classes("w-full mt-3")
-
-            with ui.row().classes("gap-3 mt-3"):
-                rebuild_vector_button = ui.button(
-                    "全量重建", icon="hub"
-                )
-                clear_cache_button = ui.button(
-                    "清空缓存", icon="delete"
-                ).props("outline color=orange")
-
-            def render_vector_stats() -> None:
-                stats = get_vector_stats()
-                vector_stats_container.clear()
-                with vector_stats_container:
-                    ui.badge(
-                        _vector_health_label(stats["health"]),
-                        color=_vector_health_color(stats["health"]),
-                    ).classes("text-sm")
-                    with ui.grid(columns=3).classes("w-full gap-2 mt-2"):
-                        ui.label(f"向量总数：{stats['total_vectors']}")
-                        ui.label(f"磁盘占用：{stats['disk_size_mb']} MB")
-                        ui.label(f"缓存条目：{stats['cache_count']}")
-                        ui.label(f"模型：{stats['model'] or '—'}")
-                        ui.label(f"维度：{stats['dimension'] or '—'}")
-                        ui.label(
-                            f"覆盖度：{stats['indexed_assets']} / {stats['total_assets']}"
+                        llm_base_url = ui.input(
+                            "Base URL", value=str(llm_config.get("base_url", ""))
+                        ).classes("w-full")
+                        llm_model = ui.input(
+                            "Model", value=str(llm_config.get("model", ""))
+                        ).classes("w-full")
+                        llm_api_key_env = ui.input(
+                            "API Key 密钥名（api_key_env）",
+                            value=str(llm_config.get("api_key_env", "")),
+                        ).classes("w-full")
+                        _render_key_status(
+                            key_status, str(llm_config.get("api_key_env", ""))
                         )
+
+                        with ui.row().classes("w-full gap-3"):
+                            llm_temperature = ui.number(
+                                "temperature",
+                                value=float(llm_config.get("temperature", 0.2)),
+                                min=0,
+                                max=2,
+                                step=0.1,
+                            ).classes("w-40")
+                            llm_max_tokens = ui.number(
+                                "max_tokens",
+                                value=int(llm_config.get("max_tokens", 2000)),
+                                min=1,
+                                step=1,
+                            ).classes("w-40")
+                            llm_timeout = ui.number(
+                                "timeout 秒",
+                                value=int(llm_config.get("timeout", 180)),
+                                min=1,
+                                step=1,
+                            ).classes("w-40")
+
+                        with ui.row().classes("w-full gap-3"):
+                            llm_max_input_chars = ui.number(
+                                "max_input_chars",
+                                value=int(llm_config.get("max_input_chars", 24000)),
+                                min=1,
+                                step=1000,
+                            ).classes("w-52")
+                            llm_chunk_chars = ui.number(
+                                "chunk_chars",
+                                value=int(llm_config.get("chunk_chars", 6000)),
+                                min=1,
+                                step=500,
+                            ).classes("w-52")
+
+                        with ui.row().classes("w-full gap-3"):
+                            llm_mode = ui.select(
+                                {"sync": "同步", "async": "异步（智谱）"},
+                                label="调用模式",
+                                value=str(llm_config.get("mode", "sync") or "sync"),
+                            ).classes("w-48")
+                            llm_thinking = ui.select(
+                                {
+                                    "": "默认（不传）",
+                                    "enabled": "开启思考",
+                                    "disabled": "关闭思考",
+                                },
+                                label="thinking",
+                                value=str(llm_config.get("thinking", "") or ""),
+                            ).classes("w-48")
+
+                        ui.label(
+                            "异步为智谱（BigModel）专有接口：提交后轮询取结果，"
+                            "不受长连接超时限制，max_tokens 可大幅调大；"
+                            "其他提供商请保持同步。轮询参数 poll_interval_seconds /"
+                            " max_wait_seconds 请编辑 config.toml 的 [llm.summary]。"
+                        ).classes("text-xs text-gray-600 mt-2")
+
+                        with ui.row().classes("mt-3 gap-3"):
+                            test_llm_button = ui.button("测试 LLM API", icon="cable")
+
+                    # ── AI 打标配置（m16）──
+                    with ui.card().classes(CLS["card"]):
+                        ui.label("AI 打标配置").classes(CLS["card_title"])
+                        ui.label(
+                            "详情页「AI 建议标签」使用；建议只预填编辑器，保存后才入库。"
+                            "可与总结用不同模型（打标输入短、输出小，可用更快/更便宜的模型）。"
+                        ).classes("text-sm text-gray-600 mt-1")
+
+                        tagging_enabled = ui.switch(
+                            "启用 AI 打标",
+                            value=bool(tagging_config.get("enabled", False)),
+                        )
+                        tagging_base_url = ui.input(
+                            "Base URL",
+                            value=str(tagging_config.get("base_url", "")),
+                        ).classes("w-full")
+                        tagging_model = ui.input(
+                            "Model", value=str(tagging_config.get("model", ""))
+                        ).classes("w-full")
+                        tagging_api_key_env = ui.input(
+                            "API Key 密钥名（api_key_env）",
+                            value=str(tagging_config.get("api_key_env", "")),
+                        ).classes("w-full")
+                        _render_key_status(
+                            key_status, str(tagging_config.get("api_key_env", ""))
+                        )
+
+                        with ui.row().classes("w-full gap-3"):
+                            tagging_mode = ui.select(
+                                {"sync": "同步", "async": "异步（智谱）"},
+                                label="调用模式",
+                                value=str(tagging_config.get("mode", "sync") or "sync"),
+                            ).classes("w-48")
+                            tagging_thinking = ui.select(
+                                {
+                                    "": "默认（不传）",
+                                    "enabled": "开启思考",
+                                    "disabled": "关闭思考",
+                                },
+                                label="thinking",
+                                value=str(tagging_config.get("thinking", "") or ""),
+                            ).classes("w-48")
+
+                        ui.label(
+                            "temperature / max_tokens / timeout 等其余参数使用默认值，"
+                            "如需调整请编辑 config.toml 的 [llm.tagging]。"
+                            "异步为智谱专有接口，其他提供商请保持同步。"
+                        ).classes("text-xs text-gray-600 mt-2")
+
+                        with ui.row().classes("mt-3 gap-3"):
+                            test_tagging_button = ui.button(
+                                "测试打标 API", icon="cable"
+                            )
+
+                    # ── AI 分析配置（m18）──
+                    analysis_config = config.get("llm", {}).get("analysis", {})
+
+                    with ui.card().classes(CLS["card"]):
+                        ui.label("AI 分析配置").classes(CLS["card_title"])
+                        ui.label(
+                            "模板驱动的深度分析（授课分析 / 访谈分析等）。长输入长输出——"
+                            "2 小时课程转录约 4-6 万字，建议配置长上下文模型；"
+                            "超过 max_input_chars 时按时间窗切块逐窗分析后合并。"
+                        ).classes("text-sm text-gray-600 mt-1")
+
+                        analysis_enabled = ui.switch(
+                            "启用 AI 分析",
+                            value=bool(analysis_config.get("enabled", False)),
+                        )
+                        analysis_base_url = ui.input(
+                            "Base URL",
+                            value=str(analysis_config.get("base_url", "")),
+                        ).classes("w-full")
+                        analysis_model = ui.input(
+                            "Model", value=str(analysis_config.get("model", ""))
+                        ).classes("w-full")
+                        analysis_api_key_env = ui.input(
+                            "API Key 密钥名（api_key_env）",
+                            value=str(analysis_config.get("api_key_env", "")),
+                        ).classes("w-full")
+                        _render_key_status(
+                            key_status, str(analysis_config.get("api_key_env", ""))
+                        )
+
+                        with ui.row().classes("w-full gap-3"):
+                            analysis_mode = ui.select(
+                                {"sync": "同步", "async": "异步（智谱）"},
+                                label="调用模式",
+                                value=str(analysis_config.get("mode", "sync") or "sync"),
+                            ).classes("w-48")
+                            analysis_thinking = ui.select(
+                                {
+                                    "": "默认（不传）",
+                                    "enabled": "开启思考",
+                                    "disabled": "关闭思考",
+                                },
+                                label="thinking",
+                                value=str(analysis_config.get("thinking", "") or ""),
+                            ).classes("w-48")
+
+                        ui.label(
+                            "temperature / max_tokens / timeout / max_input_chars /"
+                            " window_minutes 使用默认值，如需调整请编辑 config.toml"
+                            " 的 [llm.analysis]。异步为智谱专有接口（提交后轮询，"
+                            "max_tokens 上限 128K，长分析建议开启）；"
+                            "其他提供商请保持同步。"
+                        ).classes("text-xs text-gray-600 mt-2")
+
+                        with ui.row().classes("mt-3 gap-3"):
+                            test_analysis_button = ui.button(
+                                "测试分析 API", icon="cable"
+                            )
+
+                    # ── 分析模板（m18，只读：改文件即改提示词）──
+                    with ui.card().classes(CLS["card"]):
+                        ui.label("分析模板").classes(CLS["card_title"])
+
+                        try:
+                            from app.services.analysis_preset_service import (
+                                list_analysis_presets,
+                            )
+
+                            analysis_presets = list_analysis_presets()
+                        except Exception:
+                            analysis_presets = []
+
+                        if analysis_presets:
+                            for preset in analysis_presets:
+                                with ui.row().classes("items-center gap-2 mt-1"):
+                                    ui.badge(preset["name"], color=C.ANALYSIS)
+                                    ui.label(preset["id"]).classes(
+                                        "text-xs font-mono text-gray-600"
+                                    )
+                                    if preset["description"]:
+                                        ui.label(preset["description"]).classes(
+                                            "text-xs text-gray-600 flex-1 truncate"
+                                        ).tooltip(preset["description"])
+                                    ui.label(
+                                        "适用：" + " / ".join(sorted(preset["types"]))
+                                    ).classes("text-xs text-gray-600")
+                        else:
+                            ui.label("未找到分析模板。").classes(
+                                "text-sm text-gray-600 mt-1"
+                            )
+
+                        ui.label(
+                            "模板位于 .knowledge/presets/*.md：frontmatter 写名称/描述/适用类型，"
+                            "正文即提示词（占位符 {title} 会被替换为资产标题）。"
+                            "改文件即改提示词，加文件即加新分析类型；内置模板已存在时不覆盖。"
+                        ).classes("text-xs text-gray-600 mt-2")
+
+                    # ── Embedding 配置 ──
+                    with ui.card().classes(CLS["card"]):
+                        ui.label("Embedding 配置").classes(CLS["card_title"])
+
+                        embedding_enabled = ui.switch(
+                            "启用 Embedding",
+                            value=bool(embedding_config.get("enabled", False)),
+                        )
+                        embedding_base_url = ui.input(
+                            "Base URL",
+                            value=str(embedding_config.get("base_url", "")),
+                        ).classes("w-full")
+                        embedding_model = ui.input(
+                            "Model", value=str(embedding_config.get("model", ""))
+                        ).classes("w-full")
+                        embedding_api_key_env = ui.input(
+                            "API Key 密钥名（api_key_env）",
+                            value=str(embedding_config.get("api_key_env", "")),
+                        ).classes("w-full")
+                        _render_key_status(
+                            key_status, str(embedding_config.get("api_key_env", ""))
+                        )
+
+                        with ui.row().classes("w-full gap-3"):
+                            embedding_dimension = ui.number(
+                                "dimension",
+                                value=int(
+                                    embedding_config.get("dimension", 0) or 0
+                                ),
+                                min=1,
+                                step=1,
+                            ).classes("w-40")
+                            embedding_batch_size = ui.number(
+                                "batch_size",
+                                value=int(
+                                    embedding_config.get("batch_size", 16) or 16
+                                ),
+                                min=1,
+                                step=1,
+                            ).classes("w-40")
+                            embedding_timeout = ui.number(
+                                "timeout 秒",
+                                value=int(
+                                    embedding_config.get("timeout", 120) or 120
+                                ),
+                                min=1,
+                                step=1,
+                            ).classes("w-40")
+
+                        ui.label(
+                            "注意：修改 Embedding model 或 dimension 后需要重建向量索引。"
+                        ).classes("text-orange-600 text-sm mt-2")
+
+                        with ui.row().classes("mt-3 gap-3"):
+                            test_embedding_button = ui.button(
+                                "测试 Embedding API", icon="cable"
+                            )
+
+                    # ── 文档解析配置（m9，当前仅 mineru）──
+                    with ui.card().classes(CLS["card"]):
+                        ui.label("文档解析配置").classes(CLS["card_title"])
+
+                        parse_enabled = ui.switch(
+                            "启用文档解析",
+                            value=bool(parse_config.get("enabled", False)),
+                        )
+                        ui.label(
+                            f"解析器：{parse_provider}（pdf/office）；.epub 由内置本地解析器处理，"
+                            "无需 token"
+                        ).classes("text-sm text-gray-600")
+
+                        parse_base_url = ui.input(
+                            "Base URL",
+                            value=str(
+                                parse_mineru.get("base_url", "https://mineru.net")
+                            ),
+                        ).classes("w-full")
+                        parse_model_version = ui.select(
+                            ["vlm", "pipeline"],
+                            label="model_version",
+                            value=str(parse_mineru.get("model_version", "vlm")),
+                        ).classes("w-48")
+                        parse_token_env = ui.input(
+                            "Token 密钥名（token_env）",
+                            value=str(
+                                parse_mineru.get("token_env", "MINERU_API_TOKEN")
+                            ),
+                        ).classes("w-full")
+                        _render_key_status(
+                            key_status, str(parse_mineru.get("token_env", ""))
+                        )
+
+                        with ui.row().classes("w-full gap-3"):
+                            parse_timeout = ui.number(
+                                "timeout 秒（单任务整体超时）",
+                                value=int(
+                                    parse_mineru.get("timeout_seconds", 1800)
+                                    or 1800
+                                ),
+                                min=1,
+                                step=60,
+                            ).classes("w-56")
+                            parse_poll_interval = ui.number(
+                                "轮询间隔秒",
+                                value=int(
+                                    parse_mineru.get("poll_interval_seconds", 10)
+                                    or 10
+                                ),
+                                min=1,
+                                step=1,
+                            ).classes("w-40")
+
+                        ui.label(
+                            "token 到 https://mineru.net「API 管理」页创建；"
+                            "测试 API 只校验 token，不消耗解析额度。"
+                        ).classes("text-xs text-gray-600 mt-2")
+
+                        with ui.row().classes("mt-3 gap-3"):
+                            test_parse_button = ui.button("测试解析 API", icon="cable")
+
+                    # ── 保存（本 Tab 含表单，底部再放一个）──
+                    with ui.row().classes("w-full items-center"):
+                        ui.label(
+                            "保存后写回 config.toml，未编辑的字段保持不变。"
+                        ).classes("text-sm text-gray-600 flex-1")
+                        save_button_ai = ui.button(
+                            "保存配置", icon="save"
+                        ).props("color=primary")
+
+            # ── Tab：索引与任务 ──
+            with ui.tab_panel("index"):
+                with ui.column().classes("w-full gap-4"):
+
+                    # ── 索引配置 ──
+                    with ui.card().classes(CLS["card"]):
+                        ui.label("索引配置").classes(CLS["card_title"])
+
+                        with ui.row().classes("w-full gap-3"):
+                            chunk_max_chars = ui.number(
+                                "chunk_max_chars",
+                                value=int(index_config.get("chunk_max_chars", 800)),
+                                min=100,
+                                step=100,
+                            ).classes("w-48")
+                            chunk_overlap = ui.number(
+                                "chunk_overlap",
+                                value=int(index_config.get("chunk_overlap", 100)),
+                                min=0,
+                                step=10,
+                            ).classes("w-48")
+                            rebuild_batch_size = ui.number(
+                                "rebuild_batch_size",
+                                value=int(
+                                    index_config.get("rebuild_batch_size", 100)
+                                ),
+                                min=1,
+                                step=10,
+                            ).classes("w-48")
+
+                        ui.label("chunk_overlap 必须小于 chunk_max_chars。").classes(
+                            "text-xs text-gray-600 mt-2"
+                        )
+
+                    # ── 任务配置 ──
+                    with ui.card().classes(CLS["card"]):
+                        ui.label("任务配置").classes(CLS["card_title"])
+
+                        with ui.row().classes("w-full gap-3"):
+                            max_workers = ui.number(
+                                "max_workers",
+                                value=int(task_config.get("max_workers", 1)),
+                                min=1,
+                                max=8,
+                                step=1,
+                            ).classes("w-40")
+                            task_timeout_seconds = ui.number(
+                                "task_timeout_seconds",
+                                value=int(
+                                    task_config.get("task_timeout_seconds", 7200)
+                                ),
+                                min=1,
+                                step=60,
+                            ).classes("w-56")
+
+                    # ── 扫描配置 ──
+                    with ui.card().classes(CLS["card"]):
+                        ui.label("扫描配置").classes(CLS["card_title"])
+                        scan_on_startup = ui.switch(
+                            "启动时扫描",
+                            value=bool(library_config.get("scan_on_startup", True)),
+                        )
+
+                        ignore_list = library_config.get("ignore", [])
+                        ui.label("当前忽略目录").classes("text-sm font-semibold mt-3")
+                        if ignore_list:
+                            ui.code("\n".join(ignore_list)).classes("w-full")
+                        else:
+                            ui.label("未配置忽略目录").classes("text-sm text-gray-600")
+                        ui.label(
+                            "忽略目录列表较复杂，请通过 config.toml 修改。"
+                        ).classes("text-xs text-gray-600 mt-2")
+
+                    # ── 保存（本 Tab 含表单，底部再放一个）──
+                    with ui.row().classes("w-full items-center"):
+                        ui.label(
+                            "保存后写回 config.toml，未编辑的字段保持不变。"
+                        ).classes("text-sm text-gray-600 flex-1")
+                        save_button_index = ui.button(
+                            "保存配置", icon="save"
+                        ).props("color=primary")
+
+            # ── Tab：高级选项 ──
+            with ui.tab_panel("advanced"):
+                with ui.column().classes("w-full gap-4"):
+
+                    # ── 配置文件信息 ──
+                    with ui.card().classes(CLS["card"]):
+                        ui.label("配置文件").classes(CLS["card_title"])
+                        ui.label(str(config_path)).classes(
+                            "text-sm text-gray-600 mt-2"
+                        )
+
+                        with ui.row().classes("gap-3 mt-3"):
+                            ui.button(
+                                "打开 config.toml",
+                                icon="edit_document",
+                                on_click=lambda: open_file(str(config_path)),
+                            )
+                            ui.button(
+                                "编辑 secrets.toml",
+                                icon="key",
+                                on_click=handle_open_secrets,
+                            )
+                            ui.button(
+                                "重新加载",
+                                icon="refresh",
+                                on_click=lambda: ui.navigate.to("/settings"),
+                            )
+
+                        ui.label(
+                            "API Key 也可放在 .knowledge/secrets.toml 的 [keys] 中，"
+                            "由 api_key_env 引用的名称查找，无需设置系统环境变量。"
+                        ).classes("text-xs text-gray-600 mt-3")
+
+                        if config_service.has_plain_api_key(config):
+                            ui.label(
+                                "⚠ 检测到配置中存在明文 api_key。"
+                                "建议删除 api_key，改用 api_key_env 引用环境变量。"
+                            ).classes("text-orange-600 text-sm mt-3")
+
+                    # ── 转录 CLI 配置（只读）──
+                    with ui.card().classes(CLS["card"]):
+                        ui.label("转录 CLI 配置（只读）").classes(CLS["card_title"])
+                        transcribe_command = cli_config.get("transcribe_command", [])
+                        if transcribe_command:
+                            ui.code(str(transcribe_command)).classes("w-full")
+                        else:
+                            ui.label("未配置").classes("text-sm text-gray-600")
+                        ui.label(
+                            "CLI 命令模板涉及路径与参数格式，请通过 config.toml 修改。"
+                        ).classes("text-xs text-gray-600 mt-2")
+
+                    # ── 应用配置（只读）──
+                    with ui.card().classes(CLS["card"]):
+                        ui.label("应用配置（只读）").classes(CLS["card_title"])
+                        ui.label(
+                            f"host: {app_config.get('host', '127.0.0.1')}"
+                        ).classes("text-sm mt-2")
+                        ui.label(f"port: {app_config.get('port', 8765)}").classes(
+                            "text-sm"
+                        )
+                        ui.label(
+                            f"log_level: {app_config.get('log_level', 'INFO')}"
+                        ).classes("text-sm")
+                        ui.label(
+                            "host / port 修改后需重启应用，请通过 config.toml 修改。"
+                        ).classes("text-xs text-gray-600 mt-2")
+
+            # ── Tab：维护 ──
+            with ui.tab_panel("maintenance"):
+                with ui.column().classes("w-full gap-4"):
+
+                    # ── 索引管理 ──
+                    with ui.card().classes(CLS["card"]):
+                        ui.label("索引管理").classes(CLS["card_title"])
+                        ui.label(
+                            "重建全文索引会重新处理所有已识别的文本内容。"
+                        ).classes("text-sm text-gray-600 mt-2")
+                        with ui.row().classes("gap-3 mt-3"):
+                            rebuild_fts_button = ui.button(
+                                "重建全文索引", icon="refresh"
+                            )
+
+                    # ── 向量索引状态 ──
+                    with ui.card().classes(CLS["card"]):
+                        ui.label("向量索引状态").classes(CLS["card_title"])
+                        ui.label(
+                            "重建向量索引会调用 Embedding API，已缓存的片段不会重复计费。"
+                        ).classes("text-sm text-orange-600 mt-1")
+
+                        vector_stats_container = ui.column().classes("w-full mt-3")
+
+                        with ui.row().classes("gap-3 mt-3"):
+                            rebuild_vector_button = ui.button(
+                                "全量重建", icon="hub"
+                            )
+                            clear_cache_button = ui.button(
+                                "清空缓存", icon="delete"
+                            ).props("outline color=orange")
+
+        def render_vector_stats() -> None:
+            stats = get_vector_stats()
+            vector_stats_container.clear()
+            with vector_stats_container:
+                ui.badge(
+                    _vector_health_label(stats["health"]),
+                    color=_vector_health_color(stats["health"]),
+                ).classes("text-sm")
+                with ui.grid(columns=3).classes("w-full gap-2 mt-2"):
+                    ui.label(f"向量总数：{stats['total_vectors']}")
+                    ui.label(f"磁盘占用：{stats['disk_size_mb']} MB")
+                    ui.label(f"缓存条目：{stats['cache_count']}")
+                    ui.label(f"模型：{stats['model'] or '—'}")
+                    ui.label(f"维度：{stats['dimension'] or '—'}")
                     ui.label(
-                        f"最后重建：{stats['last_rebuilt'] or '从未'}"
+                        f"覆盖度：{stats['indexed_assets']} / {stats['total_assets']}"
                     ).classes("text-sm text-gray-600 mt-2")
-                    if stats["health_msg"]:
-                        ui.label(stats["health_msg"]).classes(
-                            "text-sm text-gray-600"
-                        )
+                ui.label(
+                    f"最后重建：{stats['last_rebuilt'] or '从未'}"
+                ).classes("text-sm text-gray-600 mt-2")
+                if stats["health_msg"]:
+                    ui.label(stats["health_msg"]).classes(
+                        "text-sm text-gray-600"
+                    )
 
-            render_vector_stats()
+        render_vector_stats()
+
+        save_buttons = [save_button_top, save_button_ai, save_button_index]
 
         # ── 表单值收集 ──
         def build_patch() -> dict:
@@ -546,18 +686,24 @@ def settings_page() -> None:
                         "timeout": int(llm_timeout.value or 180),
                         "max_input_chars": int(llm_max_input_chars.value or 24000),
                         "chunk_chars": int(llm_chunk_chars.value or 6000),
+                        "mode": str(llm_mode.value or "sync"),
+                        "thinking": str(llm_thinking.value or ""),
                     },
                     "tagging": {
                         "enabled": bool(tagging_enabled.value),
                         "base_url": str(tagging_base_url.value or "").strip(),
                         "model": str(tagging_model.value or "").strip(),
                         "api_key_env": str(tagging_api_key_env.value or "").strip(),
+                        "mode": str(tagging_mode.value or "sync"),
+                        "thinking": str(tagging_thinking.value or ""),
                     },
                     "analysis": {
                         "enabled": bool(analysis_enabled.value),
                         "base_url": str(analysis_base_url.value or "").strip(),
                         "model": str(analysis_model.value or "").strip(),
                         "api_key_env": str(analysis_api_key_env.value or "").strip(),
+                        "mode": str(analysis_mode.value or "sync"),
+                        "thinking": str(analysis_thinking.value or ""),
                     },
                 },
                 "embedding": {
@@ -605,7 +751,8 @@ def settings_page() -> None:
             )
 
         async def handle_save():
-            save_button.disable()
+            for save_btn in save_buttons:
+                save_btn.disable()
             patch = build_patch()
             need_rebuild_vector = embedding_index_changed(patch)
 
@@ -622,7 +769,8 @@ def settings_page() -> None:
             except Exception as exc:
                 notify_error(exc)
             finally:
-                save_button.enable()
+                for save_btn in save_buttons:
+                    save_btn.enable()
 
         async def handle_test_llm():
             test_llm_button.disable()
@@ -750,7 +898,8 @@ def settings_page() -> None:
                 clear_cache_button.enable()
                 render_vector_stats()
 
-        save_button.on_click(handle_save)
+        for save_btn in save_buttons:
+            save_btn.on_click(handle_save)
         test_llm_button.on_click(handle_test_llm)
         test_tagging_button.on_click(handle_test_tagging)
         test_analysis_button.on_click(handle_test_analysis)

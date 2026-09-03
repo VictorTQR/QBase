@@ -67,6 +67,9 @@ poll_interval_seconds = 10
 [llm.summary]
 # AI 总结（m6）。使用前填好 base_url / model，再把 enabled 改为 true。
 # max_input_chars：超过则分段摘要后合并；chunk_chars：分段每段最大字符数。
+# 调用模式（m20）：mode = "async" 走智谱异步对话补全（提交+轮询，智谱专有，
+# 其他提供商保持 sync）；thinking = "enabled"/"disabled" 显式开关思考
+# （智谱系参数，留空不传）；poll_interval_seconds / max_wait_seconds 仅 async 生效。
 enabled = false
 provider = "openai_compatible"
 base_url = "https://api.siliconflow.cn/v1"
@@ -77,6 +80,10 @@ max_tokens = 2000
 timeout = 180
 max_input_chars = 24000
 chunk_chars = 6000
+mode = "sync"
+thinking = ""
+poll_interval_seconds = 5
+max_wait_seconds = 1800
 
 [llm.tagging]
 # AI 建议标签（m16）。详情页点「AI 建议标签」生成建议，确认后保存。
@@ -90,6 +97,10 @@ temperature = 0.1
 max_tokens = 300
 timeout = 60
 max_input_chars = 4000
+mode = "sync"
+thinking = ""
+poll_interval_seconds = 5
+max_wait_seconds = 1800
 
 [llm.analysis]
 # AI 深度分析（m18）：模板驱动的分析产物（授课分析 / 访谈分析等）。
@@ -97,6 +108,8 @@ max_input_chars = 4000
 # （可换 GLM / DeepSeek 等任意 OpenAI 兼容长上下文端点）。
 # 超过 max_input_chars 时按时间窗切块逐窗分析后合并；模板见
 # .knowledge/presets/（改文件即改提示词，加文件即加新分析类型）。
+# 智谱异步模式（m20，mode = "async"）max_tokens 上限 128K，
+# 思考型模型的推理 token 不再挤占输出预算。
 enabled = false
 provider = "openai_compatible"
 base_url = "https://api.siliconflow.cn/v1"
@@ -107,6 +120,10 @@ max_tokens = 6000
 timeout = 600
 max_input_chars = 100000
 window_minutes = 15
+mode = "sync"
+thinking = ""
+poll_interval_seconds = 5
+max_wait_seconds = 1800
 
 [embedding]
 # 向量语义搜索（m5）。使用前先填好 base_url / model / dimension，
