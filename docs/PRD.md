@@ -2140,11 +2140,16 @@ max_input_chars = 24000
 chunk_chars = 6000
 # 异步对话补全（m20，智谱系专有）：mode=async 走「提交 + 轮询」，
 # poll_interval_seconds / max_wait_seconds 仅 async 生效；
+# Batch 批处理（m21，智谱 / 硅基流动）：mode=batch 把请求打包为厂商批任务，
+# 五折计费、预计 24 小时内完成；batch_poll_interval_seconds / completion_window
+# 仅 batch 生效（completion_window 留空不传，智谱已废弃该参数）；
 # thinking = "enabled"/"disabled" 显式传 {"type":...}，留空不传（默认）
 mode = "sync"
 thinking = ""
 poll_interval_seconds = 5
 max_wait_seconds = 1800
+batch_poll_interval_seconds = 60
+completion_window = "24h"
 
 [llm.tagging]
 # AI 建议标签（m16）：详情页「AI 建议标签」生成建议，确认后保存；
@@ -2162,12 +2167,15 @@ mode = "sync"
 thinking = ""
 poll_interval_seconds = 5
 max_wait_seconds = 1800
+batch_poll_interval_seconds = 60
+completion_window = "24h"
 
 [llm.analysis]
 # AI 深度分析（m18）：模板驱动的分析产物（授课分析 / 访谈分析等）。
 # 长输入长输出——需要长上下文模型；超过 max_input_chars 时按时间窗
 # 切块逐窗分析后合并（window_minutes）；模板见 .knowledge/presets/
-# 智谱异步模式（m20）max_tokens 上限 128K，思考型模型不再被截断
+# 智谱异步模式（m20）max_tokens 上限 128K，思考型模型不再被截断；
+# Batch 模式（m21）分窗请求进厂商批任务，合并调用本地同步执行
 enabled = false
 provider = "openai_compatible"
 base_url = "https://api.example.com/v1"
@@ -2182,6 +2190,8 @@ mode = "sync"
 thinking = ""
 poll_interval_seconds = 5
 max_wait_seconds = 1800
+batch_poll_interval_seconds = 60
+completion_window = "24h"
 
 [embedding]
 enabled = true
@@ -2672,6 +2682,39 @@ UI 显示友好提示：
 总结失败：API 超时
 向量索引失败：embedding 配置无效
 ```
+
+---
+
+### 24.5 Batch 批任务生命周期（m21）
+
+`[llm.*] mode = "batch"` 时，一次批量入口（单条 / 批量）变为：
+
+```text
+建 N 条资产任务（沿用 tasks 表，保持 pending）
+→ 逐任务构建叶子请求（短文 1 条，长文分段 / 分窗 N 条）
+→ JSONL 上传（POST {base_url}/files，purpose=batch）
+→ 创建批任务（POST {base_url}/batches，endpoint 从 base_url 末段推导）
+→ 写 1 条 type="batch" 任务（batch_id / custom_id 映射 / 进度入 params_json）
+→ 资产任务登记 batch_task_id（同一事务）
+→ 后台 daemon 线程按 batch_poll_interval_seconds 轮询
+→ 终态后下载输出 / 错误文件，按 custom_id 反解逐任务回填落盘
+```
+
+与 sync/async 的差异（硬约束）：
+
+```text
+batch 任务绝不重新提交（会双倍计费），重启后只续查状态
+custom_id = {task_id}_{序号}（uuid 无下划线，反解可靠）
+expired / cancelled / failed 时已完成请求仍在输出文件，先回收再判失败
+长文合并（merge）调用在下载后本地 sync 执行（merge 输入远小于原文）
+单文件上限 4000 行（取硅基流动较严限制），超出自动拆分多个批任务
+认证失败（401/403）与批任务不存在（404）整批置 failed，不再轮询
+```
+
+提供商：智谱（{base_url}/batches，endpoint /v4/chat/completions）与
+硅基流动（OpenAI Batch 完全兼容，endpoint /v1/chat/completions）路径
+结构一致，共用一套实现；均为五折计费、不受在线限流约束、预计 24 小时
+内完成，结果文件保留 30 天。
 
 ---
 
@@ -3348,6 +3391,50 @@ async 模式深度分析：提交→轮询→产物落盘；思考型模型配�
 
 ---
 
+### M21：LLM Batch 批处理模式（智谱 / 硅基流动）
+
+目标：
+
+```text
+[llm.*] 的 mode 增加第三种取值 batch（sync / async / batch），三个 LLM
+功能（总结/打标/分析）独立可选
+请求打包为厂商 Batch 任务（OpenAI 风格 files + batches 三段式）：
+上传 JSONL（POST {base_url}/files，purpose=batch）→ 创建批任务
+（POST {base_url}/batches）→ 轮询 GET {base_url}/batches/{id} →
+下载结果 GET {base_url}/files/{file_id}/content
+endpoint 参数值从 base_url 末段推导（智谱 /v4/chat/completions、
+硅基流动 /v1/chat/completions），不硬编码域名
+工作单元变化：一次入口 = N 条资产任务（pending）+ 1 条 type="batch"
+任务（batch_id / custom_id 映射 / 进度入 params_json），结果由轮询
+线程下载后逐任务回填落盘
+custom_id = {task_id}_{序号}；长文资产贡献多条请求（分段 / 分窗），
+任一请求失败即该任务 failed（附具体原因）
+长文合并（merge）调用在下载后本地 sync 执行：merge 输入仅为分段结果，
+远小于原文，全价成本占比可忽略，免去第二轮批任务状态机
+重启恢复绝不重新提交（避免双倍计费）：resume_batch_jobs 只续查；
+expired / cancelled / failed 时已完成请求仍在输出文件，先回收再判失败
+提交在调用线程同步完成（上传 + 建 batch 通常数秒），避免「任务已建但
+batch 未提交」的重启竞态；单任务构建失败 / 单批提交失败只影响自身
+单文件上限 4000 行（取硅基流动较严限制），超出自动拆分多个批任务
+新增配置：batch_poll_interval_seconds（默认 60）、completion_window
+（默认 24h，留空不传；智谱已废弃该参数）；校验与设置页同步
+设置页三张 AI 卡片 mode 下拉加「Batch 批处理（五折）」并暴露上述字段；
+任务中心 type="batch" 展示进度（completed/total + 厂商状态），不支持重试
+批量入口 notify 注明 Batch 模式（五折、预计 24 小时内回填）
+```
+
+完成标志：
+
+```text
+mode=batch 批量分析/总结：提交 → 任务中心 batch 任务进度增长 → 完成后
+产物落盘、资产任务 success、全文索引可搜到
+轮询期间重启应用：重新打开知识库后 batch 任务续查，不重复提交、不双倍计费
+长转录资产：分窗请求进 batch、merge 本地 sync，产物结构与 sync 模式一致
+mode 切回 sync/async 后批量总结/打标/分析行为与 M20 一致
+```
+
+---
+
 ## 29. 验收标准
 
 ### 29.1 知识库
@@ -3715,7 +3802,9 @@ M17（资产列表多选 + 批量总结 + 批量 AI 打标，复用任务系统�
 输入 + [llm.analysis] + 任务复用）、资产列表文件夹层级浏览已由 M19
 （文件管理器式导航：面包屑 + 子文件夹递归计数 + 当前层直接文件 +
 关键词全库搜索）、LLM 异步对话补全已由 M20（[llm.*] mode 切换 +
-智谱提交/轮询 + thinking 显式配置）完成，剩余：
+智谱提交/轮询 + thinking 显式配置）、LLM Batch 批处理模式已由 M21
+（mode=batch 五折批任务：智谱 / 硅基流动 files+batches 三段式 +
+batch_job_service 提交/轮询/回填 + 重启续查不重复计费）完成，剩余：
 
 ```text
 1. 收藏与稍后处理

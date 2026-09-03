@@ -307,6 +307,22 @@
     - 不引入 provider 抽象层：真实差异仅一对端点+一个参数且全部提供商 OpenAI 兼容；config 的 provider 字段 + chat_completion 唯一入口即抽象缝，出现协议级分歧提供商/特有能力 ≥3/UI 需要提供商预设时再评估
     - 异步 max_tokens 上限 128K（同步一般 8~16K），配合 thinking 显式开关治理思考型模型推理 token 预算截断（60fb62e 的根因修复）
 
+- M21 LLM Batch 批处理模式（智谱 / 硅基流动）- 代码已落地（2026-09-03），mock 全链路自检通过（提交→进度→completed 回填→success / expired 无输出→failed / 构建失败不影响整批 / 重启续查不重复提交），真实 API 冒烟待开发人员手动执行
+  - 依据：智谱官方文档「Batch 批处理」与「批处理 API」（创建/检索/列出），硅基流动官方文档「Batch API 指南」与 batches/files REST（两提供商均为 OpenAI 风格 files+batches 三段式、五折计费、预计 24h 内完成、结果文件保留 30 天；三个取舍定案：三功能统一支持 / merge 走本地 sync / 暂不做取消）
+  - 落地内容：
+    - `app/services/llm_batch.py`（新增）：Batch API 纯客户端——endpoint 从 base_url 末段推导（智谱 /v4/chat/completions、硅基流动 /v1/chat/completions，不硬编码域名）；build_jsonl_lines（body 复用 _build_payload，model/temperature/max_tokens/thinking 与 sync/async 含义一致）/ upload_input_file（purpose=batch）/ create_batch（completion_window 留空不传）/ retrieve_batch / download_results / extract_result（成功行复用 _extract_content，失败行取顶层 error 或 body.error）/ split_requests_chunks（单文件 ≤4000 行自动拆分）；异常分级 BatchAuthError（401/403）/ BatchMissingError（404）/ BatchUnsupportedError（404/405 提示改回 sync/async）
+    - `app/services/batch_job_service.py`（新增）：编排——submit_batch_jobs（逐任务构建叶子请求→拆分→上传建批→写 type="batch" 任务并在资产任务 params 登记 batch_task_id，同一事务；构建/提交失败只影响自身）；轮询 daemon 线程（单线程，间隔 batch_poll_interval_seconds 默认 60，空闲自退；进度 completed/failed/total + 厂商状态写 params_json）；终态下载输出/错误文件按 custom_id 反解（{task_id}_{序号}）逐任务回填，expired/cancelled/failed 先回收已完成请求再判失败；401/403 与 404 整批早失败；resume_batch_jobs 只续查绝不重新提交（避免双倍计费）
+    - `app/services/llm_service.py`：抽叶子请求构建 build_summary_leaf_messages / build_analysis_leaf_messages（附各窗时间范围标签）/ build_tagging_messages 与 merge_summary_summaries / merge_analysis_partials；summarize_text / analyze_text / suggest_tags 改为组合复用，sync 路径行为不变
+    - `app/services/summarization_service.py` / `tag_service.py` / `analysis_service.py`：新增 build_batch_request / apply_batch_results 钩子（惰性导入避免循环依赖）；落盘抽取 write_summary_artifact / write_analysis_artifact + refresh_*_indexes（批量回填统一刷一次索引）；编排器 _dispatch_created_tasks 按 mode 分流（batch → submit_batch_jobs，否则 batch_runner 照旧）；resume_pending_* 跳过 batch 托管任务；run_*_task 防御性跳过
+    - `app/services/library_service.py`：open_library 增 resume_batch_jobs()
+    - `app/services/config_service.py`：_llm_async_fields 更名扩展为 _llm_mode_fields（mode 允许 batch，新增 batch_poll_interval_seconds 默认 60、completion_window 默认 24h 留空不传）；_validate_llm_mode_fields 校验（completion_window 留空或 1-336h）
+    - UI：设置页三卡片「调用模式」下拉加「Batch 批处理（五折）」并暴露 batch 轮询间隔 / completion_window；任务中心 TYPE_LABELS 加 batch、列表行展示进度文案、重试走「暂不支持重试」；资产页三个批量入口 notify 注明 Batch 五折与 24h 预期（服务返回增 mode 字段）
+  - 决策记录：
+    - batch 改变工作单元而非单次调用：一次入口 = N 条资产任务（pending）+ 1 条 type="batch" 任务，custom_id={task_id}_{序号}（uuid 无下划线反解可靠），长文资产贡献多条请求、任一失败该任务 failed
+    - 与 sync/async 的硬约束差异：批任务绝不重新提交（会双倍计费），重启只续查（结果文件 30 天有效期覆盖恢复窗口）；提交在调用线程同步完成（上传+建批通常数秒），消除「任务已建但 batch 未提交」的重启竞态
+    - merge 走本地 sync：merge 输入仅为分段结果远小于原文，全价成本占比可忽略，免去第二轮批任务状态机；mode=batch 时 chat_completion 不命中 async 分支自然走 sync，零改动
+    - endpoint 从 base_url 末段推导而非配置项：智谱 …/paas/v4 → /v4、硅基流动 …/v1 → /v1，与 M20「端点推导不硬编码域名」一致；不引入 provider 抽象层（延续 M20 决策）
+
 ## 项目文档
 
 - [项目现状同步-2026-08-24.md](./项目现状同步-2026-08-24.md) - 面向协作者的完整现状快照（功能全景 / 架构 / API / 配置 / 决策 / 限制 / 规划）
