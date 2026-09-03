@@ -147,7 +147,6 @@ docs/PRD.md          # 唯一权威 spec
 
 ## 相关文档
 
-- [docs/项目现状同步-2026-08-23.md](./docs/项目现状同步-2026-08-23.md) — 面向协作者的完整现状快照（从这里开始了解项目）
 - [docs/PRD.md](./docs/PRD.md) — 产品需求文档 v1.1（权威 spec：数据模型 / API / UI / 配置 / 里程碑）
 - [docs/README.md](./docs/README.md) — 文档索引与里程碑实施记录
 - [docs/项目梳理报告.md](./docs/项目梳理报告.md) — 项目全景梳理

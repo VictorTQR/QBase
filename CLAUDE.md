@@ -79,9 +79,9 @@ docs/PRD.md          # 唯一权威 spec
 - [x] M7 设置页 + 任务中心增强（2026-08-16 完成，配置总览/索引管理/任务详情/失败重试）
 - [x] M7 补完：配置 UI 化（2026-08-16 完成，表单写回 config.toml / 环境变量检测 / 连通性测试 / 明文 Key 打码 / dimension 变更告警）
 - [x] M8 体验优化（2026-08-16 完成，状态徽章/搜索高亮/大文本折叠/错误提示/排序分页/统一导航 + 最近打开/向量状态卡片）
-- [x] M9 文档解析接入 MinerU（2026-08-20 代码落地，验收步骤见 docs/讨论/qwen-prdv1/m9-parse.md §8）：解析器 provider 抽象（parsers/）+ 批量上传 batch-of-1 + 重启恢复轮询 + parsed.md 进索引 + PDF 总结输入切换；2026-08-23 后补：pptx/ppt/xlsx/xls 补入扫描扩展名（PRD §15.2 既有宣称，扫描层缺口），html/htm 改无需解析
-- [x] M10 EPUB 内容索引（2026-08-21 代码落地，脚本验证已通过，UI 验收步骤见 docs/讨论/qwen-prdv1/m10-epub.md §3）：内置本地 EpubParser（标准库 only）+ to_markdown 接口扩展 + 按扩展名路由（.epub 免 token）+ parsed.md 全链路复用
-- [x] M11 sidecar 目录 .kb（2026-08-21 代码落地，验收步骤见 docs/讨论/qwen-prdv1/m11-sidecar.md §3）：<原始文件名>.kb/ 目录识别（目录名精确绑定，无歧义）+ 总结/解析跟随现状写入（有目录才归集）+ 转录平铺不变（{output} 变量预留）；后补：详情页「创建 .kb 派生目录」按钮（service + REST + UI，只建目录不移动文件）
+- [x] M9 文档解析接入 MinerU（2026-08-20 代码落地，验收步骤见 docs/讨论/qwen-prd/m9-parse.md §8）：解析器 provider 抽象（parsers/）+ 批量上传 batch-of-1 + 重启恢复轮询 + parsed.md 进索引 + PDF 总结输入切换；2026-08-23 后补：pptx/ppt/xlsx/xls 补入扫描扩展名（PRD §15.2 既有宣称，扫描层缺口），html/htm 改无需解析
+- [x] M10 EPUB 内容索引（2026-08-21 代码落地，脚本验证已通过，UI 验收步骤见 docs/讨论/qwen-prd/m10-epub.md §3）：内置本地 EpubParser（标准库 only）+ to_markdown 接口扩展 + 按扩展名路由（.epub 免 token）+ parsed.md 全链路复用
+- [x] M11 sidecar 目录 .kb（2026-08-21 代码落地，验收步骤见 docs/讨论/qwen-prd/m11-sidecar.md §3）：<原始文件名>.kb/ 目录识别（目录名精确绑定，无歧义）+ 总结/解析跟随现状写入（有目录才归集）+ 转录平铺不变（{output} 变量预留）；后补：详情页「创建 .kb 派生目录」按钮（service + REST + UI，只建目录不移动文件）
 - [x] M12 transcript JSON segments（2026-08-21 代码落地，冒烟验证见讨论稿 m12-segments.md 附录 A，UI 验收步骤见 §3）：详情页 json 转录分段视图（时间戳/说话人/100 段分页）+ 判定统一 is_transcript_json_name（修复 m11 遗留：sidecar transcript.json 此前不命中后缀判定，索引/总结输入读入原始 JSON）
 - [x] M13 音频/视频播放器与字幕级跳转（2026-08-21 代码落地，UI 验收步骤见讨论稿 m13-audio-seek.md §3）：详情页「播放」卡片（原生 ui.audio/ui.video，NiceGUI 自动托管本地文件 Range 流式）+ json 转录分段时间戳点击跳转（seek + play）；源文件缺失/无播放器降级纯文本；不做反向同步，API/服务层零改动
 - [x] M14 混合搜索排序（2026-08-21 代码落地，RRF 融合逻辑自测通过，UI 验收步骤见讨论稿 m14-hybrid-search.md §3）：搜索服务 search_hybrid（全文+向量两路 RRF，k=60，chunk 级去重，双命中合并标注来源）+ 搜索页「综合搜索」主按钮（回车触发）+ REST mode=hybrid（响应附 degraded_reason）；单路不可用降级为另一路并提示，不报错

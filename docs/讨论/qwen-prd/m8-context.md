@@ -268,7 +268,7 @@ M8：体验优化
 ## 10. 相关文档索引（如需深入）
 
 - `docs/PRD.md`：完整产品需求，M8 见 §28；安全红线 §3；配置 §20.2 / §22.6 / §26.2；验收 §29。
-- `docs/讨论/qwen-prdv1/m7-config-ui.md`：M7 配置 UI 化设计（含 §19 secrets.toml 已实施记录），可参考其文档风格与拆解粒度来写 M8 设计文档。
+- `docs/讨论/qwen-prd/m7-config-ui.md`：M7 配置 UI 化设计（含 §19 secrets.toml 已实施记录），可参考其文档风格与拆解粒度来写 M8 设计文档。
 - `docs/README.md`：各里程碑落地文件清单与函数清单。
 - `docs/项目梳理报告.md`：M0-M7 实施现状说明。
 

@@ -12,7 +12,7 @@
 - M0 项目骨架 - 已完成（2026-08-16），无偏差，见 PRD §28
   - 备注：NiceGUI `@ui.page` 注册要求包 `__init__.py` 显式导入子模块
 - M1 知识库与扫描 - 已完成（2026-08-16）
-  - 依据：讨论稿 qwen-prdv1/m1.md，已适配 M0 结构
+  - 依据：讨论稿 qwen-prd/m1.md，已适配 M0 结构
   - 偏差/补充（m1.md 未覆盖、由实施补齐）：
     - `app/database.py`：sqlite3 连接（WAL + Row 工厂）+ assets 建表（DDL 取自 PRD §19.1）
     - `app/services/library_service.py`：open_library / close_library / get_library_status；打开时写默认 `.knowledge/config.toml`（模板取自 PRD §20）
@@ -20,7 +20,7 @@
     - `app/main.py`：未按 m1.md 整体替换，保留 M0 的配置/日志/健康检查，仅追加 API 路由
     - `app/state.py`、`app/rules.py`、`app/utils.py`、`app/repositories/asset_repository.py`、`app/services/scanner_service.py`、`app/ui/pages/assets.py` 按 m1.md 落地（资产页并入 page_frame 导航布局，新增类型过滤）
 - M2 派生文件识别 + 资产详情页 - 已完成（2026-08-16）
-  - 依据：讨论稿 qwen-prdv1/m2.md，已适配 M1 结构
+  - 依据：讨论稿 qwen-prd/m2.md，已适配 M1 结构
   - 偏差/补充（m2.md 未覆盖、由实施补齐）：
     - `database.py` 保留 M1 的 WAL/get_conn，SCHEMA 扩至 PRD §19.1 全部 5 表 + artifacts 索引 + chunks_fts（FTS5，M4 搜索用）
     - `list_assets` 保留 M1 的类型过滤参数，叠加 has_transcript/has_summary/note EXISTS 徽章列
@@ -31,7 +31,7 @@
     - 同 stem 多候选 -> 歧义不绑定；无候选 -> 孤儿（stats 计数，UI warning 提示）
     - 普通 {stem}.txt 在同目录存在同 stem 音视频时识别为转录，否则仍是文档资产
 - M3 转录任务 - 已完成（2026-08-16）
-  - 依据：讨论稿 qwen-prdv1/m3.md（QVoice CLI 集成），已适配 M2 结构
+  - 依据：讨论稿 qwen-prd/m3.md（QVoice CLI 集成），已适配 M2 结构
   - 偏差/补充（m3.md 未覆盖、由实施补齐）：
     - `app/services/config_service.py`：`transcribe_cwd` 空字符串归一为 None（否则 subprocess WinError 123）
     - `app/services/transcription_service.py`：任务 command 字段统一存 json.dumps（m3.md 的 run 阶段误存 str(list) repr）；补 loguru 日志
@@ -43,7 +43,7 @@
     - 验收用 mock CLI（kb-test/.knowledge/mock_transcribe.py）跑通 success/failed/超时去重三条路径；真实 QVoice 配置已写入默认模板，用户改库级 config 即可切换
     - 并发去重：同资产同类型存在 pending/running 任务时拒绝（HTTP 400）
 - M4 全文搜索 + 文件名搜索 - 已完成（2026-08-16）
-  - 依据：讨论稿 qwen-prdv1/m4.md，已适配 M3 结构
+  - 依据：讨论稿 qwen-prd/m4.md，已适配 M3 结构
   - 偏差/补充（m4.md 未覆盖、由实施补齐）：
     - `app/ui/pages/search.py`：搜索页包 page_frame（m4.md 版本无布局，手写导航链接已去除）
     - 未按 m4.md 替换 main.py，页面经 `pages/__init__.py` 注册；/search 占位页移除
@@ -55,7 +55,7 @@
     - 索引来源：active 状态的 transcript/summary/note/parsed 派生 + .md/.txt 文档资产（parse_status=not_required）
     - 重建策略为全量清空重建；大库可优化为按资产增量索引
 - M5 LanceDB 向量搜索 - 已完成（2026-08-16）
-  - 依据：讨论稿 qwen-prdv1/m5.md，已适配 M4 结构
+  - 依据：讨论稿 qwen-prd/m5.md，已适配 M4 结构
   - 偏差/补充（m5.md 未覆盖、由实施补齐）：
     - `app/ui/pages/search.py`：搜索页包 page_frame（m5.md 版本手写导航已去除），新增「语义」模式与「重建向量索引」按钮、distance 显示
     - 新增 API：`POST /api/search/vector/rebuild`；`GET /api/search` 的 mode 放行 vector
@@ -66,7 +66,7 @@
     - embedding 缓存 key = `chunk|query:{model}:{sha256(text)}`，存 embedding_cache 表（M2 已建），JSON 向量
     - 验收用本地 mock embeddings 服务（kb-test/.knowledge/mock_embeddings.py，字符频率向量，端口 8790）跑通：首次重建 7 片段全量嵌入 → 二次重建 7 缓存命中 0 新调用 → 「知识管理」语义命中 ep001 总结（distance 1.20 vs 其他 ≥1.79）→ enabled=false 时 HTTP 400 明确报错
 - M6 AI 总结生成 - 已完成（2026-08-16）
-  - 依据：讨论稿 qwen-prdv1/m6.md，已适配 M5 结构
+  - 依据：讨论稿 qwen-prd/m6.md，已适配 M5 结构
   - 偏差/补充（m6.md 未覆盖、由实施补齐）：
     - `app/ui/pages/asset_detail.py`：AI 总结卡片并入 page_frame 版详情页（m6.md 版本丢了布局），按钮禁用态 + 覆盖确认对话框
     - 新增 API：`POST /api/assets/{id}/summarize`（m6.md 未提供，与 transcribe 端点对齐）
@@ -77,7 +77,7 @@
     - 总结成功后自动 scan + rebuild_fulltext_index（失败仅记 warning，不影响任务 success）
     - 验收用本地 mock LLM（kb-test/.knowledge/mock_llm.py，端口 8791，内容含「触发失败」时返回 500）：短文直出 / 长文分段合并（601 字原文 → 合并请求 1091 字符）/ 覆盖备份（.knowledge/backups/）/ 自动刷新索引（新总结立即可搜）全部通过
 - M7 统一导航 + 设置页 + 任务中心增强 - 已完成（2026-08-16）
-  - 依据：讨论稿 qwen-prdv1/m7.md，已适配现有结构
+  - 依据：讨论稿 qwen-prd/m7.md，已适配现有结构
   - 偏差/补充（m7.md 未覆盖、由实施补齐）：
     - m7.md §1 的 page_header/require_library 未采纳——统一导航自 M0 起已由 page_frame 提供（含设置入口），全部页面沿用
     - m7.md §4 资产列表页未替换——类型过滤 M1 已实现（DB 层 asset_type 参数，非页面端过滤）
@@ -88,7 +88,7 @@
     - 重试 = 创建新任务而非复用旧记录（任务表保留完整历史）；同资产存在 pending/running 任务时仍受并发去重约束（400）
     - m7.md §10 后续规划（M8 watch/M9 文档解析/M10 笔记编辑等）仅作参考，下一里程碑以 PRD 为准
 - M7 补完（m7-config-ui）：配置 UI 化 - 已完成（2026-08-16）
-  - 依据：讨论稿 qwen-prdv1/m7-config-ui.md（qwen 误标为 M8，已纠正为 M7 配置 UI 化补完，与 PRD v1.1 §20.2/§22.6/§23.5 对齐）
+  - 依据：讨论稿 qwen-prd/m7-config-ui.md（qwen 误标为 M8，已纠正为 M7 配置 UI 化补完，与 PRD v1.1 §20.2/§22.6/§23.5 对齐）
   - 偏差/补充（m7-config-ui.md 未覆盖、由实施补齐）：
     - 保留 M5/M6 既有 `get_embedding_config`/`get_summary_llm_config` 不被破坏；`config_service` 新增 `save_config`/`validate_config`/`get_key_status`/`has_plain_api_key`/`test_connection` 等
     - 新增 `app/api/settings.py`：`GET/PUT /api/settings` + `POST /api/settings/test-connection`，main.py 用 `include_router` 注册（沿用 M0 入口，不替换 main.py）
@@ -96,7 +96,7 @@
     - 明文 Key 处理：`GET /api/settings` 返回的 config 中 api_key 一律打码为 `***`；`has_plain_api_key` 单独检测用于警告；UI 绝不提供明文 Key 输入框
     - 依赖新增 `tomli-w`（TOML 写回）
 - M8 体验优化 - 已完成（2026-08-16）
-  - 依据：讨论稿 qwen-prdv1/m8.md（与 qwen 基于 m8-context.md 讨论产出）
+  - 依据：讨论稿 qwen-prd/m8.md（与 qwen 基于 m8-context.md 讨论产出）
   - 落地内容：
     - `app/ui/layout.py`：保留 `page_frame`（新增 `active_nav` 高亮参数），新增 `page_header`/`breadcrumb`/`require_library`
     - `app/utils.py`：新增 `notify_error`（loguru 记录 + 中文友好提示）、`highlight_snippet`（HTML 转义 + `<mark>` 高亮）、`read_text_full`/`read_text_segment`
@@ -140,7 +140,7 @@
     - 徽章/按钮颜色只用 Quasar 调色板名（`color=` 参数），文字/布局类只用 Tailwind 类串（`.classes()`），两类入口分别收口到 `C` / `CLS`，禁止页面内再写裸色值
     - `page_header` 与 `page_frame` 双轨并存时两套页面骨架易漂移（M8 期间新增页面各选其一），收敛为单一 `page_frame` 后删除 `page_header`
 - M9 文档解析接入（MinerU）- 代码已落地（2026-08-20），验收步骤见讨论稿 m9-parse.md §8，待开发人员手动执行
-  - 依据：讨论稿 qwen-prdv1/m9-parse.md（与用户讨论定稿，9 条决策不再开放：batch-of-1 / 只落 parsed.md + zip 留档 / 白名单 / vlm 默认 / token_env 机制 / PDF 总结输入切换等）
+  - 依据：讨论稿 qwen-prd/m9-parse.md（与用户讨论定稿，9 条决策不再开放：batch-of-1 / 只落 parsed.md + zip 留档 / 白名单 / vlm 默认 / token_env 机制 / PDF 总结输入切换等）
   - 落地内容：
     - 新增 `app/services/parsers/`：`base.py`（`DocumentParser` ABC，submit/poll/fetch 三阶段 + `ParseSubmission`/`ParseFileState` 数据类）、`mineru_parser.py`（v4 批量上传接口：申请链接 → PUT 上传不带 Content-Type → 自动解析 → 轮询 → zip 下载）、`__init__.py`（注册表 `PARSERS` + `get_parser`）
     - 新增 `app/services/parse_service.py`：`start_parsing`（前置校验：白名单/200MB/token/去重）→ `run_parse_task`（提交 → 轮询 → 下载 → 写 `{stem}.parsed.md` → zip 留档 `.knowledge/backups/` → 自动 scan + 重建全文索引）；`resume_running_parse_tasks` 打开库时恢复未完结任务（`_live_task_ids` 线程守卫防重复拉起）
@@ -166,7 +166,7 @@
     - 老库需重新扫描一次：新增的 Office 资产才会入库，存量 html 资产的 parse_status 由 pending 更新为 not_required（upsert 每次扫描都刷新该列）
   - 手动验收步骤：① 放 pptx/xlsx 文件 → 扫描 → 资产列表出现（类型=文档，徽章=待解析）② 详情页发起解析 → 任务中心 → parsed.md 生成 → 全文搜索命中内容 → AI 总结可用 ③ html 资产重扫后徽章变「无需解析」，全文索引确认不含 html 原文（仅文件名搜索）
 - M10 EPUB 内容索引（内置本地解析器）- 代码已落地（2026-08-21），附录 A 验证脚本已跑通（合成 EPUB3/EPUB2/latin-1/坏 zip/DRM + 全链路），UI 手动验收步骤见讨论稿 m10-epub.md §3
-  - 依据：讨论稿 qwen-prdv1/m10-epub.md（选型：手写 zipfile + 标准库，不引 ebooklib；.epub 固定路由内置解析器，不看 [parse].provider）
+  - 依据：讨论稿 qwen-prd/m10-epub.md（选型：手写 zipfile + 标准库，不引 ebooklib；.epub 固定路由内置解析器，不看 [parse].provider）
   - 落地内容：
     - 新增 `app/services/parsers/epub_parser.py`：`EpubParser` 本地解析器——submit=结构校验（zip/container.xml/OPF/spine，DRM 拒绝）、poll=查源文件（done 时 `full_zip_url=local://<路径>` 伪协议指针，parse_service 轮询循环零改动）、fetch=现算 markdown（幂等无状态，重启重算即恢复）、`to_markdown`=utf-8 解码；核心 `_epub_to_markdown`：container.xml → OPF manifest/spine 阅读顺序 → XHTML 逐章 `html.parser` 流式转 markdown（h1-h6/列表/引用/代码块/表格简化映射，href 百分号解码，BOM/XML 声明探测编码，spine 为空回退全量内容文件按路径排序）
     - `base.py`：`DocumentParser` 增抽象方法 `to_markdown(raw)` + 类属性 `PRODUCT_BACKUP_SUFFIX`（产物留档后缀，None 不留档）与 `max_file_bytes`（None 不限制）；MinerU 的 `_extract_full_md` 从 parse_service 挪入 `MineruParser.to_markdown`，200MB 上限改为 MinerU 类属性（本地解析不设限）
@@ -179,7 +179,7 @@
     - epub 产物不留档 zip（产物即 md 文本，覆盖重解析已有 `.bak.md` 备份链路）
     - 验证脚本（讨论稿附录 A）：EPUB3 spine 顺序/实体/列表/斜体/代码块/引用/表格断言、EPUB2+latin-1+子目录、坏 zip/DRM 报错、parse_service 全链路（无 MinerU token 下任务 success → parsed.md 进 FTS → 无 zip 留档 → 覆盖备份生成），2026-08-21 全部通过
 - M11 sidecar 目录 .kb - 代码已落地（2026-08-21），验收步骤见讨论稿 m11-sidecar.md §3，待开发人员手动执行
-  - 依据：讨论稿 qwen-prdv1/m11-sidecar.md（与用户讨论定稿，决策不再开放：写入跟随现状 opt-in / 转录按不支持指定输出路径设计 + {output} 预留 / 不做归集工具）
+  - 依据：讨论稿 qwen-prd/m11-sidecar.md（与用户讨论定稿，决策不再开放：写入跟随现状 opt-in / 转录按不支持指定输出路径设计 + {output} 预留 / 不做归集工具）
   - 落地内容：
     - `app/rules.py`：新增 sidecar 命名规则——`SIDECAR_DIR_SUFFIX`（".kb"）、`SIDECAR_FILE_KINDS`（目录内固定文件名 -> kind）、`is_sidecar_dir` / `sidecar_asset_filename` / `sidecar_file_kind` / `sidecar_dir_of`，以及写入策略 helper `derived_output_path`（.kb 目录存在 -> 目录内原名；否则平铺 stem.filename）
     - `app/services/scanner_service.py`：`collect_files` 返回 (普通文件, sidecar 文件) 二元组，os.walk 时摘出 .kb 目录单独收集（不递归、跳过隐藏与未识别命名）且不再下钻；绑定阶段 sidecar 候选按 `relative_path.lower()` 精确映射资产（目录名去掉 .kb 即完整文件名，含扩展名），未命中计孤儿
@@ -197,7 +197,7 @@
   - `app/ui/pages/asset_detail.py`：派生文件区新增状态行——未启用时显示「创建 .kb 派生目录」按钮 + 平铺提示，创建成功后按钮禁用、状态改「已启用」；已启用时只显示状态
   - 冒烟（临时脚本，已通过）：未启用时 `derived_output_path` 平铺 → `create_sidecar_dir` 建目录 → 启用后跟随写入 `.kb/parsed.md` → 重复调用幂等 → 未知资产 ValueError「资产不存在」
 - M12 transcript JSON segments - 代码已落地（2026-08-21），附录 A 冒烟验证 32 项已通过，UI 手动验收步骤见讨论稿 m12-segments.md §3，待开发人员手动执行
-  - 依据：讨论稿 qwen-prdv1/m12-segments.md（范围 = 解析 + 详情页分段展示；播放器/点击跳转属 M13、segments 不入库、不加 API 端点）
+  - 依据：讨论稿 qwen-prd/m12-segments.md（范围 = 解析 + 详情页分段展示；播放器/点击跳转属 M13、segments 不入库、不加 API 端点）
   - 落地内容：
     - `app/rules.py`：`is_transcript_json_name`——平铺 `.transcript.json` 后缀与 sidecar 固定名 `transcript.json`（精确匹配）统一判定，大小写不敏感
     - `app/utils.py`：`_is_transcript_json` 改走 rules helper；新增 `load_transcript_segments`（归一化 segments[{start,end,text,speaker}] + duration/language——无文本段跳过、非数值时间置 None、speaker 空串归 None、duration 缺失用末段 end 推导，失败抛 ValueError）与 `format_clock`（MM:SS / H:MM:SS，无效值空串）
@@ -207,7 +207,7 @@
     - json 转录默认分段视图替换「纯文本预览 + 展开全文」：分段视图信息严格包含纯文本，原始 JSON 可「文件」按钮外部打开；txt 转录不变
     - segments 按需解析不入库（文件即事实源）；无 REST 端点（NiceGUI 服务端渲染直接读文件）
 - M13 音频/视频播放器与字幕级跳转 - 代码已落地（2026-08-21），UI 手动验收步骤见讨论稿 m13-audio-seek.md §3，待开发人员手动执行
-  - 依据：讨论稿 qwen-prdv1/m13-audio-seek.md（范围 = 详情页播放卡片 + 分段时间戳点击跳转；音频与视频一并实现、不做反向同步、API/服务层零改动）
+  - 依据：讨论稿 qwen-prd/m13-audio-seek.md（范围 = 详情页播放卡片 + 分段时间戳点击跳转；音频与视频一并实现、不做反向同步、API/服务层零改动）
   - 落地内容：
     - `app/ui/pages/asset_detail.py`（唯一改动文件）：基本信息卡片后新增「播放」卡片（仅音频/视频）——源文件存在时 `ui.audio` / `ui.video`（视频限高 max-h-[60vh]），缺失时降级橙色提示；`_render_transcript_segments` 增可选 `player` 参数，时间戳在有播放器且段有 start 时改为可点击按钮（`_make_seek_handler`：seek + play，工厂函数避免循环内闭包晚绑定）
   - 决策记录：
@@ -215,7 +215,7 @@
     - 降级路径保持 m12 行为：无播放器（文档资产 / 源文件缺失）或段 start 缺失时时间戳为纯文本；txt 转录无结构化时间戳，不提供跳转
     - 反向同步（播放中高亮/滚动当前段）、倍速、字幕文件加载明确不做（讨论稿决策 6/7），需要时再立任务
 - M14 混合搜索排序（全文 + 向量 RRF 融合）- 代码已落地（2026-08-21），RRF 融合逻辑自测通过（双命中合并/排序/无 chunk_id 不误合并），UI 手动验收步骤见讨论稿 m14-hybrid-search.md §3，待开发人员手动执行
-  - 依据：讨论稿 qwen-prdv1/m14-hybrid-search.md（范围 = 仅全文+向量两路融合，文件名搜索保持独立；「综合搜索」为主按钮且回车触发；向量不可用降级为纯全文+提示不报错）
+  - 依据：讨论稿 qwen-prd/m14-hybrid-search.md（范围 = 仅全文+向量两路融合，文件名搜索保持独立；「综合搜索」为主按钮且回车触发；向量不可用降级为纯全文+提示不报错）
   - 落地内容：
     - `app/services/vector_service.py`：`search_vectors` 返回值补 `chunk_id`（取 LanceDB 记录 id 字段）
     - `app/services/search_service.py`：`search_fulltext` / `search_vector` 输出补 `chunk_id`（融合去重键）；新增 `_rrf_fuse`（score = Σ 1/(60+rank)，同 chunk 双命中合并——保留全文路片段/高亮词、distance 取向量路；chunk_id 缺失时按「路前缀-名次」生成独立键不误合并）与 `search_hybrid`（两路各取 top 50，各自 try/except 降级并汇总原因，返回 `(结果, 降级原因)`）；统一入口 `search` mode 增加 hybrid
@@ -226,7 +226,7 @@
     - 向量路捕获任意异常降级（Embedding 未启用 ValueError / API 失败同路径处理）；全文路仅捕获 RuntimeError（FTS 索引缺失提示），其他数据库错误照常上抛
     - 搜索页各 handler 维持直接同步调用的既有模式（m5 起语义搜索即如此），不在本里程碑引入 run.io_bound
 - M15 标签系统（手动打标 + 列表/搜索标签筛选）- 代码已落地（2026-08-21），验收步骤见讨论稿 m15-tags.md §3，待开发人员手动执行
-  - 依据：讨论稿 qwen-prdv1/m15-tags.md（范围 = 标签数据模型 + 详情页手动打标 + 列表标签列与筛选 + 四种搜索模式标签过滤；纯手动、扁平、无管理页，AI 打标/层级/颜色/tags.json 双写明确不做）
+  - 依据：讨论稿 qwen-prd/m15-tags.md（范围 = 标签数据模型 + 详情页手动打标 + 列表标签列与筛选 + 四种搜索模式标签过滤；纯手动、扁平、无管理页，AI 打标/层级/颜色/tags.json 双写明确不做）
   - 落地内容：
     - `app/database.py`：SCHEMA 追加 tags / asset_tags 两表 + idx_asset_tags_tag_id 索引（IF NOT EXISTS，老库幂等）；不声明外键，与 artifacts/chunks 现状一致
     - 新增 `app/repositories/tag_repository.py`：make_tag_id（uuid5 同名同 ID，对齐 make_asset_id 方案）/ list_tags（LEFT JOIN 聚合 usage）/ get_tags_for_asset / set_asset_tags（全量替换：缺失标签先建 → 删旧绑定重插 → delete_orphan_tags 清零引用；调用方 commit）
@@ -241,7 +241,7 @@
     - 列表 tags 列用 group_concat 逗号聚合（因此标签名禁半角逗号），group_concat 不保序，展示顺序由 UI 排序
     - 范围外：AI 建议标签、批量自动打标（留待「批量任务」里程碑）、标签层级/颜色/别名、标签管理页、搜索结果卡展示标签徽章、按标签统计报表
 - M16 AI 建议标签（LLM 打标，M15 增强）- 代码已落地（2026-08-21），冒烟（解析/清洗/校验路径 + mock 全链路）与浏览器端到端（mock OpenAI：配置保存 → 测试连通 → 建议预填 → 确认入库）已通过，UI 手动验收步骤见讨论稿 m16-ai-tags.md §3，待开发人员手动执行
-  - 依据：讨论稿 qwen-prdv1/m16-ai-tags.md（修订 m15 决策 2「不做 AI 建议标签」的部分：AI 只建议、人确认；批量打标与总结后自动建议仍明确不做）
+  - 依据：讨论稿 qwen-prd/m16-ai-tags.md（修订 m15 决策 2「不做 AI 建议标签」的部分：AI 只建议、人确认；批量打标与总结后自动建议仍明确不做）
   - 落地内容：
     - `app/services/llm_service.py`：TAGGING_SYSTEM_PROMPT（中文：3-8 个、单个 ≤10 字符、优先复用已有标签、只输出 JSON 数组）+ suggest_tags（标题/内容截断/已有标签 → chat_completion）+ _parse_tag_list（剥 markdown fence、截取 [...]、json.loads，失败 RuntimeError 中文报错）
     - `app/services/tag_service.py`：suggest_asset_tags（校验资产/启用/输入文本，输入优先 active 总结、空总结跳过、无则复用 get_summary_input_text 取转录/解析/原文，全库标签随 prompt 下发引导复用）+ _clean_suggestions（宽松清洗：丢空/含半角逗号/>30 字符、去重保序、截到单资产上限）；全程不写库
@@ -254,7 +254,7 @@
     - 打标与总结可配不同模型（输入短输出小，可用更快/更便宜模型）
     - 清洗宽松丢弃而非报错：LLM 幻觉条目（空/含逗号/超长）静默丢弃，其余照常；解析失败（非 JSON）才报错
 - M17 批量任务（批量总结 + 批量 AI 打标）- 代码已落地（2026-08-23），冒烟（mock LLM 临时知识库全链路：批量总结 3 任务成功 / 重跑全跳过 / 批量打标追加不删已有 / 重启恢复 / 同资产去重）已通过，UI 手动验收步骤见讨论稿 m17-batch-tasks.md §3，待开发人员手动执行
-  - 依据：讨论稿 qwen-prdv1/m17-batch-tasks.md（两个产品决策——打标写入策略与总结覆盖策略——用户未逐条答复，按推荐项落地：自动追加写入 / 弹窗选择跳过或覆盖，讨论稿 §0 注明可复核）
+  - 依据：讨论稿 qwen-prd/m17-batch-tasks.md（两个产品决策——打标写入策略与总结覆盖策略——用户未逐条答复，按推荐项落地：自动追加写入 / 弹窗选择跳过或覆盖，讨论稿 §0 注明可复核）
   - 落地内容：
     - 新增 `app/services/batch_runner.py`：get_max_workers（读 [task].max_workers，m1 起存在但执行侧零消费，本次接通）+ execute_tasks（daemon 线程串行/ThreadPoolExecutor 并发消费任务列表；_inflight_task_ids 进程内去重，防重启恢复与在跑任务重复执行）
     - `app/services/summarization_service.py`：start_summarization 的「校验+建任务」段抽成 _create_summarization_task（返回 task_id 或跳过原因，单条路径行为不变，改经 batch_runner 执行）；新增 start_batch_summarization（整体 enabled 预检 → 逐资产预检，overwrite=False 时已有 active summary 跳过 → 返回 created/skipped 报告）与 resume_pending_summarization_tasks
@@ -270,7 +270,7 @@
     - 批量提交后保留选择集（不自动清除），便于紧接对同一批资产做另一批量操作（总结 → 打标工作流：打标输入优先取总结）
 
 - M18 深度分析（多模板分析产物）- 代码已落地（2026-08-24），冒烟（mock LLM 临时知识库全链路：模板生成不覆盖 / 带时间戳输入构造 / 单条任务成功写 analysis.teaching.md / 批量跳过与覆盖备份 / sidecar 输出 / 伪造 pending 任务恢复 / 分析进全文索引 / 超长分窗 5+1 次调用合并）已通过，UI 手动验收步骤见讨论稿 m18-analysis.md §3，待开发人员手动执行
-  - 依据：讨论稿 qwen-prdv1/m18-analysis.md（三个产品决策——模板管理方式 / 渲染方式 / 时间戳交互——用户未逐条答复，按推荐项落地：presets 文件化无 UI 编辑器 / 仅分析用 markdown 渲染 / v1 时间戳仅展示，讨论稿 §0 注明可复核）
+  - 依据：讨论稿 qwen-prd/m18-analysis.md（三个产品决策——模板管理方式 / 渲染方式 / 时间戳交互——用户未逐条答复，按推荐项落地：presets 文件化无 UI 编辑器 / 仅分析用 markdown 渲染 / v1 时间戳仅展示，讨论稿 §0 注明可复核）
   - 落地内容：
     - 新增 `app/services/analysis_preset_service.py`：.knowledge/presets/*.md 模板系统（极简 frontmatter 解析、内置 teaching/interview、ensure 已存在不覆盖、list/get、{title} 用 str.replace 替换防花括号冲突）
     - 新增 `app/services/analysis_service.py`：build_timestamped_input（transcript.json segments → [MM:SS] 说话人: 文本，纯文本转录报错引导 -f json）、_create_analysis_task / start_analysis / start_batch_analysis（该模板已有分析按文件名反解判定，路径无关）/ resume_pending_analysis_tasks / run_analysis_task（备份 → 写 analysis.<preset>.md → 重扫描 + 重建索引）
@@ -325,8 +325,6 @@
 
 ## 项目文档
 
-- [项目现状同步-2026-08-24.md](./项目现状同步-2026-08-24.md) - 面向协作者的完整现状快照（功能全景 / 架构 / API / 配置 / 决策 / 限制 / 规划）
-- [项目现状同步-2026-08-23.md](./项目现状同步-2026-08-23.md) - 历史快照（M17 时点）
 - [项目梳理报告.md](./项目梳理报告.md) - 2026-08-16 项目全景梳理（历史演进 / 技术转向 / 架构决策）
 
 ## 修复记录

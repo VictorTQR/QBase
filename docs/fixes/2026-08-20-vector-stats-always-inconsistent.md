@@ -6,7 +6,7 @@
 
 ## 根因
 
-`get_vector_stats` 沿用了讨论稿 [vector-manage.md](../讨论/qwen-prdv1/vector-manage.md) 的统计口径，用 `kind='vector'` 过滤 chunks 表：
+`get_vector_stats` 沿用了讨论稿 [vector-manage.md](../讨论/qwen-prd/vector-manage.md) 的统计口径，用 `kind='vector'` 过滤 chunks 表：
 
 ```sql
 SELECT COUNT(*) FROM chunks WHERE kind='vector'

@@ -1674,7 +1674,7 @@ document text，仅限可读文本
 
 优先级：P2
 
-m14 已实现（讨论稿 `docs/讨论/qwen-prdv1/m14-hybrid-search.md`）：
+m14 已实现（讨论稿 `docs/讨论/qwen-prd/m14-hybrid-search.md`）：
 
 ```text
 全文结果 + 向量结果融合
@@ -3690,6 +3690,45 @@ pending/running 任务恢复
 「平铺」视图与原有平铺列表一致；两视图切换记住所在文件夹
 类型/标签筛选影响文件列表与文件夹计数；分页/排序/多选/批量不变
 扫描后回到根目录；含 %/_ 等特殊字符的文件夹名正常
+```
+
+---
+
+### 29.19 LLM 异步对话补全（m20）
+
+验收：
+
+```text
+默认 sync 路径回归：总结/打标/分析行为不变，请求 payload 不含 thinking
+设置页任一 AI 卡片切「异步（智谱）」：提交后轮询至完成，产物落盘与
+sync 模式一致；思考型模型配大 max_tokens（异步上限 128K），长输出
+不再被推理 token 截断
+thinking 三态生效：默认不传 / 开启附带 {"type":"enabled"} / 关闭附带
+{"type":"disabled"}（仅显式配置才附带）
+不支持异步接口的提供商（DeepSeek/硅基流动等）误开 async：报错可读并
+提示改回 sync，不静默降级
+轮询期间瞬时网络异常/非 200 容忍至 max_wait_seconds（默认 1800）截止，
+401/403 密钥问题立即失败
+重启应用：轮询中的任务随任务系统整体重跑（重新提交），与 sync 行为一致
+```
+
+---
+
+### 29.20 LLM Batch 批处理模式（m21）
+
+验收：
+
+```text
+mode=batch 批量总结/打标/分析：批量入口提示五折与 24h 预期；提交后
+任务中心出现 type="batch" 任务并展示进度（completed/total + 厂商状态）
+完成后产物落盘、资产任务逐条 success、全文索引可搜到产物；长转录
+资产分窗请求进 batch、merge 本地 sync，产物结构与 sync 模式一致
+轮询期间重启应用：重新打开知识库后 batch 任务只续查不重新提交
+（不双倍计费）；expired/cancelled/failed 先回收已完成请求再判失败
+单文件超 4000 行自动拆分多批；单任务构建失败/单批提交失败只影响自身
+任务中心 batch 任务不支持重试；mode 切回 sync/async 后行为与 M20 一致
+completion_window 留空不传或 1-336h 校验生效；batch_poll_interval_seconds
+默认 60
 ```
 
 ---
