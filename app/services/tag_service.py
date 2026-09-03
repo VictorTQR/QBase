@@ -1,5 +1,6 @@
 """标签服务（m15）：标签名校验、查询与整体替换；AI 建议标签（m16）；
-任务化批量 AI 打标——建议清洗后自动追加写库（m17）。"""
+任务化批量 AI 打标——建议清洗后自动追加写库（m17）；mode=batch 时
+打包为厂商 Batch 批任务（m21，由 batch_job_service 轮询回填）。"""
 
 from __future__ import annotations
 
@@ -204,6 +205,14 @@ def run_tagging_task(task_id: str) -> None:
         if task is None:
             return
 
+        try:
+            params = json.loads(task["params_json"] or "{}")
+        except json.JSONDecodeError:
+            params = {}
+
+        if params.get("batch_task_id"):
+            return  # batch 托管任务由 batch_job_service 轮询回填
+
         asset = get_asset_by_id(conn, task["asset_id"]) if task["asset_id"] else None
 
         if asset is None:
@@ -242,26 +251,7 @@ def run_tagging_task(task_id: str) -> None:
             llm_service.suggest_tags(asset["title"], input_text, existing, llm_config)
         )
 
-        if not suggestions:
-            task_repository.update_task(
-                conn,
-                task_id,
-                status="failed",
-                error="AI 未返回可用标签",
-                finished_at=task_repository.utcnow_iso(),
-            )
-            conn.commit()
-            return
-
-        current = get_tags_for_asset(conn, asset["id"])
-        merged = (current + [s for s in suggestions if s not in current])[
-            :MAX_TAGS_PER_ASSET
-        ]
-
-        repo_set_asset_tags(conn, asset["id"], merged)
-        conn.commit()
-
-        applied = [s for s in suggestions if s in merged]
+        applied = _apply_suggestions(conn, asset, suggestions)
 
         task_repository.update_task(
             conn,
@@ -299,6 +289,77 @@ def run_tagging_task(task_id: str) -> None:
         conn.close()
 
 
+def _apply_suggestions(conn, asset: dict, suggestions: list[str]) -> list[str]:
+    """清洗后的建议追加写库（不删已有标签，m21 抽取 sync/batch 共用）。
+
+    无可用标签抛 ValueError；返回实际写入的标签。
+    """
+    if not suggestions:
+        raise ValueError("AI 未返回可用标签")
+
+    current = get_tags_for_asset(conn, asset["id"])
+    merged = (current + [s for s in suggestions if s not in current])[
+        :MAX_TAGS_PER_ASSET
+    ]
+
+    repo_set_asset_tags(conn, asset["id"], merged)
+    conn.commit()
+
+    return [s for s in suggestions if s in merged]
+
+
+def build_batch_request(conn, task_id: str) -> list[list[dict]]:
+    """构建 batch 模式叶子请求（m21）：打标恒为单请求（输入短、截断）。"""
+    task = task_repository.get_task(conn, task_id)
+    asset = get_asset_by_id(conn, task["asset_id"]) if task and task["asset_id"] else None
+
+    if asset is None:
+        raise ValueError("资产不存在")
+
+    llm_config = config_service.get_tagging_llm_config()
+
+    if not llm_config.get("enabled"):
+        raise ValueError("AI 打标未启用，请前往设置页开启")
+
+    input_text = _get_tagging_input_text(conn, asset)
+    existing = [tag["name"] for tag in list_tags(conn)]
+
+    return [
+        llm_service.build_tagging_messages(asset["title"], input_text, existing, llm_config)
+    ]
+
+
+def apply_batch_results(conn, task_id: str, contents: list[str]) -> dict:
+    """batch 结果落库（m21）：解析各行原始输出 → 清洗 → 追加写库。
+
+    返回合并进任务 params 的附加字段（applied 审计）；失败抛异常。
+    """
+    task = task_repository.get_task(conn, task_id)
+    asset = get_asset_by_id(conn, task["asset_id"]) if task and task["asset_id"] else None
+
+    if asset is None:
+        raise ValueError("资产不存在")
+
+    suggestions: list[str] = []
+
+    for raw in contents:
+        suggestions.extend(llm_service._parse_tag_list(raw))
+
+    applied = _apply_suggestions(conn, asset, _clean_suggestions(suggestions))
+
+    return {"applied": applied}
+
+
+def _dispatch_created_tasks(task_ids: list[str]) -> None:
+    """按 [llm.tagging] mode 分流（m21）：batch 打包为厂商批任务，其余本地消费。"""
+    from app.services import batch_job_service
+
+    if batch_job_service.is_batch_mode(config_service.get_tagging_llm_config()):
+        batch_job_service.submit_batch_jobs("tagging", task_ids)
+    else:
+        batch_runner.execute_tasks(task_ids, run_tagging_task)
+
+
 def start_tagging(asset_id: str) -> str:
     """创建并启动单个 AI 打标任务（任务中心失败重试入口）。"""
     conn = get_conn(get_db_path())
@@ -313,7 +374,7 @@ def start_tagging(asset_id: str) -> str:
     finally:
         conn.close()
 
-    batch_runner.execute_tasks([task_id], run_tagging_task)
+    _dispatch_created_tasks([task_id])
 
     logger.info("AI 打标任务已创建：{}（asset {}）", task_id, asset_id)
 
@@ -357,7 +418,7 @@ def start_batch_tagging(asset_ids: list[str]) -> dict:
         conn.close()
 
     if created:
-        batch_runner.execute_tasks(created, run_tagging_task)
+        _dispatch_created_tasks(created)
 
     logger.info(
         "批量 AI 打标：创建 {} 个任务，跳过 {} 项", len(created), len(skipped)
@@ -367,26 +428,43 @@ def start_batch_tagging(asset_ids: list[str]) -> dict:
         "created": len(created),
         "task_ids": created,
         "skipped": skipped,
+        "mode": llm_config.get("mode", "sync"),
     }
 
 
 def resume_pending_tagging_tasks() -> None:
-    """打开知识库时恢复未完结的 AI 打标任务（重跑幂等；in-flight 去重见 batch_runner）。"""
+    """打开知识库时恢复未完结的 AI 打标任务（重跑幂等；in-flight 去重见 batch_runner）。
+
+    params_json 带 batch_task_id 的任务由 batch_job_service 轮询回填，
+    这里跳过（m21），避免与厂商批任务重复计费。
+    """
     conn = get_conn(get_db_path())
 
     try:
         rows = conn.execute(
             """
-            SELECT id FROM tasks
+            SELECT id, params_json FROM tasks
             WHERE type = 'tagging' AND status IN ('pending', 'running')
             """
         ).fetchall()
     finally:
         conn.close()
 
-    if not rows:
+    task_ids: list[str] = []
+
+    for row in rows:
+        try:
+            params = json.loads(row["params_json"] or "{}")
+        except json.JSONDecodeError:
+            params = {}
+
+        if params.get("batch_task_id"):
+            continue
+
+        task_ids.append(row["id"])
+
+    if not task_ids:
         return
 
-    task_ids = [row["id"] for row in rows]
     logger.info("恢复未完结的 AI 打标任务：{} 个", len(task_ids))
     batch_runner.execute_tasks(task_ids, run_tagging_task)

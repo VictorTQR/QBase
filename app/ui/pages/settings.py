@@ -158,10 +158,14 @@ def settings_page() -> None:
 
                         with ui.row().classes("w-full gap-3"):
                             llm_mode = ui.select(
-                                {"sync": "同步", "async": "异步（智谱）"},
+                                {
+                                    "sync": "同步",
+                                    "async": "异步（智谱）",
+                                    "batch": "Batch 批处理（五折）",
+                                },
                                 label="调用模式",
                                 value=str(llm_config.get("mode", "sync") or "sync"),
-                            ).classes("w-48")
+                            ).classes("w-56")
                             llm_thinking = ui.select(
                                 {
                                     "": "默认（不传）",
@@ -172,12 +176,38 @@ def settings_page() -> None:
                                 value=str(llm_config.get("thinking", "") or ""),
                             ).classes("w-48")
 
+                        with ui.row().classes("w-full gap-3"):
+                            llm_batch_poll = ui.number(
+                                "batch 轮询间隔秒",
+                                value=int(
+                                    llm_config.get(
+                                        "batch_poll_interval_seconds", 60
+                                    )
+                                    or 60
+                                ),
+                                min=1,
+                                step=10,
+                            ).classes("w-48")
+                            llm_completion_window = ui.input(
+                                "completion_window（留空不传）",
+                                value=str(
+                                    llm_config.get("completion_window", "24h")
+                                    or ""
+                                ),
+                            ).classes("w-56")
+
                         ui.label(
                             "异步为智谱（BigModel）专有接口：提交后轮询取结果，"
                             "不受长连接超时限制，max_tokens 可大幅调大；"
                             "其他提供商请保持同步。轮询参数 poll_interval_seconds /"
                             " max_wait_seconds 请编辑 config.toml 的 [llm.summary]。"
                         ).classes("text-xs text-gray-600 mt-2")
+                        ui.label(
+                            "Batch 批处理（m21，智谱 / 硅基流动）：请求打包为厂商"
+                            "批任务，五折计费、不受在线限流约束，预计 24 小时内"
+                            "完成；重启后只续查不重新提交。长文本的合并调用仍在"
+                            "本地同步执行。"
+                        ).classes("text-xs text-gray-600 mt-1")
 
                         with ui.row().classes("mt-3 gap-3"):
                             test_llm_button = ui.button("测试 LLM API", icon="cable")
@@ -211,10 +241,14 @@ def settings_page() -> None:
 
                         with ui.row().classes("w-full gap-3"):
                             tagging_mode = ui.select(
-                                {"sync": "同步", "async": "异步（智谱）"},
+                                {
+                                    "sync": "同步",
+                                    "async": "异步（智谱）",
+                                    "batch": "Batch 批处理（五折）",
+                                },
                                 label="调用模式",
                                 value=str(tagging_config.get("mode", "sync") or "sync"),
-                            ).classes("w-48")
+                            ).classes("w-56")
                             tagging_thinking = ui.select(
                                 {
                                     "": "默认（不传）",
@@ -225,10 +259,31 @@ def settings_page() -> None:
                                 value=str(tagging_config.get("thinking", "") or ""),
                             ).classes("w-48")
 
+                        with ui.row().classes("w-full gap-3"):
+                            tagging_batch_poll = ui.number(
+                                "batch 轮询间隔秒",
+                                value=int(
+                                    tagging_config.get(
+                                        "batch_poll_interval_seconds", 60
+                                    )
+                                    or 60
+                                ),
+                                min=1,
+                                step=10,
+                            ).classes("w-48")
+                            tagging_completion_window = ui.input(
+                                "completion_window（留空不传）",
+                                value=str(
+                                    tagging_config.get("completion_window", "24h")
+                                    or ""
+                                ),
+                            ).classes("w-56")
+
                         ui.label(
                             "temperature / max_tokens / timeout 等其余参数使用默认值，"
                             "如需调整请编辑 config.toml 的 [llm.tagging]。"
                             "异步为智谱专有接口，其他提供商请保持同步。"
+                            "Batch 批处理五折计费，结果预计 24 小时内回填。"
                         ).classes("text-xs text-gray-600 mt-2")
 
                         with ui.row().classes("mt-3 gap-3"):
@@ -268,10 +323,14 @@ def settings_page() -> None:
 
                         with ui.row().classes("w-full gap-3"):
                             analysis_mode = ui.select(
-                                {"sync": "同步", "async": "异步（智谱）"},
+                                {
+                                    "sync": "同步",
+                                    "async": "异步（智谱）",
+                                    "batch": "Batch 批处理（五折）",
+                                },
                                 label="调用模式",
                                 value=str(analysis_config.get("mode", "sync") or "sync"),
-                            ).classes("w-48")
+                            ).classes("w-56")
                             analysis_thinking = ui.select(
                                 {
                                     "": "默认（不传）",
@@ -282,12 +341,34 @@ def settings_page() -> None:
                                 value=str(analysis_config.get("thinking", "") or ""),
                             ).classes("w-48")
 
+                        with ui.row().classes("w-full gap-3"):
+                            analysis_batch_poll = ui.number(
+                                "batch 轮询间隔秒",
+                                value=int(
+                                    analysis_config.get(
+                                        "batch_poll_interval_seconds", 60
+                                    )
+                                    or 60
+                                ),
+                                min=1,
+                                step=10,
+                            ).classes("w-48")
+                            analysis_completion_window = ui.input(
+                                "completion_window（留空不传）",
+                                value=str(
+                                    analysis_config.get("completion_window", "24h")
+                                    or ""
+                                ),
+                            ).classes("w-56")
+
                         ui.label(
                             "temperature / max_tokens / timeout / max_input_chars /"
                             " window_minutes 使用默认值，如需调整请编辑 config.toml"
                             " 的 [llm.analysis]。异步为智谱专有接口（提交后轮询，"
                             "max_tokens 上限 128K，长分析建议开启）；"
                             "其他提供商请保持同步。"
+                            "Batch 批处理五折计费：分窗请求进厂商批任务，"
+                            "合并调用本地执行，结果预计 24 小时内回填。"
                         ).classes("text-xs text-gray-600 mt-2")
 
                         with ui.row().classes("mt-3 gap-3"):
@@ -688,6 +769,12 @@ def settings_page() -> None:
                         "chunk_chars": int(llm_chunk_chars.value or 6000),
                         "mode": str(llm_mode.value or "sync"),
                         "thinking": str(llm_thinking.value or ""),
+                        "batch_poll_interval_seconds": int(
+                            llm_batch_poll.value or 60
+                        ),
+                        "completion_window": str(
+                            llm_completion_window.value or ""
+                        ).strip(),
                     },
                     "tagging": {
                         "enabled": bool(tagging_enabled.value),
@@ -696,6 +783,12 @@ def settings_page() -> None:
                         "api_key_env": str(tagging_api_key_env.value or "").strip(),
                         "mode": str(tagging_mode.value or "sync"),
                         "thinking": str(tagging_thinking.value or ""),
+                        "batch_poll_interval_seconds": int(
+                            tagging_batch_poll.value or 60
+                        ),
+                        "completion_window": str(
+                            tagging_completion_window.value or ""
+                        ).strip(),
                     },
                     "analysis": {
                         "enabled": bool(analysis_enabled.value),
@@ -704,6 +797,12 @@ def settings_page() -> None:
                         "api_key_env": str(analysis_api_key_env.value or "").strip(),
                         "mode": str(analysis_mode.value or "sync"),
                         "thinking": str(analysis_thinking.value or ""),
+                        "batch_poll_interval_seconds": int(
+                            analysis_batch_poll.value or 60
+                        ),
+                        "completion_window": str(
+                            analysis_completion_window.value or ""
+                        ).strip(),
                     },
                 },
                 "embedding": {

@@ -35,7 +35,27 @@ TYPE_LABELS = {
     "parse": "解析",
     "tagging": "AI 打标",
     "analysis": "AI 分析",
+    "batch": "Batch 批处理",
 }
+
+
+def _batch_progress_text(task: dict) -> str:
+    """Batch 批任务在列表「输出 / 错误」列的进度文案（m21）。"""
+    try:
+        params = json.loads(task["params_json"] or "{}")
+    except json.JSONDecodeError:
+        return ""
+
+    progress = params.get("progress") or {}
+
+    if not progress:
+        return "已提交，等待厂商调度"
+
+    return (
+        f"进度 {progress.get('completed', 0)}/{progress.get('total', 0)}"
+        f"（失败 {progress.get('failed', 0)}，"
+        f"厂商状态 {params.get('provider_status') or '-'}）"
+    )
 
 
 @ui.page("/tasks")
@@ -168,6 +188,8 @@ def tasks_page() -> None:
 
                         if status == "failed":
                             message = task["error"] or "失败"
+                        elif task["type"] == "batch":
+                            message = _batch_progress_text(task)
                         else:
                             message = task["output_path"] or ""
 

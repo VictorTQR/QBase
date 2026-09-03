@@ -184,17 +184,22 @@ def get_embedding_config() -> dict:
     return result
 
 
-def _llm_async_fields(section: dict) -> dict:
-    """读取 LLM 功能节通用的异步对话字段（m20，智谱提交+轮询模式）。
+def _llm_mode_fields(section: dict) -> dict:
+    """读取 LLM 功能节通用的调用模式字段（m20 async / m21 batch）。
 
     mode 默认 sync；thinking 留空表示不向 API 传该字段；
-    poll_interval_seconds / max_wait_seconds 仅 async 模式生效。
+    poll_interval_seconds / max_wait_seconds 仅 async 模式生效；
+    batch_poll_interval_seconds / completion_window 仅 batch 模式生效
+    （completion_window 留空表示不向 API 传该字段，智谱已废弃该参数）。
     """
     mode = str(section.get("mode", "sync") or "sync").strip().lower()
     thinking = str(section.get("thinking", "") or "").strip().lower()
+    completion_window = str(
+        section.get("completion_window", "24h") or ""
+    ).strip().lower()
 
     return {
-        "mode": mode if mode in ("sync", "async") else "sync",
+        "mode": mode if mode in ("sync", "async", "batch") else "sync",
         "thinking": thinking if thinking in ("enabled", "disabled") else "",
         "poll_interval_seconds": max(
             1, int(section.get("poll_interval_seconds", 5) or 5)
@@ -202,15 +207,19 @@ def _llm_async_fields(section: dict) -> dict:
         "max_wait_seconds": max(
             1, int(section.get("max_wait_seconds", 1800) or 1800)
         ),
+        "batch_poll_interval_seconds": max(
+            1, int(section.get("batch_poll_interval_seconds", 60) or 60)
+        ),
+        "completion_window": completion_window,
     }
 
 
-def _validate_llm_async_fields(section: dict, label: str) -> None:
-    """校验 LLM 功能节的异步对话字段（m20）。"""
+def _validate_llm_mode_fields(section: dict, label: str) -> None:
+    """校验 LLM 功能节的调用模式字段（m20 async / m21 batch）。"""
     mode = str(section.get("mode", "sync") or "sync").strip().lower()
 
-    if mode not in ("sync", "async"):
-        raise ConfigError(f"{label} mode 仅支持 sync / async")
+    if mode not in ("sync", "async", "batch"):
+        raise ConfigError(f"{label} mode 仅支持 sync / async / batch")
 
     thinking = str(section.get("thinking", "") or "").strip().lower()
 
@@ -226,6 +235,28 @@ def _validate_llm_async_fields(section: dict, label: str) -> None:
 
     if max_wait < poll_interval:
         raise ConfigError(f"{label} max_wait_seconds 不应小于 poll_interval_seconds")
+
+    batch_poll_interval = int(section.get("batch_poll_interval_seconds", 60))
+
+    if batch_poll_interval < 1:
+        raise ConfigError(
+            f"{label} batch_poll_interval_seconds 必须大于等于 1"
+        )
+
+    completion_window = str(
+        section.get("completion_window", "24h") or ""
+    ).strip().lower()
+
+    if completion_window:
+        if not completion_window.endswith("h") or not completion_window[:-1].isdigit():
+            raise ConfigError(
+                f"{label} completion_window 仅支持留空或整小时数（如 24h）"
+            )
+
+        hours = int(completion_window[:-1])
+
+        if not 1 <= hours <= 336:
+            raise ConfigError(f"{label} completion_window 需在 1h - 336h 之间")
 
 
 def get_summary_llm_config() -> dict:
@@ -262,7 +293,7 @@ def get_summary_llm_config() -> dict:
         "timeout": timeout,
         "max_input_chars": max_input_chars,
         "chunk_chars": chunk_chars,
-        **_llm_async_fields(summary_config),
+        **_llm_mode_fields(summary_config),
     }
 
     if enabled:
@@ -312,7 +343,7 @@ def get_tagging_llm_config() -> dict:
         "max_input_chars": int(
             tagging_config.get("max_input_chars", 4000) or 4000
         ),
-        **_llm_async_fields(tagging_config),
+        **_llm_mode_fields(tagging_config),
     }
 
     if enabled:
@@ -363,7 +394,7 @@ def get_analysis_llm_config() -> dict:
             analysis_config.get("max_input_chars", 100000) or 100000
         ),
         "window_minutes": int(analysis_config.get("window_minutes", 15) or 15),
-        **_llm_async_fields(analysis_config),
+        **_llm_mode_fields(analysis_config),
     }
 
     if enabled:
@@ -573,7 +604,7 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
         if chunk_chars > max_input_chars:
             raise ConfigError("LLM chunk_chars 不应大于 max_input_chars")
 
-        _validate_llm_async_fields(summary, "LLM 总结")
+        _validate_llm_mode_fields(summary, "LLM 总结")
 
     # ── llm.tagging（m16 AI 打标）──
     tagging = llm.get("tagging", {})
@@ -597,7 +628,7 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
         if tagging_max_input <= 0:
             raise ConfigError("AI 打标 max_input_chars 必须大于 0")
 
-        _validate_llm_async_fields(tagging, "AI 打标")
+        _validate_llm_mode_fields(tagging, "AI 打标")
 
     # ── llm.analysis（m18 深度分析）──
     analysis = llm.get("analysis", {})
@@ -625,7 +656,7 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
         if analysis_window_minutes <= 0:
             raise ConfigError("AI 分析 window_minutes 必须大于 0")
 
-        _validate_llm_async_fields(analysis, "AI 分析")
+        _validate_llm_mode_fields(analysis, "AI 分析")
 
     # ── parse ──
     parse = cfg.get("parse", {})

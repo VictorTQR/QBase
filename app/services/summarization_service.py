@@ -1,8 +1,10 @@
 """总结服务：LLM 生成 {stem}.summary.md，后台任务 + 覆盖备份 + 自动刷新索引（m6）；
-批量总结与重启恢复（m17）经 batch_runner 消费。"""
+批量总结与重启恢复（m17）经 batch_runner 消费；mode=batch 时打包为厂商
+Batch 批任务（m21，五折、24h 内完成，由 batch_job_service 提交与轮询）。"""
 
 from __future__ import annotations
 
+import json
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,10 +19,10 @@ from app.repositories.artifact_repository import (
 )
 from app.repositories.asset_repository import get_asset_by_id
 from app.rules import derived_output_path
-from app.services import batch_runner
+from app.services import batch_runner, llm_service
 from app.services.config_service import get_summary_llm_config
 from app.services.index_service import rebuild_fulltext_index
-from app.services.llm_service import summarize_text
+from app.services import llm_service
 from app.services.parse_service import PARSEABLE_EXTENSIONS
 from app.services.scanner_service import scan_current_library
 from app.state import get_db_path, state
@@ -150,6 +152,16 @@ def _create_summarization_task(
     return task_id, None
 
 
+def _dispatch_created_tasks(task_ids: list[str]) -> None:
+    """按 [llm.summary] mode 分流（m21）：batch 打包为厂商批任务，其余本地消费。"""
+    from app.services import batch_job_service
+
+    if batch_job_service.is_batch_mode(get_summary_llm_config()):
+        batch_job_service.submit_batch_jobs("summary", task_ids)
+    else:
+        batch_runner.execute_tasks(task_ids, run_summarization_task)
+
+
 def start_summarization(asset_id: str) -> str:
     """创建并启动总结任务（并发去重 + 前置校验）。"""
     conn = get_conn(get_db_path())
@@ -164,7 +176,7 @@ def start_summarization(asset_id: str) -> str:
     finally:
         conn.close()
 
-    batch_runner.execute_tasks([task_id], run_summarization_task)
+    _dispatch_created_tasks([task_id])
 
     logger.info("总结任务已创建：{}（asset {}）", task_id, asset_id)
 
@@ -234,7 +246,7 @@ def start_batch_summarization(
         conn.close()
 
     if created:
-        batch_runner.execute_tasks(created, run_summarization_task)
+        _dispatch_created_tasks(created)
 
     logger.info(
         "批量总结：创建 {} 个任务，跳过 {} 项", len(created), len(skipped)
@@ -244,29 +256,119 @@ def start_batch_summarization(
         "created": len(created),
         "task_ids": created,
         "skipped": skipped,
+        "mode": llm_config.get("mode", "sync"),
     }
 
 
 def resume_pending_summarization_tasks() -> None:
-    """打开知识库时恢复未完结的总结任务（重跑幂等；in-flight 去重见 batch_runner）。"""
+    """打开知识库时恢复未完结的总结任务（重跑幂等；in-flight 去重见 batch_runner）。
+
+    params_json 带 batch_task_id 的任务由 batch_job_service 轮询回填，
+    这里跳过（m21），避免与厂商批任务重复计费。
+    """
     conn = get_conn(get_db_path())
 
     try:
         rows = conn.execute(
             """
-            SELECT id FROM tasks
+            SELECT id, params_json FROM tasks
             WHERE type = 'summarization' AND status IN ('pending', 'running')
             """
         ).fetchall()
     finally:
         conn.close()
 
-    if not rows:
+    task_ids: list[str] = []
+
+    for row in rows:
+        try:
+            params = json.loads(row["params_json"] or "{}")
+        except json.JSONDecodeError:
+            params = {}
+
+        if params.get("batch_task_id"):
+            continue
+
+        task_ids.append(row["id"])
+
+    if not task_ids:
         return
 
-    task_ids = [row["id"] for row in rows]
     logger.info("恢复未完结的总结任务：{} 个", len(task_ids))
     batch_runner.execute_tasks(task_ids, run_summarization_task)
+
+
+def write_summary_artifact(asset: dict, summary_content: str, llm_config: dict) -> str:
+    """总结落盘（m21 抽取）：覆盖前备份 + frontmatter，返回输出路径。
+
+    只写文件不刷索引，索引刷新由调用方负责（batch 批量回填时统一刷一次）。
+    """
+    summary_path = derived_output_path(asset["absolute_path"], "summary.md")
+
+    backup_existing_summary(summary_path)
+
+    summary_path.write_text(
+        build_summary_frontmatter(asset, llm_config) + summary_content,
+        encoding="utf-8",
+    )
+
+    return str(summary_path)
+
+
+def refresh_summary_indexes() -> str | None:
+    """刷新扫描与全文索引，失败返回警告文本不抛错（sync/batch 共用）。"""
+    try:
+        scan_current_library()
+        rebuild_fulltext_index()
+    except Exception as scan_exc:
+        return f"总结生成成功，但刷新索引失败：{scan_exc}"
+
+    return None
+
+
+def _task_params(task: dict) -> dict:
+    try:
+        return json.loads(task["params_json"] or "{}")
+    except json.JSONDecodeError:
+        return {}
+
+
+def build_batch_request(conn, task_id: str) -> list[list[dict]]:
+    """构建 batch 模式叶子请求（m21）：短文 1 条，长文按段 N 条。"""
+    task = task_repository.get_task(conn, task_id)
+    asset = get_asset_by_id(conn, task["asset_id"]) if task and task["asset_id"] else None
+
+    if asset is None:
+        raise ValueError("资产不存在")
+
+    input_text = get_summary_input_text(conn, asset)
+
+    return llm_service.build_summary_leaf_messages(
+        input_text, get_summary_llm_config()
+    )
+
+
+def apply_batch_results(
+    conn, task_id: str, contents: list[str], llm_config: dict
+) -> dict:
+    """batch 结果落盘（m21）：多条分段结果先本地合并再写文件。
+
+    返回合并进任务 params 的附加字段（output_path）；失败抛异常。
+    """
+    task = task_repository.get_task(conn, task_id)
+    asset = get_asset_by_id(conn, task["asset_id"]) if task and task["asset_id"] else None
+
+    if asset is None:
+        raise ValueError("资产不存在")
+
+    content = (
+        contents[0] if len(contents) == 1
+        else llm_service.merge_summary_summaries(contents, llm_config)
+    )
+
+    output_path = write_summary_artifact(asset, content, llm_config)
+
+    return {"output_path": output_path}
 
 
 def run_summarization_task(task_id: str) -> None:
@@ -278,6 +380,9 @@ def run_summarization_task(task_id: str) -> None:
 
         if task is None:
             return
+
+        if _task_params(task).get("batch_task_id"):
+            return  # batch 托管任务由 batch_job_service 轮询回填
 
         asset = get_asset_by_id(conn, task["asset_id"]) if task["asset_id"] else None
 
@@ -300,31 +405,16 @@ def run_summarization_task(task_id: str) -> None:
         conn.commit()
 
         input_text = get_summary_input_text(conn, asset)
-        summary_content = summarize_text(input_text, llm_config)
+        summary_content = llm_service.summarize_text(input_text, llm_config)
 
-        summary_path = derived_output_path(asset["absolute_path"], "summary.md")
-
-        backup_existing_summary(summary_path)
-
-        summary_path.write_text(
-            build_summary_frontmatter(asset, llm_config) + summary_content,
-            encoding="utf-8",
-        )
-
-        # 刷新扫描和全文索引（失败不影响任务结果）
-        warning = None
-
-        try:
-            scan_current_library()
-            rebuild_fulltext_index()
-        except Exception as scan_exc:
-            warning = f"总结生成成功，但刷新索引失败：{scan_exc}"
+        summary_path = write_summary_artifact(asset, summary_content, llm_config)
+        warning = refresh_summary_indexes()
 
         task_repository.update_task(
             conn,
             task_id,
             status="success",
-            output_path=str(summary_path),
+            output_path=summary_path,
             error=warning,
             finished_at=utcnow_iso(),
         )

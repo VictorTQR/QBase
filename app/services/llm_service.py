@@ -1,6 +1,7 @@
 """LLM 服务：OpenAI 兼容 chat completions + 长文本分段摘要合并（m6）+ AI 建议标签（m16）
 + 深度分析（m18，模板提示词 + 时间窗切块合并）
-+ 异步对话补全（m20，智谱提交 + 轮询，mode 配置切换）。"""
++ 异步对话补全（m20，智谱提交 + 轮询，mode 配置切换）
++ Batch 批处理请求构建（m21，叶子请求/合并拆分供 batch 模式复用）。"""
 
 from __future__ import annotations
 
@@ -306,60 +307,62 @@ def split_text_for_summary(text: str, chunk_chars: int) -> list[str]:
     return chunks
 
 
-def summarize_text(text: str, config: dict) -> str:
-    """生成总结：短文本直接总结；超过 max_input_chars 分段摘要后合并。"""
+def build_summary_leaf_messages(text: str, config: dict) -> list[list[dict]]:
+    """总结的叶子请求列表（m21 batch 模式逐条进 JSONL，sync 模式逐条调用）。
+
+    短文本（≤max_input_chars）单请求；超长按 chunk_chars 切段后逐段一条
+    CHUNK 请求（段间合并由 merge_summary_summaries 完成）。切分结果只有
+    一段时等同短文本，用全文总结提示词。
+    """
     text = text.strip()
 
     if not text:
         raise ValueError("输入文本为空，无法生成总结")
 
     max_input_chars = config.get("max_input_chars", 24000)
-    chunk_chars = config.get("chunk_chars", 6000)
 
     if len(text) <= max_input_chars:
-        return chat_completion(
+        return [
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": text},
-            ],
-            config,
-        )
+            ]
+        ]
 
+    chunk_chars = config.get("chunk_chars", 6000)
     chunks = split_text_for_summary(text, chunk_chars)
 
     if not chunks:
         raise ValueError("文本切分后为空")
 
     if len(chunks) == 1:
-        return chat_completion(
+        return [
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": chunks[0]},
-            ],
-            config,
-        )
+            ]
+        ]
 
-    partial_summaries: list[str] = []
+    return [
+        [
+            {
+                "role": "system",
+                "content": "你是一个文本摘要助手。请输出简洁中文摘要。",
+            },
+            {
+                "role": "user",
+                "content": CHUNK_SUMMARY_PROMPT.format(chunk=chunk),
+            },
+        ]
+        for chunk in chunks
+    ]
 
-    for chunk in chunks:
-        partial = chat_completion(
-            [
-                {
-                    "role": "system",
-                    "content": "你是一个文本摘要助手。请输出简洁中文摘要。",
-                },
-                {
-                    "role": "user",
-                    "content": CHUNK_SUMMARY_PROMPT.format(chunk=chunk),
-                },
-            ],
-            config,
-        )
-        partial_summaries.append(partial.strip())
 
+def merge_summary_summaries(partials: list[str], config: dict) -> str:
+    """多段摘要合并为最终总结（m21：sync/batch 两种模式共用）。"""
     combined = "\n\n---\n\n".join(
         f"【第 {i + 1} 段摘要】\n{summary}"
-        for i, summary in enumerate(partial_summaries)
+        for i, summary in enumerate(partials)
     )
 
     return chat_completion(
@@ -372,6 +375,20 @@ def summarize_text(text: str, config: dict) -> str:
         ],
         config,
     )
+
+
+def summarize_text(text: str, config: dict) -> str:
+    """生成总结：短文本直接总结；超过 max_input_chars 分段摘要后合并。"""
+    leaves = build_summary_leaf_messages(text, config)
+
+    if len(leaves) == 1:
+        return chat_completion(leaves[0], config)
+
+    partial_summaries = [
+        chat_completion(messages, config).strip() for messages in leaves
+    ]
+
+    return merge_summary_summaries(partial_summaries, config)
 
 
 def _line_start_seconds(line: str) -> float | None:
@@ -453,12 +470,13 @@ def split_by_time_windows(text: str, window_minutes: int) -> list[dict]:
     return result
 
 
-def analyze_text(system_prompt: str, text: str, config: dict) -> str:
-    """深度分析（m18）：模板提示词为 system，带时间戳全文为 user。
+def build_analysis_leaf_messages(
+    system_prompt: str, text: str, config: dict
+) -> tuple[list[list[dict]], list[str]]:
+    """分析的叶子请求列表 + 各窗时间范围标签（m21）。
 
-    短输入单次调用；超过 max_input_chars 时按时间窗切块：逐窗调用
-    （附「只分析该时间窗」指令）再用 ANALYSIS_MERGE_PROMPT 合并成
-    完整分析，合并要求保留时间戳与模板结构。
+    标签形如「05:00 – 20:00」，供 merge 合并时标注分段来源；短文本
+    返回单请求与空标签列表。超长且无时间分段时抛 ValueError。
     """
     text = text.strip()
 
@@ -468,12 +486,14 @@ def analyze_text(system_prompt: str, text: str, config: dict) -> str:
     max_input_chars = config.get("max_input_chars", 100000)
 
     if len(text) <= max_input_chars:
-        return chat_completion(
+        return (
             [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": text},
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": text},
+                ]
             ],
-            config,
+            [],
         )
 
     window_minutes = config.get("window_minutes", 15)
@@ -485,7 +505,8 @@ def analyze_text(system_prompt: str, text: str, config: dict) -> str:
             "请在 [llm.analysis] 中调大 max_input_chars 或改用长上下文模型"
         )
 
-    partial_analyses: list[str] = []
+    messages_list: list[list[dict]] = []
+    window_labels: list[str] = []
 
     for index, window in enumerate(windows):
         user_content = (
@@ -499,18 +520,37 @@ def analyze_text(system_prompt: str, text: str, config: dict) -> str:
             )
         )
 
-        partial = chat_completion(
+        messages_list.append(
             [
-                {"role": "system", "content": "你是一个内容分析助手，输出简体中文 Markdown。"},
+                {
+                    "role": "system",
+                    "content": "你是一个内容分析助手，输出简体中文 Markdown。",
+                },
                 {"role": "user", "content": user_content},
-            ],
-            config,
+            ]
         )
-        partial_analyses.append(partial.strip())
+        window_labels.append(
+            f"{_format_seconds(window['start'])} – {_format_seconds(window['end'])}"
+        )
+
+    return messages_list, window_labels
+
+
+def merge_analysis_partials(
+    system_prompt: str,
+    partial_analyses: list[str],
+    window_labels: list[str],
+    config: dict,
+) -> str:
+    """多窗分析合并为完整分析（m21：sync/batch 两种模式共用）。
+
+    window_labels 与 partial_analyses 一一对应，缺失时以空标签占位。
+    """
+    labels = window_labels + [""] * (len(partial_analyses) - len(window_labels))
 
     combined = "\n\n---\n\n".join(
-        f"【第 {i + 1} 窗 · {_format_seconds(w['start'])} – {_format_seconds(w['end'])}】\n{partial}"
-        for i, (w, partial) in enumerate(zip(windows, partial_analyses))
+        f"【第 {i + 1} 窗 · {label}】\n{partial}"
+        for i, (label, partial) in enumerate(zip(labels, partial_analyses))
     )
 
     return chat_completion(
@@ -522,6 +562,25 @@ def analyze_text(system_prompt: str, text: str, config: dict) -> str:
             },
         ],
         config,
+    )
+
+
+def analyze_text(system_prompt: str, text: str, config: dict) -> str:
+    """深度分析（m18）：模板提示词为 system，带时间戳全文为 user。
+
+    短输入单次调用；超过 max_input_chars 时按时间窗切块：逐窗调用
+    （附「只分析该时间窗」指令）再用 ANALYSIS_MERGE_PROMPT 合并成
+    完整分析，合并要求保留时间戳与模板结构。
+    """
+    leaves, window_labels = build_analysis_leaf_messages(system_prompt, text, config)
+
+    if len(leaves) == 1:
+        return chat_completion(leaves[0], config)
+
+    partial_analyses = [chat_completion(messages, config).strip() for messages in leaves]
+
+    return merge_analysis_partials(
+        system_prompt, partial_analyses, window_labels, config
     )
 
 
@@ -554,13 +613,13 @@ def _parse_tag_list(raw: str) -> list[str]:
     return data
 
 
-def suggest_tags(
+def build_tagging_messages(
     title: str,
     text: str,
     existing_tags: list[str],
     config: dict,
-) -> list[str]:
-    """AI 建议标签：标题 + 内容（截断）+ 已有标签 → JSON 数组（m16）。"""
+) -> list[dict]:
+    """打标请求消息（m21：sync/batch 两种模式共用，内容超长截断）。"""
     max_input_chars = config.get("max_input_chars", 4000)
     content = text.strip()[:max_input_chars]
 
@@ -575,12 +634,19 @@ def suggest_tags(
         f"内容：\n{content}"
     )
 
-    raw = chat_completion(
-        [
-            {"role": "system", "content": TAGGING_SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ],
-        config,
-    )
+    return [
+        {"role": "system", "content": TAGGING_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+
+
+def suggest_tags(
+    title: str,
+    text: str,
+    existing_tags: list[str],
+    config: dict,
+) -> list[str]:
+    """AI 建议标签：标题 + 内容（截断）+ 已有标签 → JSON 数组（m16）。"""
+    raw = chat_completion(build_tagging_messages(title, text, existing_tags, config), config)
 
     return _parse_tag_list(raw)

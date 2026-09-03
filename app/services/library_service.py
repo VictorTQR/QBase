@@ -199,6 +199,11 @@ def open_library(path_str: str) -> dict:
     resume_pending_tagging_tasks()
     resume_pending_analysis_tasks()
 
+    # 恢复 Batch 批任务轮询（m21，只续查不重新提交，避免双倍计费）
+    from app.services.batch_job_service import resume_batch_jobs
+
+    resume_batch_jobs()
+
     return {
         "library_root": str(root),
         "db_path": str(db_path),

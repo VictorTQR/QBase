@@ -506,6 +506,9 @@ async def assets_page():
 
             message = f"已创建 {report['created']} 个总结任务，进度见任务中心"
 
+            if report.get("mode") == "batch":
+                message += "（Batch 批处理：五折计费，预计 24 小时内回填）"
+
             if report["skipped"]:
                 message += f"；跳过 {len(report['skipped'])} 项"
 
@@ -576,6 +579,9 @@ async def assets_page():
 
             message = f"已创建 {report['created']} 个打标任务，进度见任务中心"
 
+            if report.get("mode") == "batch":
+                message += "（Batch 批处理：五折计费，预计 24 小时内回填）"
+
             if report["skipped"]:
                 message += f"；跳过 {len(report['skipped'])} 项"
 
@@ -619,6 +625,9 @@ async def assets_page():
                 return
 
             message = f"已创建 {report['created']} 个分析任务，进度见任务中心"
+
+            if report.get("mode") == "batch":
+                message += "（Batch 批处理：五折计费，预计 24 小时内回填）"
 
             if report["skipped"]:
                 message += f"；跳过 {len(report['skipped'])} 项"

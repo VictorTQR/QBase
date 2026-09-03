@@ -3,7 +3,8 @@
 一个资产 × 一个分析模板 = 一份分析文件（区别于快速浏览的总结：
 长输出、结构化、带时间锚点）。输入从 transcript.json 的 segments 构造
 带时间戳文本（时间戳信息不丢，说话人缺失时由模型推断）。
-任务形态完全复用 tasks 系统 + batch_runner（单条 / 批量 / 重启恢复）。
+任务形态完全复用 tasks 系统 + batch_runner（单条 / 批量 / 重启恢复）；
+mode=batch 时打包为厂商 Batch 批任务（m21，由 batch_job_service 轮询回填）。
 """
 
 from __future__ import annotations
@@ -25,14 +26,13 @@ from app.rules import (
     is_transcript_json_name,
     sidecar_analysis_preset,
 )
-from app.services import batch_runner
+from app.services import batch_runner, llm_service
 from app.services.analysis_preset_service import (
     format_analysis_prompt,
     get_analysis_preset,
 )
 from app.services.config_service import get_analysis_llm_config
 from app.services.index_service import rebuild_fulltext_index
-from app.services.llm_service import analyze_text
 from app.services.scanner_service import scan_current_library
 from app.state import get_db_path, state
 from app.utils import format_clock, load_transcript_segments
@@ -222,6 +222,16 @@ def _create_analysis_task(
     return task_id, None
 
 
+def _dispatch_created_tasks(task_ids: list[str]) -> None:
+    """按 [llm.analysis] mode 分流（m21）：batch 打包为厂商批任务，其余本地消费。"""
+    from app.services import batch_job_service
+
+    if batch_job_service.is_batch_mode(get_analysis_llm_config()):
+        batch_job_service.submit_batch_jobs("analysis", task_ids)
+    else:
+        batch_runner.execute_tasks(task_ids, run_analysis_task)
+
+
 def start_analysis(asset_id: str, preset_id: str) -> str:
     """创建并启动单条分析任务（并发去重 + 前置校验）。"""
     conn = get_conn(get_db_path())
@@ -236,7 +246,7 @@ def start_analysis(asset_id: str, preset_id: str) -> str:
     finally:
         conn.close()
 
-    batch_runner.execute_tasks([task_id], run_analysis_task)
+    _dispatch_created_tasks([task_id])
 
     logger.info("分析任务已创建：{}（asset {}，preset {}）", task_id, asset_id, preset_id)
 
@@ -300,7 +310,7 @@ def start_batch_analysis(
         conn.close()
 
     if created:
-        batch_runner.execute_tasks(created, run_analysis_task)
+        _dispatch_created_tasks(created)
 
     logger.info(
         "批量分析（{}）：创建 {} 个任务，跳过 {} 项",
@@ -313,29 +323,150 @@ def start_batch_analysis(
         "created": len(created),
         "task_ids": created,
         "skipped": skipped,
+        "mode": llm_config.get("mode", "sync"),
     }
 
 
 def resume_pending_analysis_tasks() -> None:
-    """打开知识库时恢复未完结的分析任务（重跑幂等；in-flight 去重见 batch_runner）。"""
+    """打开知识库时恢复未完结的分析任务（重跑幂等；in-flight 去重见 batch_runner）。
+
+    params_json 带 batch_task_id 的任务由 batch_job_service 轮询回填，
+    这里跳过（m21），避免与厂商批任务重复计费。
+    """
     conn = get_conn(get_db_path())
 
     try:
         rows = conn.execute(
             """
-            SELECT id FROM tasks
+            SELECT id, params_json FROM tasks
             WHERE type = 'analysis' AND status IN ('pending', 'running')
             """
         ).fetchall()
     finally:
         conn.close()
 
-    if not rows:
+    task_ids: list[str] = []
+
+    for row in rows:
+        try:
+            params = json.loads(row["params_json"] or "{}")
+        except json.JSONDecodeError:
+            params = {}
+
+        if params.get("batch_task_id"):
+            continue
+
+        task_ids.append(row["id"])
+
+    if not task_ids:
         return
 
-    task_ids = [row["id"] for row in rows]
     logger.info("恢复未完结的分析任务：{} 个", len(task_ids))
     batch_runner.execute_tasks(task_ids, run_analysis_task)
+
+
+def _task_params(task: dict) -> dict:
+    try:
+        return json.loads(task["params_json"] or "{}")
+    except json.JSONDecodeError:
+        return {}
+
+
+def write_analysis_artifact(
+    asset: dict, preset: dict, analysis_content: str, llm_config: dict
+) -> str:
+    """分析落盘（m21 抽取）：覆盖前备份 + frontmatter，返回输出路径。
+
+    只写文件不刷索引，索引刷新由调用方负责（batch 批量回填时统一刷一次）。
+    """
+    analysis_path = derived_output_path(
+        asset["absolute_path"], analysis_output_filename(preset["id"])
+    )
+
+    backup_existing_analysis(analysis_path)
+
+    analysis_path.write_text(
+        build_analysis_frontmatter(asset, preset, llm_config) + analysis_content,
+        encoding="utf-8",
+    )
+
+    return str(analysis_path)
+
+
+def refresh_analysis_indexes() -> str | None:
+    """刷新扫描与全文索引，失败返回警告文本不抛错（sync/batch 共用）。"""
+    try:
+        scan_current_library()
+        rebuild_fulltext_index()
+    except Exception as scan_exc:
+        return f"分析生成成功，但刷新索引失败：{scan_exc}"
+
+    return None
+
+
+def build_batch_request(conn, task_id: str) -> dict:
+    """构建 batch 模式叶子请求（m21）：短文 1 条，长文按时间窗 N 条。
+
+    返回 {"requests": [...], "window_labels": [...]}，标签供合并时
+    标注各窗时间范围。
+    """
+    task = task_repository.get_task(conn, task_id)
+
+    if task is None:
+        raise ValueError("任务不存在")
+
+    asset = get_asset_by_id(conn, task["asset_id"]) if task["asset_id"] else None
+
+    if asset is None:
+        raise ValueError("资产不存在")
+
+    preset = get_analysis_preset(_task_params(task).get("preset_id") or "")
+    llm_config = get_analysis_llm_config()
+
+    system_prompt = format_analysis_prompt(preset, asset["title"])
+    input_text = build_timestamped_input(conn, asset)
+
+    messages_list, window_labels = llm_service.build_analysis_leaf_messages(
+        system_prompt, input_text, llm_config
+    )
+
+    return {"requests": messages_list, "window_labels": window_labels}
+
+
+def apply_batch_results(
+    conn,
+    task_id: str,
+    contents: list[str],
+    window_labels: list[str] | None,
+    llm_config: dict,
+) -> dict:
+    """batch 结果落盘（m21）：多窗结果先本地合并再写文件。
+
+    返回合并进任务 params 的附加字段（output_path）；失败抛异常。
+    """
+    task = task_repository.get_task(conn, task_id)
+
+    if task is None:
+        raise ValueError("任务不存在")
+
+    asset = get_asset_by_id(conn, task["asset_id"]) if task["asset_id"] else None
+
+    if asset is None:
+        raise ValueError("资产不存在")
+
+    preset = get_analysis_preset(_task_params(task).get("preset_id") or "")
+
+    if len(contents) == 1:
+        analysis_content = contents[0]
+    else:
+        system_prompt = format_analysis_prompt(preset, asset["title"])
+        analysis_content = llm_service.merge_analysis_partials(
+            system_prompt, contents, window_labels or [], llm_config
+        )
+
+    output_path = write_analysis_artifact(asset, preset, analysis_content, llm_config)
+
+    return {"output_path": output_path}
 
 
 def run_analysis_task(task_id: str) -> None:
@@ -347,6 +478,11 @@ def run_analysis_task(task_id: str) -> None:
 
         if task is None:
             return
+
+        params = _task_params(task)
+
+        if params.get("batch_task_id"):
+            return  # batch 托管任务由 batch_job_service 轮询回填
 
         asset = get_asset_by_id(conn, task["asset_id"]) if task["asset_id"] else None
 
@@ -360,11 +496,6 @@ def run_analysis_task(task_id: str) -> None:
             )
             conn.commit()
             return
-
-        try:
-            params = json.loads(task["params_json"] or "{}")
-        except json.JSONDecodeError:
-            params = {}
 
         preset_id = str(params.get("preset_id") or "")
 
@@ -391,33 +522,16 @@ def run_analysis_task(task_id: str) -> None:
         input_text = build_timestamped_input(conn, asset)
 
         system_prompt = format_analysis_prompt(preset, asset["title"])
-        analysis_content = analyze_text(system_prompt, input_text, llm_config)
+        analysis_content = llm_service.analyze_text(system_prompt, input_text, llm_config)
 
-        analysis_path = derived_output_path(
-            asset["absolute_path"], analysis_output_filename(preset["id"])
-        )
-
-        backup_existing_analysis(analysis_path)
-
-        analysis_path.write_text(
-            build_analysis_frontmatter(asset, preset, llm_config) + analysis_content,
-            encoding="utf-8",
-        )
-
-        # 刷新扫描和全文索引（失败不影响任务结果）
-        warning = None
-
-        try:
-            scan_current_library()
-            rebuild_fulltext_index()
-        except Exception as scan_exc:
-            warning = f"分析生成成功，但刷新索引失败：{scan_exc}"
+        analysis_path = write_analysis_artifact(asset, preset, analysis_content, llm_config)
+        warning = refresh_analysis_indexes()
 
         task_repository.update_task(
             conn,
             task_id,
             status="success",
-            output_path=str(analysis_path),
+            output_path=analysis_path,
             error=warning,
             finished_at=utcnow_iso(),
         )
